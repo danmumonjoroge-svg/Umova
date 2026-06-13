@@ -1,0 +1,693 @@
+/* ============================================================
+   CHAMA DASHBOARD — OVERVIEW CONTENT
+   Inherits design tokens from ChamaDashboardLayout.css
+============================================================ */
+
+.cdash {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ============================================================
+   LOADING STATE
+============================================================ */
+
+.cdash-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 80px 0;
+  color: var(--cd-ink-muted);
+  font-size: 13px;
+}
+
+.cdash-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--cd-border);
+  border-top-color: var(--cd-accent);
+  border-radius: 50%;
+  animation: cdash-spin 0.8s linear infinite;
+}
+
+@keyframes cdash-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   KPI ROW
+============================================================ */
+
+.cdash-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.cdash-kpi-card {
+  background: var(--cd-surface);
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-md);
+  padding: 18px 20px;
+  box-shadow: var(--cd-shadow-sm);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s var(--cd-ease), box-shadow 0.2s var(--cd-ease);
+}
+
+.cdash-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--cd-shadow);
+}
+
+.cdash-kpi-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.accent-teal::before  { background: var(--cd-accent); }
+.accent-emerald::before { background: #15803d; }
+.accent-amber::before { background: var(--cd-amber); }
+.accent-rose::before  { background: var(--cd-rose); }
+
+.cdash-kpi-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.cdash-kpi-head span {
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cd-ink-muted);
+  font-weight: 600;
+}
+
+.cdash-kpi-head svg {
+  color: var(--cd-ink-muted);
+}
+
+.cdash-kpi-value {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cd-ink);
+  letter-spacing: -0.01em;
+  margin-bottom: 10px;
+}
+
+.cdash-kpi-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--cd-border-soft);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.cdash-kpi-bar div {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--cd-accent);
+  transition: width 0.5s var(--cd-ease);
+}
+
+.cdash-kpi-bar.emerald div { background: #15803d; }
+.cdash-kpi-bar.amber div { background: var(--cd-amber); }
+.cdash-kpi-bar.rose div { background: var(--cd-rose); }
+
+.cdash-kpi-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--cd-ink-muted);
+}
+
+/* ============================================================
+   SPLIT LAYOUT
+============================================================ */
+
+.cdash-split {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .cdash-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cdash-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cdash-sticky {
+  position: sticky;
+  top: 20px;
+}
+
+@media (max-width: 1024px) {
+  .cdash-sticky {
+    position: static;
+  }
+}
+
+/* ============================================================
+   PANEL
+============================================================ */
+
+.cdash-panel {
+  background: var(--cd-surface);
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-lg);
+  padding: 22px 24px;
+  box-shadow: var(--cd-shadow-sm);
+}
+
+.cdash-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.cdash-panel-head h2 {
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--cd-ink);
+}
+
+.cdash-panel-head p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--cd-ink-muted);
+}
+
+/* ============================================================
+   TOOLBAR (search + filter)
+============================================================ */
+
+.cdash-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.cdash-search,
+.cdash-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--cd-surface-raised);
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-sm);
+  padding: 9px 12px;
+  color: var(--cd-ink-muted);
+}
+
+.cdash-search {
+  flex: 1;
+  min-width: 180px;
+}
+
+.cdash-search input,
+.cdash-filter select {
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: var(--cd-ink);
+  width: 100%;
+  font-family: "Inter", sans-serif;
+}
+
+.cdash-filter select {
+  cursor: pointer;
+}
+
+/* ============================================================
+   INLINE FORM
+============================================================ */
+
+.cdash-form {
+  background: var(--cd-surface-raised);
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-md);
+  padding: 18px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cdash-form h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cd-ink);
+}
+
+.cdash-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .cdash-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cdash-form label,
+.cdash-form-full {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cdash-form label span,
+.cdash-form-full span {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cd-ink-muted);
+  font-weight: 600;
+}
+
+.cdash-form input,
+.cdash-form select {
+  background: var(--cd-surface);
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-sm);
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--cd-ink);
+  font-family: "Inter", sans-serif;
+}
+
+.cdash-form input:focus,
+.cdash-form select:focus {
+  outline: none;
+  border-color: var(--cd-accent);
+  box-shadow: 0 0 0 3px var(--cd-accent-soft);
+}
+
+.cdash-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ============================================================
+   BUTTONS
+============================================================ */
+
+.cdash-btn-primary,
+.cdash-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--cd-radius-sm);
+  padding: 9px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: filter 0.15s var(--cd-ease), background 0.15s var(--cd-ease);
+  white-space: nowrap;
+}
+
+.cdash-btn-primary {
+  background: var(--cd-accent);
+  color: #fff;
+}
+
+.cdash-btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.cdash-btn-ghost {
+  background: transparent;
+  border-color: var(--cd-border);
+  color: var(--cd-ink-soft);
+}
+
+.cdash-btn-ghost:hover {
+  background: var(--cd-border-soft);
+}
+
+/* ============================================================
+   EMPTY STATE
+============================================================ */
+
+.cdash-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: var(--cd-ink-muted);
+}
+
+.cdash-empty svg {
+  color: var(--cd-border);
+}
+
+.cdash-empty p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.cdash-empty-success svg {
+  color: var(--cd-accent);
+}
+
+.cdash-empty-success h4 {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cd-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   ASSET GRID
+============================================================ */
+
+.cdash-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.cdash-asset-card {
+  background: var(--cd-surface-raised);
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-md);
+  padding: 14px 16px;
+  transition: border-color 0.2s var(--cd-ease), transform 0.2s var(--cd-ease);
+}
+
+.cdash-asset-card:hover {
+  border-color: var(--cd-accent);
+  transform: translateY(-2px);
+}
+
+.cdash-asset-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.cdash-asset-info {
+  min-width: 0;
+}
+
+.cdash-asset-tag {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--cd-accent-strong);
+  background: var(--cd-accent-soft);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-bottom: 6px;
+}
+
+.cdash-asset-info h4 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--cd-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cdash-asset-value {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cd-ink);
+  white-space: nowrap;
+}
+
+.cdash-asset-desc {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--cd-ink-soft);
+  line-height: 1.5;
+}
+
+.cdash-asset-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cdash-asset-footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--cd-accent-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   WALLETS
+============================================================ */
+
+.cdash-wallet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.cdash-wallet-card {
+  background: var(--cd-surface-raised);
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-md);
+  padding: 14px 16px;
+}
+
+.cdash-wallet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cd-ink-muted);
+  font-weight: 600;
+}
+
+.cdash-wallet-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--cd-accent-soft);
+  color: var(--cd-accent-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cdash-wallet-card h4 {
+  margin: 0 0 4px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--cd-ink);
+}
+
+.cdash-wallet-balance {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cd-accent-strong);
+}
+
+/* ============================================================
+   APPROVALS
+============================================================ */
+
+.cdash-approval-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 560px;
+  overflow-y: auto;
+  padding-right: 4px;
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--cd-border) transparent;
+}
+
+.cdash-approval-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cdash-approval-list::-webkit-scrollbar-thumb {
+  background: var(--cd-border);
+  border-radius: 999px;
+}
+
+.cdash-approval-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: var(--cd-surface-raised);
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-md);
+  padding: 12px 14px;
+  transition: border-color 0.2s var(--cd-ease), opacity 0.2s var(--cd-ease);
+}
+
+.cdash-approval-row.processing {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.cdash-approval-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cdash-approval-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cdash-approval-avatar {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--cd-accent-soft);
+  color: var(--cd-accent-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cdash-approval-member strong {
+  font-size: 13px;
+  color: var(--cd-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cdash-approval-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cdash-approval-amount {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cd-ink);
+}
+
+.cdash-approval-type {
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cd-ink-muted);
+  font-weight: 600;
+}
+
+.cdash-approval-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cdash-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--cd-radius-sm);
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: filter 0.15s var(--cd-ease), transform 0.15s var(--cd-ease);
+}
+
+.cdash-icon-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.cdash-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cdash-icon-btn.approve {
+  background: rgba(21, 128, 61, 0.1);
+  color: #15803d;
+  border-color: rgba(21, 128, 61, 0.2);
+}
+
+.cdash-icon-btn.reject {
+  background: var(--cd-rose-soft);
+  color: var(--cd-rose);
+  border-color: rgba(190, 18, 60, 0.2);
+}
+
+.cdash-approval-locked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cd-amber);
+  white-space: nowrap;
+}
+
+.cdash-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cd-amber);
+  animation: cdash-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes cdash-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}

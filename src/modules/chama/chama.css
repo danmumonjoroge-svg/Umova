@@ -1,0 +1,19 @@
+.chama-container {
+  padding: 40px;
+  text-align: center;
+}
+
+.grid {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+button {
+  padding: 10px 15px;
+  border-radius: 8px;
+  background: green;
+  color: white;
+  border: none;
+  cursor: pointer;
+}

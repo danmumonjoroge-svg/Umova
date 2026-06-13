@@ -1,0 +1,225 @@
+
+/* =========================
+   CHAMA PUBLIC PORTAL
+   FINTECH STYLE UI
+   ========================= */
+
+.chama-public {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f6f8fb;
+  color: #1f2937;
+}
+
+/* ================= HERO ================= */
+.chama-hero {
+  background: linear-gradient(135deg, #0f5132, #198754);
+  color: white;
+  padding: 90px 20px;
+  text-align: center;
+  position: relative;
+}
+
+.chama-hero-content {
+  max-width: 800px;
+  margin: auto;
+}
+
+.chama-hero h1 {
+  font-size: 42px;
+  font-weight: 800;
+  margin-bottom: 12px;
+  letter-spacing: 0.3px;
+}
+
+.chama-hero p {
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+/* BUTTONS */
+.chama-hero-buttons {
+  margin-top: 25px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn-primary {
+  background: #ffffff;
+  color: #198754;
+  padding: 12px 22px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+  padding: 12px 22px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-outline:hover {
+  background: white;
+  color: #198754;
+}
+
+/* MINI LINK */
+.chama-mini-links {
+  margin-top: 18px;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.9;
+}
+
+.chama-mini-links span:hover {
+  text-decoration: underline;
+}
+
+/* ================= FEATURES ================= */
+.chama-features {
+  padding: 70px 20px;
+  text-align: center;
+}
+
+.chama-features h2 {
+  font-size: 28px;
+  margin-bottom: 30px;
+  font-weight: 800;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  max-width: 900px;
+  margin: auto;
+}
+
+.feature-card {
+  background: white;
+  padding: 22px;
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  text-align: left;
+  transition: 0.2s;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+}
+
+.feature-card h3 {
+  margin-bottom: 8px;
+  font-size: 18px;
+  color: #198754;
+}
+
+.feature-card p {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* ================= TRUST SECTION ================= */
+.chama-trust {
+  background: white;
+  padding: 70px 20px;
+}
+
+.trust-box {
+  max-width: 800px;
+  margin: auto;
+  text-align: center;
+}
+
+.trust-box h2 {
+  font-size: 26px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.trust-box p {
+  font-size: 15px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.trust-box ul {
+  list-style: none;
+  padding: 0;
+  margin-top: 20px;
+}
+
+.trust-box li {
+  padding: 8px 0;
+  font-size: 14px;
+  color: #374151;
+}
+
+/* ================= CTA ================= */
+.chama-cta {
+  background: #198754;
+  color: white;
+  text-align: center;
+  padding: 70px 20px;
+}
+
+.chama-cta h2 {
+  font-size: 28px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.chama-cta p {
+  opacity: 0.9;
+  margin-bottom: 20px;
+}
+
+.chama-cta button {
+  background: white;
+  color: #198754;
+  padding: 12px 26px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.chama-cta button:hover {
+  transform: scale(1.05);
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 768px) {
+
+  .chama-hero h1 {
+    font-size: 30px;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chama-hero-buttons {
+    flex-direction: column;
+  }
+
+  .btn-primary,
+  .btn-outline {
+    width: 100%;
+  }
+}

@@ -1,0 +1,103 @@
+.payment-container {
+  padding: 20px;
+  background: #f3f6fb;
+  min-height: 100vh;
+  font-family: Arial;
+}
+
+.payment-header {
+  background: linear-gradient(135deg, #0f5132, #198754);
+  color: white;
+  padding: 18px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.payment-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 20px;
+}
+
+/* CARDS */
+.card {
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+}
+
+/* FORM */
+.input, select {
+  width: 100%;
+  padding: 10px;
+  margin: 6px 0;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+/* MEMBER BOX */
+.member-box {
+  background: #e8f5e9;
+  padding: 8px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+/* SPLITS */
+.split-box {
+  margin-top: 10px;
+}
+
+.split-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+/* BUTTONS */
+.btn-submit {
+  width: 100%;
+  background: #198754;
+  color: white;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+
+.btn-add {
+  background: #0d6efd;
+  color: white;
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+
+.btn-download {
+  background: #212529;
+  color: white;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+}
+
+/* TABLE */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+thead {
+  background: #198754;
+  color: white;
+}
+
+td, th {
+  padding: 10px;
+  text-align: center;
+  border-bottom: 1px solid #eee;
+}

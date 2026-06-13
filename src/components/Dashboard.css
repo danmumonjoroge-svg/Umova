@@ -1,0 +1,131 @@
+/* ================= BASE DASHBOARD ================= */
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f4f6fb 0%, #eef2f7 100%);
+  font-family: "Inter", system-ui, Arial;
+  color: #0f172a;
+}
+
+/* ================= SIDEBAR ================= */
+.sidebar {
+  width: 260px;
+  background: #0b1220;
+  color: #e2e8f0;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 10px 0 30px rgba(0,0,0,0.08);
+}
+
+/* ================= LOGO AREA (FIXED) ================= */
+.sidebar .logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.sidebar .logo img {
+  width: 38px;       /* 👈 balanced size */
+  height: 38px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.sidebar .logo h2 {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* ================= NAV LINKS ================= */
+.sidebar a {
+  color: #cbd5e1;
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  margin-bottom: 6px;
+}
+
+.sidebar a:hover {
+  background: rgba(37, 99, 235, 0.15);
+  color: white;
+}
+
+.sidebar a.active {
+  background: #2563eb;
+  color: white;
+}
+
+/* ================= MAIN CONTENT ================= */
+.main-content {
+  flex: 1;
+  padding: 25px;
+  background: transparent;
+}
+
+/* ================= TOP HEADER ================= */
+.topbar {
+  background: white;
+  padding: 15px 20px;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+/* ================= DASHBOARD CARDS ================= */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+.card {
+  background: white;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 12px 25px rgba(0,0,0,0.06);
+  transition: 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+}
+
+/* ================= TABLE AREA ================= */
+.table-box {
+  margin-top: 20px;
+  background: white;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 12px 25px rgba(0,0,0,0.05);
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 1000px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sidebar {
+    width: 220px;
+  }
+}
+
+@media (max-width: 600px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+}

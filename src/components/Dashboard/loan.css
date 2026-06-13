@@ -1,0 +1,532 @@
+/* ==========================================================================
+   UMOVA SACCO ADVANCED OPERATIONS UTILITIES & CORE COMPONENT STYLING
+   ========================================================================== */
+
+:root {
+  --emerald-600: #059669;
+  --emerald-700: #047857;
+  --emerald-50: #ecfdf5;
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --slate-600: #475569;
+  --slate-100: #f1f5f9;
+  --slate-50: #f8fafc;
+  --red-600: #dc2626;
+  --red-700: #b91c1c;
+  --red-50: #fef2f2;
+  --amber-600: #d97706;
+  --amber-50: #fffbeb;
+  --blue-600: #2563eb;
+  --blue-50: #eff6ff;
+  --border-color: #cbd5e1;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+}
+
+/* Container & Layout Framework */
+.loan-container-main-wrapper {
+  max-width: 1280px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--slate-800);
+}
+
+/* Node Profile Metadata Header */
+.system-node-profile-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--slate-50);
+  border: 1px solid var(--border-color);
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.regulatory-tag-pill {
+  display: inline-block;
+  background-color: var(--emerald-50);
+  color: var(--emerald-700);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.25rem 0.75rem;
+  border-radius: 50px;
+  border: 1px solid var(--emerald-600);
+  margin-bottom: 0.5rem;
+}
+
+.client-identity-heading {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+  color: var(--slate-800);
+}
+
+.system-clock-label {
+  font-size: 0.75rem;
+  color: var(--slate-600);
+  text-transform: uppercase;
+  margin: 0 0 0.25rem 0;
+  text-align: right;
+}
+
+.system-clock-timestamp {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--slate-700);
+  margin: 0;
+  text-align: right;
+}
+
+/* Compliance Metrics Dashboard Panel */
+.metrics-dashboard-grid-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.metric-box {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.metric-box:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.metric-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--slate-600);
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.metric-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.025em;
+}
+
+.metric-subtitle {
+  font-size: 0.75rem;
+  color: var(--slate-600);
+  margin: 0;
+}
+
+.text-highlight-green {
+  color: var(--emerald-600);
+}
+
+.delinquency-alert {
+  color: var(--red-600);
+}
+
+/* Controller Action Layout Buttons */
+.action-control-button-cluster {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1.25rem;
+}
+
+.btn-action-trigger {
+  padding: 0.75rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-primary-emerald {
+  background-color: var(--emerald-600);
+  color: white;
+}
+
+.btn-primary-emerald:hover {
+  background-color: var(--emerald-700);
+}
+
+.btn-secondary-slate {
+  background-color: var(--slate-100);
+  color: var(--slate-700);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary-slate:hover {
+  background-color: var(--slate-800);
+  color: white;
+}
+
+/* Workspace Matrix Layout Blocks */
+.qualification-interface-workspace-grid {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 2rem;
+  align-items: start;
+}
+
+.form-workspace-scaffolding-block,
+.compliance-audit-sidebar-panel,
+.historic-operations-ledger-card-container {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.workspace-sub-section-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: var(--slate-800);
+}
+
+/* Dynamic Forms Structuring Engine */
+.form-input-matrix-grid-structure {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.input-element-control-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.input-field-descriptive-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--slate-700);
+  margin-bottom: 0.5rem;
+}
+
+.input-numeric-text-box,
+.dropdown-menu-ui,
+.input-block-textarea-element {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.95rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background-color: white;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.input-numeric-text-box:focus,
+.dropdown-menu-ui:focus,
+.input-block-textarea-element:focus {
+  outline: none;
+  border-color: var(--emerald-600);
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+}
+
+.input-numeric-text-box:disabled {
+  background-color: var(--slate-100);
+  cursor: not-allowed;
+}
+
+.full-width-layout {
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+/* Write Commit Execution Trigger Pipeline */
+.btn-transaction-commit-execution {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-transaction-commit-execution.state-ready-active {
+  background-color: var(--emerald-600);
+  color: white;
+}
+
+.btn-transaction-commit-execution.state-ready-active:hover {
+  background-color: var(--emerald-700);
+}
+
+.btn-transaction-commit-execution.state-locked-disabled {
+  background-color: var(--slate-100);
+  color: var(--slate-600);
+  border: 1px solid var(--border-color);
+  cursor: not-allowed;
+}
+
+/* Dynamic Operations Sidebar Panel Console */
+.sidebar-section-header {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--slate-100);
+}
+
+.audit-data-row-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.audit-metric-row-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: var(--slate-700);
+}
+
+.bold-data-output {
+  font-weight: 700;
+  color: var(--slate-800);
+}
+
+.font-weight-900 {
+  font-weight: 900;
+}
+
+.text-danger-alert {
+  color: var(--red-700);
+}
+
+.net-disbursed-row,
+.total-liability-row,
+.monthly-installment-row {
+  padding: 0.65rem 0;
+  border-top: 1px dashed var(--border-color);
+}
+
+.highlight-dark-slate {
+  color: var(--slate-800);
+  font-weight: 800;
+}
+
+.highlight-emerald-green {
+  color: var(--emerald-700);
+  font-weight: 800;
+}
+
+.font-size-emphasized {
+  font-size: 1.1rem;
+  color: var(--emerald-600);
+  font-weight: 900;
+}
+
+.dsr-validation-status-footer-row {
+  margin-top: 0.5rem;
+  padding-top: 0.85rem;
+  border-top: 2px solid var(--slate-100);
+  align-items: center;
+}
+
+.compliance-status-text-flag {
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.status-flag-pass {
+  background-color: var(--emerald-50);
+  color: var(--emerald-700);
+  border: 1px solid var(--emerald-600);
+}
+
+.status-flag-fail {
+  background-color: var(--red-50);
+  color: var(--red-700);
+  border: 1px solid var(--red-600);
+}
+
+/* Compliance Evaluative Final Decision Badges */
+.regulatory-decision-terminal-badge {
+  padding: 1.25rem;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.regulatory-decision-terminal-badge.verdict-pass-theme {
+  background-color: var(--emerald-50);
+  color: var(--emerald-700);
+  border: 1px solid var(--emerald-600);
+}
+
+.regulatory-decision-terminal-badge.verdict-fail-theme {
+  background-color: var(--red-50);
+  color: var(--red-700);
+  border: 1px solid var(--red-600);
+}
+
+/* Account Statements Ledger Tables Architecture */
+.ledger-header-wrapper-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.btn-download-pdf-stream {
+  background-color: var(--slate-800);
+  color: white;
+  border: none;
+  font-size: 0.85rem;
+}
+
+.btn-download-pdf-stream:hover {
+  background-color: var(--slate-700);
+}
+
+.fallback-empty-ledger-message-text {
+  text-align: center;
+  color: var(--slate-600);
+  padding: 3rem 0;
+  font-style: italic;
+}
+
+.responsive-table-scroll-containment-shell {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.data-grid-table-element {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.table-header-row-style {
+  background-color: var(--slate-100);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.table-header-cell {
+  padding: 0.85rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--slate-700);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.table-data-row-interactive {
+  border-bottom: 1px solid var(--slate-100);
+  transition: background-color 0.15s;
+}
+
+.table-data-row-interactive:hover {
+  background-color: var(--slate-50);
+}
+
+.table-body-cell {
+  padding: 1rem;
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+.font-mono { font-family: Courier, monospace; }
+.text-muted { color: var(--slate-600); }
+.text-uppercase { text-transform: uppercase; }
+.font-weight-bold { font-weight: 700; }
+.cell-numeric-text { color: var(--slate-800); }
+
+/* Status Badges Inside Operations Sub-ledger Table Rows */
+.status-badge-pill-element {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 50px;
+}
+
+.badge-deposit {
+  background-color: var(--emerald-50);
+  color: var(--emerald-700);
+}
+
+.badge-withdrawal {
+  background-color: var(--amber-50);
+  color: var(--amber-600);
+}
+
+.badge-loan-draw {
+  background-color: var(--blue-50);
+  color: var(--blue-600);
+}
+
+.badge-loan-pay {
+  background-color: var(--emerald-600);
+  color: white;
+}
+
+.badge-adjust {
+  background-color: var(--slate-100);
+  color: var(--slate-700);
+}
+
+/* ==========================================================================
+   MEDIA QUERIES (RESPONSIVE VIEWPORT ADAPTABILITY ENGINE)
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .qualification-interface-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .system-node-profile-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .node-profile-right .system-clock-label,
+  .node-profile-right .system-clock-timestamp {
+    text-align: left;
+  }
+
+  .form-input-matrix-grid-structure {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-header-wrapper-flex {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .btn-download-pdf-stream {
+    width: 100%;
+  }
+}

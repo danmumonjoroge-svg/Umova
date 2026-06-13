@@ -1,0 +1,400 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ================= 1. THEME DESIGN SYSTEM ================= */
+:root {
+  --bg-main: #0b0f19;         /* Premium Deep Obsidian */
+  --bg-panel: #131c2e;        /* Dark Slate Workspace Cards */
+  --bg-surface: #1e2942;      /* Elevated Depth Blocks */
+  --text-main: #f8fafc;       /* Clean White Prose */
+  --text-muted: #94a3b8;      /* Secondary Sub-metrics */
+  
+  --accent-emerald: #10b981;  /* Banking Green */
+  --accent-blue: #3b82f6;     /* Link tracking index indicator */
+  --accent-purple: #8b5cf6;   /* Queue pipeline badge */
+  --border-color: #24324f;    /* High-contrast structural boundaries */
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.whatsapp-container {
+  padding: 1.75rem;
+  background-color: var(--bg-main);
+  height: 100vh;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  color: var(--text-main);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Lock the dashboard safely into view height */
+}
+
+/* ================= 2. THE TOP COMMAND HEADER ================= */
+.whatsapp-header-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  background: linear-gradient(135deg, #131c2e 0%, #0f172a 100%);
+  padding: 1.25rem 2rem;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+  margin-bottom: 1.5rem;
+  flex-shrink: 0;
+}
+
+.whatsapp-title {
+  font-size: 22px;
+  font-weight: 800;
+  background: linear-gradient(120deg, #ffffff 30%, #a7f3d0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.03em;
+}
+
+.whatsapp-subtitle {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.refresh-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: var(--border-color);
+  border-color: var(--accent-emerald);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+}
+
+/* ================= 3. BALANCED ANTI-SQUEEZE DOCK ================= */
+.whatsapp-grid {
+  display: flex;
+  gap: 1.5rem;
+  flex-grow: 1;
+  width: 100%;
+  height: calc(100% - 110px);
+  min-height: 0; /* Keeps layout from breaking native browser height bounds */
+}
+
+/* PANEL 1: Member Registry Sidebar */
+.whatsapp-grid > .whatsapp-panel:nth-child(1) {
+  flex: 0 0 300px; /* Locked down securely so it can never squeeze the center */
+}
+
+/* PANEL 2: THE PROCESSING DESK (Expanded Canvas) */
+.whatsapp-grid > .whatsapp-panel:nth-child(2) {
+  flex: 2 1 0%; /* Spreads dynamically out across the space with maximum priority */
+  background: linear-gradient(180deg, var(--bg-panel) 0%, rgba(19, 28, 46, 0.6) 100%);
+}
+
+/* PANEL 3: Outbox Pipeline Queue */
+.whatsapp-grid > .whatsapp-panel:nth-child(3) {
+  flex: 0 0 350px; /* Fixed functional frame layout width */
+}
+
+/* Responsive Fluid Wrap for Smaller Monitor Displays */
+@media (max-width: 1280px) {
+  .whatsapp-grid {
+    flex-wrap: wrap;
+    overflow-y: auto;
+    height: auto;
+  }
+  .whatsapp-grid > .whatsapp-panel:nth-child(1),
+  .whatsapp-grid > .whatsapp-panel:nth-child(2),
+  .whatsapp-grid > .whatsapp-panel:nth-child(3) {
+    flex: 1 1 100%; /* Collapse cleanly onto lines instead of compressing components */
+    height: 550px !important;
+  }
+}
+
+/* ================= 4. INTUITIVE WORKSPACE PANELS ================= */
+.whatsapp-panel {
+  background-color: var(--bg-panel);
+  border-radius: 20px;
+  padding: 1.5rem;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0; 
+}
+
+.panel-title {
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 1.25rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* ================= 5. CORE INNER LIST CONTROLLERS ================= */
+.member-list, 
+.outbox-list, 
+.workflow-deck {
+  flex-grow: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  padding-right: 6px;
+}
+
+/* ================= 6. CONTROLS, INPUTS & FORMS ================= */
+.search-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  margin-bottom: 1.25rem;
+  background-color: var(--bg-surface);
+  outline: none;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.search-input:focus {
+  border-color: var(--accent-emerald);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 1.25rem;
+  flex-shrink: 0;
+}
+
+.input-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.action-dropdown {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.action-dropdown:focus {
+  border-color: var(--accent-blue);
+}
+
+.sub-select-box {
+  background: rgba(251, 191, 36, 0.03);
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(251, 191, 36, 0.15);
+  margin-bottom: 0.5rem;
+  animation: fadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* ================= 7. PROFILE REGISTER & ACTION CARDS ================= */
+.member-card {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 0.75rem;
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.member-card:hover {
+  background: var(--border-color);
+  transform: translateY(-1px);
+}
+
+.member-card.active {
+  border: 2px solid var(--accent-emerald);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(19, 28, 46, 0.5) 100%);
+  box-shadow: 0 4px 20px -5px rgba(16, 185, 129, 0.3);
+}
+
+.member-name {
+  font-weight: 700;
+  color: #fff;
+  font-size: 14.5px;
+}
+
+/* Context Banner for Current Processing Profile Asset */
+.member-info-box {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+  border-left: 4px solid var(--accent-emerald);
+  padding: 16px;
+  border-radius: 14px;
+  margin-bottom: 1.5rem;
+  flex-shrink: 0;
+  border-top: 1px solid rgba(16, 185, 129, 0.12);
+  border-right: 1px solid rgba(16, 185, 129, 0.12);
+  border-bottom: 1px solid rgba(16, 185, 129, 0.12);
+}
+
+.member-info-box h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+/* ================= 8. ADVANCED IDE SYSTEM CODESPACE ================= */
+.preview-area {
+  width: 100%;
+  flex-grow: 1; /* Maximizes vertical viewport utilization inside desk space */
+  min-height: 240px; /* Gives plenty of editing headroom */
+  background: #070a12 !important; 
+  color: #a7f3d0 !important;       
+  font-family: 'JetBrains Mono', monospace;
+  padding: 1.25rem;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  border: 1px solid var(--border-color);
+  resize: none;
+}
+
+/* Outbox Pipeline Elements */
+.outbox-card-advanced {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+.badge-type {
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(139, 92, 246, 0.15);
+  color: #c084fc;
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.badge-phone {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+}
+
+.outbox-message-body {
+  font-size: 12.5px;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  background: #070a12;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  max-height: 120px;
+  overflow-y: auto;
+  line-height: 1.6;
+}
+
+/* ================= 9. PRIMARY TRANSACTION HARDWARE ================= */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.25);
+  margin-top: 0.75rem;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 25px rgba(16, 185, 129, 0.4);
+}
+
+.btn-dispatch {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  padding: 10px 14px;
+  font-size: 13px;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
+}
+
+.btn-dispatch:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35);
+}
+
+/* ================= 10. SYSTEM UTILITIES ================= */
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 4rem 2rem;
+  font-size: 14px;
+  font-weight: 500;
+  border: 2px dashed var(--border-color);
+  border-radius: 16px;
+  background: rgba(30, 41, 66, 0.15);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }

@@ -1,0 +1,279 @@
+/* ================= GLOBAL THEME ================= */
+.public-v12 {
+  font-family: "Inter", system-ui, Arial;
+  color: #0f172a;
+
+  /* 🌈 PREMIUM FINTECH BACKGROUND */
+  background: radial-gradient(circle at top, #eef2ff 0%, #f8fafc 40%, #eef6ff 100%);
+  min-height: 100vh;
+}
+
+/* smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ================= NAV ================= */
+.nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 40px;
+
+  background: rgba(11, 18, 32, 0.9);
+  backdrop-filter: blur(12px);
+  color: white;
+
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.nav-links {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.nav-links a {
+  color: #cbd5e1;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.nav-links a:hover {
+  color: white;
+}
+
+.nav-links button {
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: none;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.nav-links button:hover {
+  transform: translateY(-2px);
+}
+
+/* ================= HERO ================= */
+.hero {
+  text-align: center;
+  padding: 110px 20px;
+}
+
+.hero h1 {
+  font-size: 44px;
+  font-weight: 800;
+  background: linear-gradient(90deg, #1e3a8a, #2563eb, #0ea5e9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero p {
+  font-size: 18px;
+  color: #475569;
+  max-width: 650px;
+  margin: 10px auto;
+}
+
+.hero button {
+  margin-top: 20px;
+  padding: 12px 22px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: 0.3s;
+  box-shadow: 0 10px 25px rgba(37,99,235,0.25);
+}
+
+.hero button:hover {
+  transform: scale(1.05);
+}
+
+/* ================= PRODUCTS ================= */
+.products {
+  padding: 70px 40px;
+  text-align: center;
+}
+
+.products h2 {
+  font-size: 28px;
+  margin-bottom: 25px;
+}
+
+/* GRID */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+
+/* ================= PRODUCT CARDS (IMPROVED) ================= */
+.card {
+  background: linear-gradient(145deg, #ffffff, #f1f5f9);
+  border-radius: 18px;
+  overflow: hidden;
+
+  box-shadow:
+    0 10px 25px rgba(0,0,0,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.6);
+
+  transition: 0.35s ease;
+}
+
+.card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 18px 40px rgba(37,99,235,0.15);
+}
+
+.card img {
+  width: 100%;
+  height: 170px;
+  object-fit: cover;
+}
+
+.card h3 {
+  margin: 12px 0 5px;
+  color: #0f172a;
+}
+
+.card p {
+  font-size: 14px;
+  color: #475569;
+  padding: 0 12px 18px;
+}
+
+/* ================= HOW ================= */
+.how {
+  padding: 60px 40px;
+  background: linear-gradient(135deg, #eef2ff, #f1f5f9);
+}
+
+/* ================= APPLY ================= */
+.apply {
+  padding: 70px 40px;
+  text-align: center;
+}
+
+.form {
+  width: 320px;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form input {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  outline: none;
+}
+
+.form input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+}
+
+.form button {
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  color: white;
+  cursor: pointer;
+}
+
+/* ================= STORIES ================= */
+.stories {
+  padding: 70px 40px;
+}
+
+.story-scroll {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 10px;
+}
+
+.story-card {
+  min-width: 270px;
+  background: linear-gradient(145deg, #ffffff, #f8fafc);
+  border-radius: 18px;
+  padding: 12px;
+
+  scroll-snap-align: start;
+
+  box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+  transition: 0.3s;
+}
+
+.story-card:hover {
+  transform: translateY(-6px);
+}
+
+.story-card img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+/* ================= MODAL ================= */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: white;
+  padding: 25px;
+  width: 420px;
+  border-radius: 16px;
+}
+
+/* ================= FOOTER ================= */
+.footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 30px 40px;
+  background: #0b1220;
+  color: white;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero h1 {
+    font-size: 30px;
+  }
+}

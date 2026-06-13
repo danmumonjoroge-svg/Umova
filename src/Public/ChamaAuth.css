@@ -1,0 +1,106 @@
+/* =========================
+   CHAMA AUTH STYLES
+   ========================= */
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.chama-auth-container {
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #f4f6f8, #e9eef2);
+}
+
+/* CARD */
+.chama-auth-card {
+  width: 380px;
+  background: #ffffff;
+  padding: 32px;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  text-align: center;
+  border: 1px solid #eef0f2;
+}
+
+/* TITLE */
+.chama-auth-card h2 {
+  margin-bottom: 6px;
+  color: #198754;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+/* SUBTEXT */
+.chama-auth-card p {
+  font-size: 13px;
+  color: #6c757d;
+  margin-bottom: 18px;
+}
+
+/* INPUT FIELDS */
+.chama-auth-card input {
+  width: 100%;
+  padding: 12px 14px;
+  margin: 8px 0;
+  border-radius: 10px;
+  border: 1px solid #dcdfe3;
+  outline: none;
+  font-size: 14px;
+  transition: 0.2s;
+}
+
+.chama-auth-card input:focus {
+  border-color: #198754;
+  box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.15);
+}
+
+/* BUTTON */
+.chama-auth-card button {
+  width: 100%;
+  padding: 12px;
+  background: #198754;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  margin-top: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.chama-auth-card button:hover {
+  background: #157347;
+}
+
+.chama-auth-card button:disabled {
+  background: #9aa6b2;
+  cursor: not-allowed;
+}
+
+/* NAV LINK */
+.chama-links {
+  margin-top: 16px;
+}
+
+.chama-links p {
+  font-size: 12px;
+  color: #198754;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.chama-links p:hover {
+  text-decoration: underline;
+}
+
+/* MOBILE RESPONSIVE */
+@media (max-width: 480px) {
+  .chama-auth-card {
+    width: 90%;
+    padding: 24px;
+  }
+}

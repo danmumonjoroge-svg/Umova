@@ -1,0 +1,17 @@
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1e3a8a;
+  --bg: #f4f7fb;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e5e7eb;
+  --shadow: 0 10px 25px rgba(0,0,0,0.08);
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}

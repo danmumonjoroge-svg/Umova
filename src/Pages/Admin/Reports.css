@@ -1,0 +1,35 @@
+.dashboard {
+  padding: 24px;
+  background: #f4f6fb;
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: bold;
+  margin-bottom: 18px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+}
+
+.card-title {
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+.card-value {
+  font-size: 18px;
+  font-weight: bold;
+}

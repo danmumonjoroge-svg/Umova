@@ -1,0 +1,144 @@
+/* MAIN WRAPPER */
+.chama-public {
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #1f2937;
+  background: #f8fafc;
+}
+
+/* HERO SECTION */
+.chama-hero {
+  height: 85vh;
+  background: linear-gradient(
+      rgba(0, 0, 0, 0.65),
+      rgba(0, 0, 0, 0.65)
+    ),
+    url("https://images.unsplash.com/photo-1601597111158-2fceff292cdc");
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.hero-overlay {
+  color: white;
+  max-width: 700px;
+  padding: 20px;
+}
+
+.hero-overlay h1 {
+  font-size: 42px;
+  margin-bottom: 15px;
+  font-weight: 800;
+}
+
+.hero-overlay p {
+  font-size: 18px;
+  opacity: 0.9;
+  margin-bottom: 25px;
+}
+
+/* BUTTONS */
+.hero-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.primary-btn,
+.secondary-btn,
+.outline-btn,
+.cta-btn {
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.3s;
+}
+
+/* PRIMARY */
+.primary-btn {
+  background: #16a34a;
+  color: white;
+}
+
+.primary-btn:hover {
+  background: #15803d;
+}
+
+/* SECONDARY */
+.secondary-btn {
+  background: #2563eb;
+  color: white;
+}
+
+.secondary-btn:hover {
+  background: #1d4ed8;
+}
+
+/* OUTLINE */
+.outline-btn {
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+}
+
+.outline-btn:hover {
+  background: white;
+  color: black;
+}
+
+/* INFO SECTION */
+.info-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  padding: 60px 40px;
+  background: white;
+}
+
+.info-card {
+  background: #f1f5f9;
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+  transition: 0.3s;
+}
+
+.info-card:hover {
+  transform: translateY(-5px);
+  background: #e2e8f0;
+}
+
+/* CTA SECTION */
+.cta-section {
+  text-align: center;
+  padding: 60px 20px;
+  background: #0f172a;
+  color: white;
+}
+
+.cta-section h2 {
+  font-size: 28px;
+  margin-bottom: 10px;
+}
+
+.cta-section p {
+  opacity: 0.8;
+  margin-bottom: 20px;
+}
+
+.cta-btn {
+  background: #22c55e;
+  color: white;
+  padding: 14px 24px;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+.cta-btn:hover {
+  background: #16a34a;
+}

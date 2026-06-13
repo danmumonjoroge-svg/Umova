@@ -1,0 +1,242 @@
+/* =========================
+   PROFILE PAGE (FINTECH UI)
+   UMOVA SACCO STYLE
+========================= */
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, Arial, sans-serif;
+}
+
+/* =========================
+   MAIN CONTAINER
+========================= */
+
+.bg-gray-100 {
+  background: linear-gradient(135deg, #f4fff7, #f7f9fc);
+}
+
+/* =========================
+   PAGE WRAPPER
+========================= */
+
+.min-h-screen {
+  min-height: 100vh;
+}
+
+/* =========================
+   GLOBAL CARD STYLE
+========================= */
+
+.bg-white {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.06);
+}
+
+/* =========================
+   HEADER CARD
+========================= */
+
+.rounded-xl.shadow {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  gap: 14px;
+
+  border-left: 5px solid #00a651; /* MPESA GREEN ACCENT */
+}
+
+.rounded-xl.shadow img {
+  border: 2px solid #00a651;
+  box-shadow: 0 6px 15px rgba(0, 166, 81, 0.2);
+}
+
+/* =========================
+   TEXT STYLING
+========================= */
+
+h2 {
+  font-size: 18px;
+  margin: 0;
+  color: #0f172a;
+}
+
+.text-gray-500 {
+  color: #64748b;
+}
+
+.text-green-600 {
+  color: #00a651 !important;
+  font-weight: 600;
+}
+
+/* =========================
+   KYC PROGRESS BAR
+========================= */
+
+.w-full.bg-gray-200 {
+  background: #e5e7eb;
+  border-radius: 50px;
+  overflow: hidden;
+}
+
+.h-2 {
+  height: 8px;
+}
+
+.bg-green-500 {
+  background: linear-gradient(90deg, #00a651, #007d3c);
+  transition: width 0.4s ease-in-out;
+}
+
+/* =========================
+   SECTION CARDS
+========================= */
+
+.space-y-1 > div {
+  padding: 6px 0;
+}
+
+.section-card,
+.bg-white.p-3.rounded-xl.shadow {
+  padding: 14px;
+  border-radius: 16px;
+  transition: 0.2s ease;
+}
+
+.bg-white.p-3.rounded-xl.shadow:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+}
+
+/* Section headers */
+.text-\[10px\].font-bold {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #00a651;
+}
+
+/* =========================
+   ROW DISPLAY
+========================= */
+
+.flex.justify-between {
+  padding: 4px 0;
+  border-bottom: 1px dashed #eef2f7;
+}
+
+.flex.justify-between:last-child {
+  border-bottom: none;
+}
+
+.font-semibold {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* =========================
+   EDIT BUTTON
+========================= */
+
+button {
+  transition: all 0.2s ease;
+}
+
+.bg-green-600 {
+  background: #00a651 !important;
+  border-radius: 10px;
+}
+
+.bg-green-600:hover {
+  background: #008f45 !important;
+}
+
+/* edit button */
+button.text-xs {
+  background: #00a651;
+  color: white;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+button.text-xs:hover {
+  background: #007d3c;
+}
+
+/* =========================
+   EDIT FORM PANEL
+========================= */
+
+.space-y-2 {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  background: linear-gradient(180deg, #ffffff, #f9fafb);
+}
+
+/* =========================
+   INPUTS
+========================= */
+
+input {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 12px;
+  transition: 0.2s;
+  background: #f9fafb;
+}
+
+input:focus {
+  border-color: #00a651;
+  box-shadow: 0 0 0 3px rgba(0, 166, 81, 0.15);
+  background: #fff;
+  outline: none;
+}
+
+/* =========================
+   SAVE BUTTON
+========================= */
+
+button.w-full {
+  background: linear-gradient(135deg, #00a651, #007d3c);
+  border: none;
+  color: white;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 10px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+button.w-full:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0, 166, 81, 0.25);
+}
+
+/* =========================
+   PROFILE IMAGE
+========================= */
+
+img.w-16 {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* =========================
+   RESPONSIVE DESIGN
+========================= */
+
+@media (max-width: 768px) {
+  .rounded-xl.shadow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  h2 {
+    font-size: 16px;
+  }
+}
