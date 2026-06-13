@@ -1,177 +1,283 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "../../supabaseClient";
 
 export default function JournalList() {
-
   const [journal, setJournal] = useState([]);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [selectedRows, setSelectedRows] = useState([]);
 
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 15;
 
-  useEffect(() => {
-    loadJournal();
-  }, []);
+  const format = (v) =>
+    Number(v || 0).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
 
-  const loadJournal = async () => {
+  const loadJournal = useCallback(async () => {
+    setLoading(true);
+
     const { data, error } = await supabase
       .from("general_ledger")
       .select("*")
       .order("date", { ascending: false });
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
+    setLoading(false);
 
+    if (error) return alert(error.message);
     setJournal(data || []);
-  };
+  }, []);
 
-  /* FILTER */
+  useEffect(() => {
+    loadJournal();
+  }, [loadJournal]);
+
   const filtered = useMemo(() => {
-    return journal.filter(j =>
-      j.description?.toLowerCase().includes(search.toLowerCase())
+    const q = search.toLowerCase();
+
+    return journal.filter((j) =>
+      `${j.description || ""} ${j.member_no || ""} ${j.reference || ""}`
+        .toLowerCase()
+        .includes(q)
     );
   }, [journal, search]);
 
-  /* PAGINATION */
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE
-  );
 
-  /* EXPORT CSV */
+  const paginated = useMemo(() => {
+    return filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  }, [filtered, page]);
+
+  const toggleSelect = (id) => {
+    setSelectedRows((prev) =>
+      prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : [...prev, id]
+    );
+  };
+
+  const selectAllVisible = () => {
+    const ids = paginated.map((j) => j.id);
+    const allSelected = ids.every((id) => selectedRows.includes(id));
+
+    if (allSelected) {
+      setSelectedRows((prev) => prev.filter((id) => !ids.includes(id)));
+    } else {
+      setSelectedRows((prev) => [...new Set([...prev, ...ids])]);
+    }
+  };
+
   const exportCSV = () => {
     const rows = [
-      ["Date", "Member", "Description", "Debit", "Credit", "Amount"]
+      [
+        "Date",
+        "Reference",
+        "Member",
+        "Description",
+        "Debit",
+        "Credit",
+        "Amount",
+      ],
     ];
 
-    filtered.forEach(j => {
+    const source =
+      selectedRows.length > 0
+        ? filtered.filter((j) => selectedRows.includes(j.id))
+        : filtered;
+
+    source.forEach((j) => {
       rows.push([
         j.date,
+        j.reference,
         j.member_no,
         j.description,
-        j.debit_account,
-        j.credit_account,
-        j.amount
+        j.debit_account_id,
+        j.credit_account_id,
+        j.amount,
       ]);
     });
 
-    const csv = rows.map(r => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const csv = rows.map((r) => r.join(",")).join("\n");
 
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "journal.csv";
-    link.click();
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `journal_export_${Date.now()}.csv`;
+    a.click();
+
+    URL.revokeObjectURL(url);
   };
 
-  /* PRINT PDF */
-  const printPDF = () => {
+  const printView = () => {
     window.print();
   };
 
+  const refresh = async () => {
+    await loadJournal();
+    setPage(1);
+    setSelectedRows([]);
+  };
+
   return (
-    <div style={styles.container}>
+    <div className="p-5 bg-white rounded-xl shadow-lg">
 
       {/* HEADER */}
-      <div style={styles.header}>
-        <h2>📘 Journal Entries</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-bold">📘 Advanced Journal Engine</h2>
 
-        <div style={styles.actions}>
-          <button onClick={exportCSV} style={styles.btn}>Export Excel</button>
-          <button onClick={printPDF} style={styles.btn}>Print PDF</button>
+        <div className="flex gap-2">
+          <button onClick={refresh} className="bg-blue-600 text-white px-3 py-1 rounded">
+            🔄 Refresh
+          </button>
+
+          <button onClick={exportCSV} className="bg-green-600 text-white px-3 py-1 rounded">
+            ⬇ Export CSV
+          </button>
+
+          <button onClick={printView} className="bg-gray-700 text-white px-3 py-1 rounded">
+            🖨 Print
+          </button>
         </div>
       </div>
 
       {/* SEARCH */}
       <input
-        placeholder="Search description..."
+        className="w-full border p-2 rounded mb-3"
+        placeholder="Search reference, member, description..."
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={styles.input}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setPage(1);
+        }}
       />
 
+      {/* LOADING */}
+      {loading && <p className="text-sm text-gray-500 mb-2">Loading...</p>}
+
       {/* TABLE */}
-      <table style={styles.table}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border">
 
-        <thead>
-          <tr style={styles.thead}>
-            <th>Date</th>
-            <th>Member</th>
-            <th>Description</th>
-            <th style={{ textAlign: "right" }}>Amount</th>
-          </tr>
-        </thead>
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="p-2">
+                <input
+                  type="checkbox"
+                  onChange={selectAllVisible}
+                />
+              </th>
+              <th className="p-2 text-left">Date</th>
+              <th className="p-2 text-left">Ref</th>
+              <th className="p-2 text-left">Member</th>
+              <th className="p-2 text-left">Description</th>
+              <th className="p-2 text-right">Amount</th>
+            </tr>
+          </thead>
 
-        <tbody>
-          {paginated.map((j, i) => (
-            <>
-              {/* MAIN ROW */}
-              <tr
-                key={j.id}
-                style={{
-                  ...styles.row,
-                  background: i % 2 ? "#f9fafb" : "white",
-                  cursor: "pointer"
-                }}
-                onClick={() =>
-                  setExpanded(expanded === j.id ? null : j.id)
-                }
-              >
-                <td>{j.date}</td>
-                <td>{j.member_no}</td>
-                <td>{j.description}</td>
-                <td style={styles.amount}>
-                  KES {Number(j.amount || 0).toLocaleString()}
-                </td>
-              </tr>
+          <tbody>
+            {paginated.map((j) => (
+              <>
+                <tr
+                  key={j.id}
+                  className="border-t hover:bg-gray-50 cursor-pointer"
+                >
+                  <td className="p-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedRows.includes(j.id)}
+                      onChange={() => toggleSelect(j.id)}
+                    />
+                  </td>
 
-              {/* DRILL DOWN */}
-              {expanded === j.id && (
-                <tr>
-                  <td colSpan="4">
-                    <div style={styles.drill}>
+                  <td className="p-2" onClick={() =>
+                    setExpanded(expanded === j.id ? null : j.id)
+                  }>
+                    {j.date}
+                  </td>
 
-                      <div style={styles.line}>
-                        <span>Debit:</span>
-                        <span style={styles.debit}>
-                          {j.debit_account}
-                        </span>
-                      </div>
+                  <td className="p-2" onClick={() =>
+                    setExpanded(expanded === j.id ? null : j.id)
+                  }>
+                    {j.reference}
+                  </td>
 
-                      <div style={styles.line}>
-                        <span>Credit:</span>
-                        <span style={styles.credit}>
-                          {j.credit_account}
-                        </span>
-                      </div>
+                  <td className="p-2">{j.member_no}</td>
 
-                    </div>
+                  <td className="p-2">{j.description}</td>
+
+                  <td className="p-2 text-right font-bold">
+                    KES {format(j.amount)}
                   </td>
                 </tr>
-              )}
-            </>
-          ))}
-        </tbody>
-      </table>
+
+                {expanded === j.id && (
+                  <tr>
+                    <td colSpan="6" className="bg-gray-50 p-4">
+                      <div className="grid grid-cols-3 gap-3 text-sm">
+
+                        <div>
+                          <p className="font-bold text-green-700">Debit Account</p>
+                          <p>{j.debit_account_id}</p>
+                        </div>
+
+                        <div>
+                          <p className="font-bold text-red-700">Credit Account</p>
+                          <p>{j.credit_account_id}</p>
+                        </div>
+
+                        <div>
+                          <p className="font-bold">Status</p>
+                          <p>{j.status || "posted"}</p>
+                        </div>
+
+                        <div>
+                          <p className="font-bold">Reference</p>
+                          <p>{j.reference}</p>
+                        </div>
+
+                        <div>
+                          <p className="font-bold">Created</p>
+                          <p>{j.created_at}</p>
+                        </div>
+
+                        <div>
+                          <p className="font-bold">Amount</p>
+                          <p>KES {format(j.amount)}</p>
+                        </div>
+
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {/* PAGINATION */}
-      <div style={styles.pagination}>
+      <div className="flex justify-between items-center mt-4">
         <button
           disabled={page === 1}
-          onClick={() => setPage(page - 1)}
+          onClick={() => setPage((p) => p - 1)}
+          className="px-3 py-1 border rounded disabled:opacity-40"
         >
           Prev
         </button>
 
-        <span>Page {page} / {totalPages || 1}</span>
+        <span className="text-sm">
+          Page {page} / {totalPages || 1}
+        </span>
 
         <button
           disabled={page === totalPages}
-          onClick={() => setPage(page + 1)}
+          onClick={() => setPage((p) => p + 1)}
+          className="px-3 py-1 border rounded disabled:opacity-40"
         >
           Next
         </button>
@@ -180,87 +286,3 @@ export default function JournalList() {
     </div>
   );
 }
-
-/* STYLES */
-const styles = {
-  container: {
-    background: "white",
-    padding: 20,
-    borderRadius: 12
-  },
-
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginBottom: 10
-  },
-
-  actions: {
-    display: "flex",
-    gap: 10
-  },
-
-  btn: {
-    padding: "6px 10px",
-    borderRadius: 6,
-    border: "none",
-    background: "#16a34a",
-    color: "white",
-    cursor: "pointer"
-  },
-
-  input: {
-    marginBottom: 10,
-    padding: 8,
-    width: "100%",
-    borderRadius: 6,
-    border: "1px solid #ddd"
-  },
-
-  table: {
-    width: "100%",
-    borderCollapse: "collapse"
-  },
-
-  thead: {
-    background: "#f3f4f6"
-  },
-
-  row: {
-    borderBottom: "1px solid #eee"
-  },
-
-  amount: {
-    textAlign: "right",
-    fontWeight: "bold"
-  },
-
-  drill: {
-    padding: 10,
-    background: "#f9fafb",
-    borderRadius: 8
-  },
-
-  line: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginBottom: 5
-  },
-
-  debit: {
-    color: "green",
-    fontWeight: "bold"
-  },
-
-  credit: {
-    color: "red",
-    fontWeight: "bold"
-  },
-
-  pagination: {
-    marginTop: 15,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center"
-  }
-};

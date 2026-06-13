@@ -3,7 +3,8 @@ import { supabase } from "../../supabaseClient";
 import { useChama } from "./ChamaContext";
 import {
   Landmark, Wallet, Briefcase, Clock, Plus, Search, Filter,
-  HelpCircle, TrendingUp, Building2, Check, X, BadgeCheck
+  HelpCircle, TrendingUp, Building2, Check, X, BadgeCheck,
+  Send, Users, ShieldAlert, AlertTriangle, Scale
 } from "lucide-react";
 
 import "./ChamaDashboard.css";
@@ -20,44 +21,52 @@ export default function ChamaDashboard() {
   const role = String(member?.role || "member").toLowerCase().trim();
   const isTreasurerOrAdmin = ["treasurer", "admin", "super_admin"].includes(role);
 
+  // Core Entity States
   const [transactions, setTransactions] = useState([]);
   const [wallets, setWallets] = useState([]);
-  const [investments, setInvestments] = useState([]);
+  const [membersList, setMembersList] = useState([]);
   const [loading, setLoading] = useState(false);
+  
+  // Interface Component States
   const [actioningId, setActioningId] = useState(null);
-  const [showInvForm, setShowInvForm] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [txTypeFilter, setTxTypeFilter] = useState("ALL");
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [assetFilter, setAssetFilter] = useState("ALL");
-
-  const [newInv, setNewInv] = useState({
-    asset_name: "", category: "Sacco", amount_invested: "", description: "",
+  // Multi-variant Send Form State
+  const [sendForm, setSendForm] = useState({
+    amount: "",
+    account_type: "savings", // options: savings, loans, fines
+    notes: ""
   });
+  const [formSubmitting, setFormSubmitting] = useState(false);
 
-  // ── Data load ──────────────────────────────────────────────────────────
+  // ── ECOSYSTEM ARCHITECTURE DATA INGESTION ──────────────────────────────
   const loadEcosystemData = useCallback(async () => {
     if (!chama?.id) return;
     setLoading(true);
     try {
-      const [txRaw, walletRaw, invRaw] = await Promise.all([
+      const [txRaw, walletRaw, membersRaw] = await Promise.all([
         supabase.from("chama_contributions").select("*").eq("chama_id", chama.id).order("created_at", { ascending: false }),
         supabase.from("chama_wallets").select("*").eq("chama_id", chama.id),
-        supabase.from("chama_investments").select("*").eq("chama_id", chama.id).order("created_at", { ascending: false }),
+        supabase.from("chama_members").select("*").eq("chama_id", chama.id).order("member_name", { ascending: true })
       ]);
 
       setTransactions(txRaw.data || []);
       setWallets(walletRaw.data || []);
-      setInvestments(invRaw.data || []);
+      setMembersList(membersRaw.data || []);
     } catch (err) {
-      console.error("Dashboard data load failed:", err);
+      console.error("Critical error pipelines failing context loads:", err);
     } finally {
       setLoading(false);
     }
   }, [chama?.id]);
 
-  useEffect(() => { loadEcosystemData(); }, [loadEcosystemData]);
+  useEffect(() => { 
+    loadEcosystemData(); 
+  }, [loadEcosystemData]);
 
-  // ── Derived figures ────────────────────────────────────────────────────
+  // ── FINANCIAL COMPUTED ENGINE PIPELINES (USEMEMO) ──────────────────────
   const ledgerSplit = useMemo(() => {
     return transactions.reduce((acc, current) => {
       if (current.status === "pending") acc.pending.push(current);
@@ -67,34 +76,78 @@ export default function ChamaDashboard() {
   }, [transactions]);
 
   const summary = useMemo(() => {
-    let savings = 0;
-    let pending = 0;
-    let totalInvested = 0;
+    let totalSavings = 0;
+    let totalLoansIssued = 0;
+    let totalFinesCollected = 0;
+    let pendingVerificationValue = 0;
 
     ledgerSplit.approved.forEach((t) => {
-      if (t.account_type === "savings") savings += Number(t.amount || 0);
+      const amt = Number(t.amount || 0);
+      if (t.account_type === "savings") totalSavings += amt;
+      if (t.account_type === "loans" || t.account_type === "loan_repayment") totalLoansIssued += amt;
+      if (t.account_type === "fines") totalFinesCollected += amt;
     });
-    ledgerSplit.pending.forEach((t) => { pending += Number(t.amount || 0); });
-    investments.forEach((i) => { totalInvested += Number(i.amount_invested || 0); });
 
-    const totalNetWorth = savings + totalInvested;
+    ledgerSplit.pending.forEach((t) => { 
+      pendingVerificationValue += Number(t.amount || 0); 
+    });
+
+    const netCapitalWorth = totalSavings + totalFinesCollected - (totalLoansIssued * 0.2); // Factoring fractional reserves
+
     return {
-      savings, pending, totalInvested, totalNetWorth,
-      liquidityRatio: totalNetWorth > 0 ? (savings / totalNetWorth) * 100 : 0,
+      savings: totalSavings,
+      loans: totalLoansIssued,
+      fines: totalFinesCollected,
+      pending: pendingVerificationValue,
+      netWorth: netCapitalWorth
     };
-  }, [ledgerSplit, investments]);
+  }, [ledgerSplit]);
 
-  const filteredInvestments = useMemo(() => {
-    return investments.filter((inv) => {
-      const matchesSearch =
-        inv.asset_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (inv.description && inv.description.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchesFilter = assetFilter === "ALL" || inv.category === assetFilter;
-      return matchesSearch && matchesFilter;
+  // Filters members dynamically for inline widget view
+  const filteredMembers = useMemo(() => {
+    return membersList.filter(m => 
+      m.member_name?.toLowerCase().includes(memberSearch.toLowerCase()) ||
+      m.role?.toLowerCase().includes(memberSearch.toLowerCase())
+    );
+  }, [membersList, memberSearch]);
+
+  const filteredPendingTransactions = useMemo(() => {
+    return ledgerSplit.pending.filter(tx => {
+      if (txTypeFilter === "ALL") return true;
+      return tx.account_type === txTypeFilter.toLowerCase();
     });
-  }, [investments, searchQuery, assetFilter]);
+  }, [ledgerSplit.pending, txTypeFilter]);
 
-  // ── Mutations ──────────────────────────────────────────────────────────
+  // ── TRANSACTION DISPATCH MATRIX (MUTATIONS) ──────────────────────────
+  const handleSendContribution = async (e) => {
+    e.preventDefault();
+    if (!sendForm.amount || parseFloat(sendForm.amount) <= 0) return;
+
+    setFormSubmitting(true);
+    try {
+      const { error } = await supabase.from("chama_contributions").insert([{
+        chama_id: chama.id,
+        member_id: member?.id,
+        member_name: member?.member_name || "Anonymous Contributor",
+        amount: parseFloat(sendForm.amount),
+        account_type: sendForm.account_type,
+        status: "pending",
+        notes: sendForm.notes,
+        created_at: new Date().toISOString()
+      }]);
+
+      if (error) throw error;
+      
+      setSendForm({ amount: "", account_type: "savings", notes: "" });
+      setShowSendModal(false);
+      await loadEcosystemData();
+    } catch (err) {
+      console.error("Failed to inject pending ledger entry into target table:", err);
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
   const handleProcessTransaction = async (id, targetStatus) => {
     setActioningId(id);
     try {
@@ -102,34 +155,16 @@ export default function ChamaDashboard() {
         .update({
           status: targetStatus,
           approved_at: targetStatus === "approved" ? new Date().toISOString() : null,
+          processed_by: member?.member_name || "System"
         })
         .eq("id", id);
+        
       if (error) throw error;
       await loadEcosystemData();
     } catch (err) {
-      console.error("Transaction update failed:", err);
+      console.error("Verification pipelines failed state mutation processing:", err);
     } finally {
       setActioningId(null);
-    }
-  };
-
-  const handleCreateInvestment = async (e) => {
-    e.preventDefault();
-    if (!newInv.asset_name || !newInv.amount_invested) return;
-    try {
-      const { error } = await supabase.from("chama_investments").insert([{
-        chama_id: chama.id,
-        asset_name: newInv.asset_name,
-        category: newInv.category,
-        amount_invested: parseFloat(newInv.amount_invested),
-        description: newInv.description,
-      }]);
-      if (error) throw error;
-      setNewInv({ asset_name: "", category: "Sacco", amount_invested: "", description: "" });
-      setShowInvForm(false);
-      await loadEcosystemData();
-    } catch (err) {
-      console.error("Investment creation failed:", err);
     }
   };
 
@@ -137,193 +172,86 @@ export default function ChamaDashboard() {
     return (
       <div className="cdash-loading">
         <div className="cdash-spinner" />
-        <p>Loading group overview…</p>
+        <p>Synchronizing Ledger Infrastructure Engine...</p>
       </div>
     );
   }
 
   return (
-    <div className="cdash">
-
-      {/* ===================== KPI ROW ===================== */}
-      <section className="cdash-kpis">
-
-        <div className="cdash-kpi-card accent-teal">
-          <div className="cdash-kpi-head">
-            <span>Net Group Worth</span>
-            <Landmark size={16} />
-          </div>
-          <div className="cdash-kpi-value">{fmt(summary.totalNetWorth)}</div>
-          <div className="cdash-kpi-bar"><div style={{ width: "100%" }} /></div>
-          <p className="cdash-kpi-note">Savings + invested assets combined</p>
+    <div className="cdash animate-fade-in">
+      
+      {/* ── TOP ACTION CONSOLE BAR ─────────────────────────────────────── */}
+      <div className="cdash-header-bar">
+        <div>
+          <span className="cdash-eyebrow">Financial Accounting Pipeline</span>
+          <h1>Ecosystem Health Metrics</h1>
         </div>
+        <button className="cdash-btn-action send-btn" onClick={() => setShowSendModal(true)}>
+          <Send size={16} /> Send Contribution
+        </button>
+      </div>
 
+      {/* ── METRIC DATA KPI CARDS (SAVINGS, LOANS, FINES, PENDING) ─────── */}
+      <section className="cdash-kpis">
         <div className="cdash-kpi-card accent-emerald">
           <div className="cdash-kpi-head">
-            <span>Liquid Savings</span>
-            <Wallet size={16} />
+            <span>Chama Liquid Savings</span>
+            <Wallet size={18} />
           </div>
           <div className="cdash-kpi-value">{fmt(summary.savings)}</div>
-          <div className="cdash-kpi-bar emerald"><div style={{ width: `${summary.liquidityRatio}%` }} /></div>
-          <p className="cdash-kpi-note">{summary.liquidityRatio.toFixed(1)}% of total worth is liquid</p>
+          <div className="cdash-kpi-bar emerald"><div style={{ width: "100%" }} /></div>
+          <p className="cdash-kpi-note">Active running account balances</p>
         </div>
 
         <div className="cdash-kpi-card accent-amber">
           <div className="cdash-kpi-head">
-            <span>Invested Capital</span>
-            <Briefcase size={16} />
+            <span>Outstanding Loans</span>
+            <Briefcase size={18} />
           </div>
-          <div className="cdash-kpi-value">{fmt(summary.totalInvested)}</div>
-          <div className="cdash-kpi-bar amber"><div style={{ width: `${100 - summary.liquidityRatio}%` }} /></div>
-          <p className="cdash-kpi-note">{(100 - summary.liquidityRatio).toFixed(1)}% allocated to assets</p>
+          <div className="cdash-kpi-value">{fmt(summary.loans)}</div>
+          <div className="cdash-kpi-bar amber"><div style={{ width: "65%" }} /></div>
+          <p className="cdash-kpi-note">Capital out with borrowing members</p>
+        </div>
+
+        <div className="cdash-kpi-card accent-gold">
+          <div className="cdash-kpi-head">
+            <span>Levies & Fines Pool</span>
+            <Scale size={18} />
+          </div>
+          <div className="cdash-kpi-value">{fmt(summary.fines)}</div>
+          <div className="cdash-kpi-bar gold"><div style={{ width: "100%" }} /></div>
+          <p className="cdash-kpi-note">Penalty allocations & administrative fines</p>
         </div>
 
         <div className="cdash-kpi-card accent-rose">
           <div className="cdash-kpi-head">
-            <span>Pending Review</span>
-            <Clock size={16} />
+            <span>Pending Validation</span>
+            <Clock size={18} />
           </div>
           <div className="cdash-kpi-value">{fmt(summary.pending)}</div>
-          <div className="cdash-kpi-bar rose"><div style={{ width: ledgerSplit.pending.length > 0 ? "100%" : "0%" }} /></div>
-          <p className="cdash-kpi-note">{ledgerSplit.pending.length} contribution(s) awaiting approval</p>
+          <div className="cdash-kpi-bar rose"><div style={{ width: filteredPendingTransactions.length > 0 ? "100%" : "0%" }} /></div>
+          <p className="cdash-kpi-note">Awaiting Treasurer verification</p>
         </div>
-
       </section>
 
-      {/* ===================== TWO COLUMN LAYOUT ===================== */}
+      {/* ── DOUBLE PIPELINE WORKSPACE GRID ────────────────────────────── */}
       <div className="cdash-split">
-
-        {/* --------------- LEFT: investments + wallets --------------- */}
+        
+        {/* LEFT COLUMN: WALLET NODES & MEMBERS DIRECTORY WIDGET */}
         <div className="cdash-col">
-
-          <div className="cdash-panel">
-
-            <div className="cdash-panel-head">
-              <div>
-                <h2>Investment Portfolio</h2>
-                <p>Assets and placements held by the group</p>
-              </div>
-              {isTreasurerOrAdmin && (
-                <button className="cdash-btn-primary" onClick={() => setShowInvForm((s) => !s)}>
-                  <Plus size={14} /> Add Asset
-                </button>
-              )}
-            </div>
-
-            <div className="cdash-toolbar">
-              <div className="cdash-search">
-                <Search size={14} />
-                <input
-                  type="text"
-                  placeholder="Search assets…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <div className="cdash-filter">
-                <Filter size={14} />
-                <select value={assetFilter} onChange={(e) => setAssetFilter(e.target.value)}>
-                  <option value="ALL">All categories</option>
-                  <option value="Sacco">Sacco Deposits</option>
-                  <option value="Bank Asset">Bank Placements</option>
-                  <option value="Agriculture">Agriculture & Livestock</option>
-                  <option value="Shares">Equity Shares</option>
-                </select>
-              </div>
-            </div>
-
-            {showInvForm && (
-              <form onSubmit={handleCreateInvestment} className="cdash-form">
-                <h3>New Investment</h3>
-                <div className="cdash-form-grid">
-                  <label>
-                    <span>Asset Name</span>
-                    <input
-                      type="text" required placeholder="e.g. CIC Money Market Fund"
-                      value={newInv.asset_name}
-                      onChange={(e) => setNewInv({ ...newInv, asset_name: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span>Category</span>
-                    <select
-                      value={newInv.category}
-                      onChange={(e) => setNewInv({ ...newInv, category: e.target.value })}
-                    >
-                      <option value="Sacco">Sacco Deposits</option>
-                      <option value="Bank Asset">Bank Placement</option>
-                      <option value="Agriculture">Agriculture & Livestock</option>
-                      <option value="Shares">Equity Shares</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Amount (KES)</span>
-                    <input
-                      type="number" required placeholder="Principal value"
-                      value={newInv.amount_invested}
-                      onChange={(e) => setNewInv({ ...newInv, amount_invested: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <label className="cdash-form-full">
-                  <span>Description</span>
-                  <input
-                    type="text" placeholder="Notes, yield, certificate reference…"
-                    value={newInv.description}
-                    onChange={(e) => setNewInv({ ...newInv, description: e.target.value })}
-                  />
-                </label>
-                <div className="cdash-form-actions">
-                  <button type="button" className="cdash-btn-ghost" onClick={() => setShowInvForm(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="cdash-btn-primary">
-                    Save Investment
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {filteredInvestments.length === 0 ? (
-              <div className="cdash-empty">
-                <HelpCircle size={26} />
-                <p>No investments match your search.</p>
-              </div>
-            ) : (
-              <div className="cdash-asset-grid">
-                {filteredInvestments.map((inv) => (
-                  <div key={inv.id} className="cdash-asset-card">
-                    <div className="cdash-asset-top">
-                      <div className="cdash-asset-info">
-                        <span className="cdash-asset-tag">{inv.category}</span>
-                        <h4>{inv.asset_name}</h4>
-                      </div>
-                      <div className="cdash-asset-value">{fmt(inv.amount_invested)}</div>
-                    </div>
-                    {inv.description && <p className="cdash-asset-desc">{inv.description}</p>}
-                    <div className="cdash-asset-footer">
-                      <span><TrendingUp size={11} /> Active</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-          </div>
-
-          {/* --------------- WALLETS --------------- */}
+          
+          {/* CUSTODY WALLETS */}
           <div className="cdash-panel">
             <div className="cdash-panel-head">
               <div>
-                <h2>Holding Wallets</h2>
-                <p>Liquidity pools by custody partner</p>
+                <h2>Liquidity Holding Vaults</h2>
+                <p>Asset distribution over target custody nodes</p>
               </div>
             </div>
-
             {wallets.length === 0 ? (
               <div className="cdash-empty">
-                <Wallet size={26} />
-                <p>No wallets configured yet.</p>
+                <Building2 size={32} />
+                <p>No backing wallets mapped to this instance profile.</p>
               </div>
             ) : (
               <div className="cdash-wallet-grid">
@@ -331,7 +259,7 @@ export default function ChamaDashboard() {
                   <div key={w.id} className="cdash-wallet-card">
                     <div className="cdash-wallet-head">
                       <div className="cdash-wallet-icon"><Building2 size={14} /></div>
-                      <span>{w.type} custody</span>
+                      <span>{w.type?.toUpperCase()}</span>
                     </div>
                     <h4>{w.name}</h4>
                     <div className="cdash-wallet-balance">{fmt(w.balance)}</div>
@@ -341,42 +269,93 @@ export default function ChamaDashboard() {
             )}
           </div>
 
-        </div>
-
-        {/* --------------- RIGHT: pending approvals --------------- */}
-        <div className="cdash-col cdash-col-side">
-          <div className="cdash-panel cdash-sticky">
-
+          {/* ACTIVE CHAMA MEMBERS DIRECTORY WIDGET */}
+          <div className="cdash-panel">
             <div className="cdash-panel-head">
               <div>
-                <h2>Pending Approvals</h2>
-                <p>Contributions awaiting review</p>
+                <h2>Chama Members Directory</h2>
+                <p>Registered contributors inside this workspace</p>
+              </div>
+              <div className="cdash-panel-search-wrap">
+                <Search size={14} />
+                <input 
+                  type="text" 
+                  placeholder="Search members..." 
+                  value={memberSearch}
+                  onChange={(e) => setMemberSearch(e.target.value)}
+                />
               </div>
             </div>
 
-            {ledgerSplit.pending.length === 0 ? (
+            <div className="cdash-members-list">
+              {filteredMembers.slice(0, 5).map((m) => (
+                <div key={m.id} className="cdash-member-row">
+                  <div className="cdash-member-profile">
+                    <div className="cdash-member-avatar">
+                      {String(m.member_name || "M").charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h4>{m.member_name}</h4>
+                      <span>Joined {new Date(m.created_at).toLocaleDateString("en-KE")}</span>
+                    </div>
+                  </div>
+                  <span className={`cdash-role-tag ${m.role?.toLowerCase()}`}>
+                    {m.role || "Member"}
+                  </span>
+                </div>
+              ))}
+              {filteredMembers.length === 0 && (
+                <p className="cdash-panel-fallback">No registered system members match criteria.</p>
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* RIGHT COLUMN: PENDING APPROVAL STREAM */}
+        <div className="cdash-col cdash-col-side">
+          <div className="cdash-panel cdash-sticky">
+            <div className="cdash-panel-head">
+              <div>
+                <h2>Pending Processing Ledger</h2>
+                <p>Transactions awaiting confirmation</p>
+              </div>
+              <div className="cdash-panel-filter-tool">
+                <Filter size={12} />
+                <select value={txTypeFilter} onChange={(e) => setTxTypeFilter(e.target.value)}>
+                  <option value="ALL">All Accounts</option>
+                  <option value="Savings">Savings Only</option>
+                  <option value="Loans">Loans Only</option>
+                  <option value="Fines">Fines Only</option>
+                </select>
+              </div>
+            </div>
+
+            {filteredPendingTransactions.length === 0 ? (
               <div className="cdash-empty cdash-empty-success">
-                <BadgeCheck size={22} />
-                <h4>All caught up</h4>
-                <p>No contributions awaiting approval.</p>
+                <BadgeCheck size={32} className="success-icon" />
+                <h4>Ledger Integrity Clean</h4>
+                <p>No operational entries are stacked in the queues.</p>
               </div>
             ) : (
               <div className="cdash-approval-list">
-                {ledgerSplit.pending.map((tx) => (
-                  <div
-                    key={tx.id}
-                    className={`cdash-approval-row ${actioningId === tx.id ? "processing" : ""}`}
-                  >
+                {filteredPendingTransactions.map((tx) => (
+                  <div key={tx.id} className={`cdash-approval-row ${actioningId === tx.id ? "processing" : ""}`}>
                     <div className="cdash-approval-info">
                       <div className="cdash-approval-member">
                         <span className="cdash-approval-avatar">
-                          {String(tx.member_name || "M").charAt(0)}
+                          {String(tx.member_name || "M").charAt(0).toUpperCase()}
                         </span>
-                        <strong>{tx.member_name || "Member"}</strong>
+                        <div>
+                          <strong>{tx.member_name}</strong>
+                          <span className="cdash-tx-notes">{tx.notes || "Standard contribution deposit"}</span>
+                        </div>
                       </div>
                       <div className="cdash-approval-meta">
                         <span className="cdash-approval-amount">{fmt(tx.amount)}</span>
-                        <span className="cdash-approval-type">{tx.account_type}</span>
+                        <span className={`cdash-type-badge ${tx.account_type}`}>
+                          {tx.account_type}
+                        </span>
                       </div>
                     </div>
 
@@ -386,7 +365,7 @@ export default function ChamaDashboard() {
                           disabled={actioningId !== null}
                           onClick={() => handleProcessTransaction(tx.id, "approved")}
                           className="cdash-icon-btn approve"
-                          aria-label="Approve"
+                          title="Verify Asset Clear"
                         >
                           <Check size={14} />
                         </button>
@@ -394,25 +373,90 @@ export default function ChamaDashboard() {
                           disabled={actioningId !== null}
                           onClick={() => handleProcessTransaction(tx.id, "rejected")}
                           className="cdash-icon-btn reject"
-                          aria-label="Reject"
+                          title="Reject System Ingestion"
                         >
                           <X size={14} />
                         </button>
                       </div>
                     ) : (
                       <div className="cdash-approval-locked">
-                        <span className="cdash-pulse" /> Pending
+                        <span className="cdash-pulse" /> Pending Approval
                       </div>
                     )}
                   </div>
                 ))}
               </div>
             )}
-
           </div>
         </div>
 
       </div>
+
+      {/* ── TRANSACTIONAL MODAL DIALOG (SEND CONTRIBUTION INPUTS) ─────── */}
+      {showSendModal && (
+        <div className="cdash-modal-overlay">
+          <div className="cdash-modal-box animate-scale-up">
+            <div className="cdash-modal-head">
+              <h3>Dispatch Contribution Funds</h3>
+              <button className="close-modal-btn" onClick={() => setShowSendModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSendContribution} className="cdash-modal-form">
+              <div className="cdash-modal-field">
+                <label>Target Account Category</label>
+                <select 
+                  value={sendForm.account_type} 
+                  onChange={(e) => setSendForm({...sendForm, account_type: e.target.value})}
+                >
+                  <option value="savings">Savings Contribution</option>
+                  <option value="loans">Loan Amortization Repayment</option>
+                  <option value="fines">Levy / Late Penalty Fee Payment</option>
+                </select>
+              </div>
+
+              <div className="cdash-modal-field">
+                <label>Transaction Principal Value (KES)</label>
+                <div className="currency-input-wrapper">
+                  <span className="currency-denom">KES</span>
+                  <input 
+                    type="number" 
+                    required 
+                    placeholder="e.g. 4,000" 
+                    value={sendForm.amount}
+                    onChange={(e) => setSendForm({...sendForm, amount: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="cdash-modal-field">
+                <label>Reference Notes / Manifest</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. M-Pesa Ref or June Mandatory Contribution" 
+                  value={sendForm.notes}
+                  onChange={(e) => setSendForm({...sendForm, notes: e.target.value})}
+                />
+              </div>
+
+              <div className="cdash-modal-warning">
+                <AlertTriangle size={16} />
+                <p>Funds will transition immediately into a <strong>pending</strong> state waiting for a certified Treasurer verification signature.</p>
+              </div>
+
+              <div className="cdash-modal-actions">
+                <button type="button" className="cdash-btn-ghost" onClick={() => setShowSendModal(false)}>
+                  Abort
+                </button>
+                <button type="submit" className="cdash-btn-primary" disabled={formSubmitting}>
+                  {formSubmitting ? <div className="cdash-spinner-micro" /> : "Transmit Pipeline Entry"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

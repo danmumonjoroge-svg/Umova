@@ -1,6 +1,6 @@
 // src/App.js
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "./Context/AuthContext";
 import { ChamaProvider } from "./modules/chama/ChamaContext";
@@ -43,23 +43,20 @@ import AdminStoryDashboard    from "./Pages/Admin/StoryDashboard";
 const STAFF_ROLES = ["staff", "admin", "manager", "superadmin", "auditor", "teller"];
 
 // ─────────────────────────────────────────────
-// LOADER
+// UI LOADER
 // ─────────────────────────────────────────────
 function Loader() {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div className="bg-white rounded-3xl shadow-xl p-10 w-[420px] text-center border border-slate-100">
-        <div className="w-16 h-16 border-4 border-green-800 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+        <div className="w-16 h-16 border-4 border-emerald-800 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
         <h2 className="text-2xl font-black text-slate-800 tracking-tight">UMOVA ERP SYSTEM</h2>
-        <p className="text-slate-500 text-sm mt-2 font-medium">Verifying session...</p>
+        <p className="text-slate-500 text-sm mt-2 font-medium">Verifying workspace integrity...</p>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────
-// UNASSIGNED ONBOARDING
-// ─────────────────────────────────────────────
 function UnassignedOnboarding() {
   const { logout } = useAuth();
   return (
@@ -84,7 +81,67 @@ function UnassignedOnboarding() {
 }
 
 // ─────────────────────────────────────────────
-// MEMBER GUARD
+// MULTI-SESSION OVERWRITE DEFENDER
+// ─────────────────────────────────────────────
+function SessionConflictScreen() {
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-3xl shadow-xl p-10 w-[520px] text-center border border-slate-100">
+        <div className="text-5xl mb-4">🔏</div>
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Isolated Session Switched</h2>
+        <p className="text-slate-500 text-sm mt-3 leading-relaxed">
+          Another member account or administrative instance was opened in a different window on this device. 
+          To protect financial statement data privacy, this workspace layout has locked down.
+        </p>
+        <button 
+          onClick={() => window.location.href = '/'}
+          className="mt-6 w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-6 rounded-2xl transition shadow-md"
+        >
+          Return to Public Site
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// MASTER INTERCEPTOR CONTAINER
+// ─────────────────────────────────────────────
+function WorkspaceSecurityManager({ children }) {
+  const { user } = useAuth();
+  const [hasConflict, setHasConflict] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Capture the exact member identifier that claimed this tab layout session first
+    if (!sessionStorage.getItem("umova_active_tab_user")) {
+      sessionStorage.setItem("umova_active_tab_user", user.id);
+    }
+
+    const verifyTabOwnership = () => {
+      const ownedBy = sessionStorage.getItem("umova_active_tab_user");
+      // If the context state has transformed to a brand new user id, throw the intercept block
+      if (ownedBy && ownedBy !== user.id) {
+        setHasConflict(true);
+      } else {
+        setHasConflict(false);
+      }
+    };
+
+    verifyTabOwnership();
+    
+    // Listen for storage events if other tabs overwrite tokens globally
+    window.addEventListener("storage", verifyTabOwnership);
+    return () => window.removeEventListener("storage", verifyTabOwnership);
+  }, [user]);
+
+  if (hasConflict) return <SessionConflictScreen />;
+  return children;
+}
+
+// ─────────────────────────────────────────────
+// GUARDS
 // ─────────────────────────────────────────────
 function MemberGuard() {
   const { user, loading, role } = useAuth();
@@ -114,9 +171,6 @@ function StaffGuard() {
   return <Outlet />;
 }
 
-// ─────────────────────────────────────────────
-// POST LOGIN
-// ─────────────────────────────────────────────
 function PostLoginRedirect() {
   const { user, loading, role } = useAuth();
 
@@ -131,15 +185,16 @@ function PostLoginRedirect() {
   return <Navigate to="/" replace />;
 }
 
-// ─────────────────────────────────────────────
-// LOGIN ROUTES
-// ─────────────────────────────────────────────
 function AdminLoginRoute() {
   const { user, loading, role } = useAuth();
 
   if (loading) return <Loader />;
+
   if (user && role && STAFF_ROLES.includes(role)) {
     return <Navigate to="/admin/dashboard" replace />;
+  }
+  if (user && role === "member") {
+    return <Navigate to="/member/dashboard" replace />;
   }
 
   return <AdminLogin />;
@@ -149,79 +204,75 @@ function MemberLoginRoute() {
   const { user, loading, role } = useAuth();
 
   if (loading) return <Loader />;
+
   if (user && role === "member") {
     return <Navigate to="/member/dashboard" replace />;
+  }
+  if (user && role && STAFF_ROLES.includes(role)) {
+    return <Navigate to="/admin/dashboard" replace />;
   }
 
   return <AuthPage />;
 }
 
 // ─────────────────────────────────────────────
-// APP
+// ENGINE CORE
 // ─────────────────────────────────────────────
 function App() {
   return (
     <ChamaProvider>
-      <Routes>
+      <WorkspaceSecurityManager>
+        <Routes>
+          <Route path="/" element={<PublicSite />} />
+          <Route path="/unassigned-onboarding" element={<UnassignedOnboarding />} />
+          <Route path="/set-password" element={<SetPassword />} />
 
-        {/* PUBLIC */}
-        <Route path="/" element={<PublicSite />} />
-        <Route path="/unassigned-onboarding" element={<UnassignedOnboarding />} />
-        <Route path="/set-password" element={<SetPassword />} />
+          <Route path="/login" element={<MemberLoginRoute />} />
+          <Route path="/admin-login" element={<AdminLoginRoute />} />
 
-        {/* AUTH */}
-        <Route path="/login" element={<MemberLoginRoute />} />
-        <Route path="/admin-login" element={<AdminLoginRoute />} />
+          <Route path="/chama/*" element={<ChamaRouter />} />
+          <Route path="/redirect" element={<PostLoginRedirect />} />
 
-        {/* CHAMA MODULE (SAFE - NO DOUBLE WRAP ANYMORE) */}
-        <Route path="/chama/*" element={<ChamaRouter />} />
-
-        {/* REDIRECT */}
-        <Route path="/redirect" element={<PostLoginRedirect />} />
-
-        {/* MEMBER */}
-        <Route path="/member" element={<MemberGuard />}>
-          <Route element={<DashboardMain />}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardHome />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="savings" element={<Savings />} />
-            <Route path="shares" element={<ShareCapital />} />
-            <Route path="loans" element={<Loans />} />
-            <Route path="statement" element={<Statements />} />
+          <Route path="/member" element={<MemberGuard />}>
+            <Route element={<DashboardMain />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<DashboardHome />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="savings" element={<Savings />} />
+              <Route path="shares" element={<ShareCapital />} />
+              <Route path="loans" element={<Loans />} />
+              <Route path="statement" element={<Statements />} />
+            </Route>
           </Route>
-        </Route>
 
-        {/* ADMIN */}
-        <Route path="/admin" element={<StaffGuard />}>
-          <Route element={<AdminLayout />}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="erp-dashboard" element={<AdminERPDashboard />} />
-            <Route path="members" element={<AdminMembers />} />
-            <Route path="member-statements" element={<AdminMemberStatements />} />
-            <Route path="loans" element={<AdminLoans />} />
-            <Route path="loan-application" element={<AdminLoanApplication />} />
-            <Route path="loan-approval" element={<AdminLoanApproval />} />
-            <Route path="loan-disbursement" element={<AdminLoanDisbursement />} />
-            <Route path="loan-repayments" element={<AdminLoanRepayments />} />
-            <Route path="loan-schedule" element={<AdminLoanSchedule />} />
-            <Route path="loan-penalties" element={<AdminLoanPenalties />} />
-            <Route path="interest-dashboard" element={<AdminInterestDashboard />} />
-            <Route path="trial-balance" element={<AdminTrialBalance />} />
-            <Route path="income-statement" element={<AdminIncomeStatement />} />
-            <Route path="balance-sheet" element={<AdminBalanceSheet />} />
-            <Route path="reports" element={<AdminReports />} />
-            <Route path="payments" element={<AdminPayments />} />
-            <Route path="settings" element={<AdminSettings />} />
-            <Route path="stories" element={<AdminStoryDashboard />} />
+          <Route path="/admin" element={<StaffGuard />}>
+            <Route element={<AdminLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="erp-dashboard" element={<AdminERPDashboard />} />
+              <Route path="members" element={<AdminMembers />} />
+              <Route path="member-statements" element={<AdminMemberStatements />} />
+              <Route path="loans" element={<AdminLoans />} />
+              <Route path="loan-application" element={<AdminLoanApplication />} />
+              <Route path="loan-approval" element={<AdminLoanApproval />} />
+              <Route path="loan-disbursement" element={<AdminLoanDisbursement />} />
+              <Route path="loan-repayments" element={<AdminLoanRepayments />} />
+              <Route path="loan-schedule" element={<AdminLoanSchedule />} />
+              <Route path="loan-penalties" element={<AdminLoanPenalties />} />
+              <Route path="interest-dashboard" element={<AdminInterestDashboard />} />
+              <Route path="trial-balance" element={<AdminTrialBalance />} />
+              <Route path="income-statement" element={<AdminIncomeStatement />} />
+              <Route path="balance-sheet" element={<AdminBalanceSheet />} />
+              <Route path="reports" element={<AdminReports />} />
+              <Route path="payments" element={<AdminPayments />} />
+              <Route path="settings" element={<AdminSettings />} />
+              <Route path="stories" element={<AdminStoryDashboard />} />
+            </Route>
           </Route>
-        </Route>
 
-        {/* FALLBACK */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-
-      </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </WorkspaceSecurityManager>
     </ChamaProvider>
   );
 }

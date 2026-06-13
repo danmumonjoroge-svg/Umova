@@ -1,59 +1,30 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
 
 export default function Dashboard() {
   const [ledger, setLedger] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [kpi, setKpi] = useState({
-    savings: 0,
-    loans: 0,
-    shares: 0,
-    cash: 0,
-  });
+  const ACC = useMemo(
+    () => ({
+      CASH: "1007",
+      LOANS: "1011",
+      SAVINGS: "1018",
+      SHARES: "1012",
+      INTEREST_INCOME: "1020",
+      EXPENSE: "1006",
+    }),
+    []
+  );
 
-  const [balanceSheet, setBalanceSheet] = useState({
-    assets: 0,
-    liabilities: 0,
-    equity: 0,
-  });
-
-  const [pl, setPl] = useState({
-    income: 0,
-    expense: 0,
-    net: 0,
-  });
-
-  const [risk, setRisk] = useState({
-    liquidity: 0,
-    defaultScore: 0,
-    par: 0,
-  });
-
-  const [forecast, setForecast] = useState([]);
-
-  // ================= SAFE HELPERS =================
-  const clean = (v) => {
-    if (v === null || v === undefined) return 0;
-    const n = Number(String(v).replace(/,/g, "").trim());
-    return isNaN(n) ? 0 : n;
+  // ================= SAFE NUMBER =================
+  const n = (v) => {
+    const x = Number(String(v ?? 0).replace(/,/g, "").trim());
+    return isNaN(x) ? 0 : x;
   };
 
-  const normalize = (data) =>
-    (data || []).map((r) => ({
-      debit: String(r.debit_account_id || "").trim(),
-      credit: String(r.credit_account_id || "").trim(),
-      amount: clean(r.amount),
-      date: r.date || null,
-    }));
-
-  const format = (v) =>
-    new Intl.NumberFormat("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(clean(v));
-
-  // ================= LOAD DATA =================
+  // ================= LOAD =================
   useEffect(() => {
     load();
   }, []);
@@ -63,125 +34,142 @@ export default function Dashboard() {
 
     const { data, error } = await supabase
       .from("general_ledger")
-      .select("*"); // IMPORTANT FIX: fetch everything
+      .select("*");
 
-    if (error || !data) {
+    if (error) {
       console.error(error);
       setLoading(false);
       return;
     }
 
-    const cleanData = normalize(data);
-
-    setLedger(cleanData);
-    engine(cleanData);
-
+    setLedger(data || []);
     setLoading(false);
   };
 
-  // ================= CORE LEDGER ENGINE =================
-  const calc = (data, id, type) => {
-    let total = 0;
-    const accountId = String(id).trim();
-
-    data.forEach((r) => {
-      const amt = clean(r.amount);
-      const debit = r.debit;
-      const credit = r.credit;
-
-      if (type === "asset") {
-        if (debit === accountId) total += amt;
-        if (credit === accountId) total -= amt;
-      }
-
-      if (type === "liability") {
-        if (credit === accountId) total += amt;
-        if (debit === accountId) total -= amt;
-      }
-    });
-
-    return clean(total);
+  const refresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
   };
 
-  // ================= ENGINE =================
-  const engine = (data) => {
-    // KPIs
-    const savings = calc(data, "1018", "liability");
-    const loans = calc(data, "1011", "asset");
-    const shares = calc(data, "1012", "liability");
-    const cash = calc(data, "1007", "asset");
+  // ================= CORE LEDGER ENGINE =================
+  const calcAccount = (accountId, mode = "asset") => {
+    let balance = 0;
 
-    setKpi({ savings, loans, shares, cash });
+    ledger.forEach((tx) => {
+      const amt = n(tx.amount);
+      const debit = String(tx.debit_account_id);
+      const credit = String(tx.credit_account_id);
 
-    // BALANCE SHEET
-    const assets = cash + loans;
-    const liabilities = savings + shares;
-    const equity = assets - liabilities;
+      if (mode === "asset") {
+        if (debit === accountId) balance += amt;
+        if (credit === accountId) balance -= amt;
+      }
 
-    setBalanceSheet({
-      assets,
-      liabilities,
-      equity,
+      if (mode === "liability") {
+        if (credit === accountId) balance += amt;
+        if (debit === accountId) balance -= amt;
+      }
+
+      if (mode === "income") {
+        if (credit === accountId) balance += amt;
+      }
+
+      if (mode === "expense") {
+        if (debit === accountId) balance += amt;
+      }
     });
 
-    // P&L
-    const income = loans * 0.02;
-    const expense = savings * 0.005;
+    return balance;
+  };
 
-    setPl({
+  // ================= KPIs =================
+  const kpi = useMemo(() => {
+    const cash = calcAccount(ACC.CASH, "asset");
+    const loans = calcAccount(ACC.LOANS, "asset");
+    const savings = calcAccount(ACC.SAVINGS, "liability");
+    const shares = calcAccount(ACC.SHARES, "liability");
+
+    return { cash, loans, savings, shares };
+  }, [ledger]);
+
+  // ================= PROFIT & LOSS =================
+  const pl = useMemo(() => {
+    const income = calcAccount(ACC.INTEREST_INCOME, "income");
+    const expense = calcAccount(ACC.EXPENSE, "expense");
+
+    return {
       income,
       expense,
       net: income - expense,
-    });
+    };
+  }, [ledger]);
 
-    // RISK ENGINE (DOCTOR VIEW)
-    const liquidity = cash / (loans || 1);
+  // ================= BALANCE SHEET =================
+  const bs = useMemo(() => {
+    const assets = kpi.cash + kpi.loans;
+    const liabilities = kpi.savings + kpi.shares;
+    const equity = assets - liabilities;
 
-    let score = 55;
-    if (liquidity > 0.6) score -= 20;
+    return { assets, liabilities, equity };
+  }, [kpi]);
+
+  // ================= RISK ENGINE =================
+  const risk = useMemo(() => {
+    const liquidity = kpi.cash / (kpi.loans || 1);
+    const par = kpi.loans > kpi.savings
+      ? ((kpi.loans - kpi.savings) / (kpi.loans || 1)) * 100
+      : 5;
+
+    let score = 50;
     if (liquidity < 0.2) score += 25;
-    if (loans > savings * 2) score += 15;
+    if (liquidity > 0.6) score -= 20;
+    if (kpi.loans > kpi.savings * 2) score += 15;
 
-    const par =
-      loans > savings ? ((loans - savings) / loans) * 100 : 5;
-
-    setRisk({
+    return {
       liquidity: liquidity * 100,
-      defaultScore: Math.min(100, Math.max(0, score)),
       par,
-    });
+      score: Math.min(100, Math.max(0, score)),
+    };
+  }, [kpi]);
 
-    // FORECAST ENGINE
-    const base = assets;
+  // ================= FORMAT =================
+  const format = (v) =>
+    new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(v || 0);
 
-    setForecast([
-      { month: "M+1", value: base * 1.02 },
-      { month: "M+2", value: base * 1.04 },
-      { month: "M+3", value: base * 1.06 },
-    ]);
+  // ================= EXPORT =================
+  const exportCSV = () => {
+    const rows = [
+      ["Metric", "Value"],
+      ["Cash", kpi.cash],
+      ["Loans", kpi.loans],
+      ["Savings", kpi.savings],
+      ["Shares", kpi.shares],
+      ["Assets", bs.assets],
+      ["Liabilities", bs.liabilities],
+      ["Equity", bs.equity],
+      ["Income", pl.income],
+      ["Expense", pl.expense],
+      ["Net", pl.net],
+      ["PAR", risk.par],
+      ["Liquidity", risk.liquidity],
+      ["Risk Score", risk.score],
+    ];
+
+    const csv = rows.map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "sacco_dashboard.csv";
+    link.click();
   };
 
-  // ================= WHATSAPP =================
-  const sendWhatsApp = async () => {
-    await fetch("/api/whatsapp/send-report", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kpi, balanceSheet, risk, pl }),
-    });
-  };
-
-  // ================= SMS =================
-  const sendSMS = async () => {
-    await fetch("/api/sms/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: `SACCO REPORT | Loans ${format(
-          kpi.loans
-        )} | Savings ${format(kpi.savings)} | PAR ${format(risk.par)}%`,
-      }),
-    });
-  };
+  // ================= PRINT =================
+  const printReport = () => window.print();
 
   // ================= UI =================
   return (
@@ -189,29 +177,41 @@ export default function Dashboard() {
 
       {/* HEADER */}
       <div style={styles.header}>
-        <h1 style={styles.title}>
-          🏦 SACCO Executive Banking Dashboard
-        </h1>
+        <h1 style={styles.title}>🏦 SACCO Executive Dashboard</h1>
         <p style={styles.subtitle}>
-          Core Banking Engine • Risk Intelligence • Financial Control Center
+          Real-time General Ledger Intelligence Engine
         </p>
+
+        <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+          <button style={styles.btnGreen} onClick={refresh}>
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </button>
+
+          <button style={styles.btnBlue} onClick={exportCSV}>
+            Export CSV
+          </button>
+
+          <button style={styles.btnDark} onClick={printReport}>
+            Print
+          </button>
+        </div>
       </div>
 
       {/* KPI */}
       <div style={styles.kpiGrid}>
-        <Card title="Savings" value={kpi.savings} color="#16a34a" />
-        <Card title="Loans" value={kpi.loans} color="#dc2626" />
-        <Card title="Shares" value={kpi.shares} color="#2563eb" />
-        <Card title="Cashbook (1007)" value={kpi.cash} color="#f59e0b" />
+        <Card title="Cash" value={kpi.cash} />
+        <Card title="Loans" value={kpi.loans} />
+        <Card title="Savings" value={kpi.savings} />
+        <Card title="Shares" value={kpi.shares} />
       </div>
 
       {/* MAIN GRID */}
       <div style={styles.grid2}>
 
         <Panel title="💰 Balance Sheet">
-          <Row label="Assets" value={balanceSheet.assets} />
-          <Row label="Liabilities" value={balanceSheet.liabilities} />
-          <Row label="Equity" value={balanceSheet.equity} />
+          <Row label="Assets" value={bs.assets} />
+          <Row label="Liabilities" value={bs.liabilities} />
+          <Row label="Equity" value={bs.equity} />
         </Panel>
 
         <Panel title="📊 Profit & Loss">
@@ -224,39 +224,12 @@ export default function Dashboard() {
 
       {/* RISK */}
       <div style={styles.panel}>
-        <h2 style={styles.sectionTitle}>🧠 Financial Health (Doctor View)</h2>
+        <h3>🧠 Risk Engine</h3>
 
         <div style={styles.riskGrid}>
-          <Risk label="Liquidity %" value={risk.liquidity} color="#2563eb" />
-          <Risk label="Default Score" value={risk.defaultScore} color="#dc2626" />
-          <Risk label="PAR %" value={risk.par} color="#f59e0b" />
-        </div>
-      </div>
-
-      {/* FORECAST */}
-      <div style={styles.panel}>
-        <h2 style={styles.sectionTitle}>📈 Forecast Engine</h2>
-
-        {forecast.map((f, i) => (
-          <div key={i} style={styles.row}>
-            <span>{f.month}</span>
-            <strong>KES {format(f.value)}</strong>
-          </div>
-        ))}
-      </div>
-
-      {/* ACTIONS */}
-      <div style={styles.panel}>
-        <h2 style={styles.sectionTitle}>⚡ Executive Actions</h2>
-
-        <div style={styles.actions}>
-          <button style={styles.btnGreen} onClick={sendWhatsApp}>
-            📲 WhatsApp Report
-          </button>
-
-          <button style={styles.btnBlue} onClick={sendSMS}>
-            📩 SMS Alert
-          </button>
+          <Risk label="Liquidity %" value={risk.liquidity} />
+          <Risk label="PAR %" value={risk.par} />
+          <Risk label="Risk Score" value={risk.score} />
         </div>
       </div>
 
@@ -264,20 +237,20 @@ export default function Dashboard() {
   );
 }
 
-// ================= UI COMPONENTS =================
-function Card({ title, value, color }) {
+// ================= COMPONENTS =================
+function Card({ title, value }) {
   return (
-    <div style={{ ...styles.card, borderLeft: `4px solid ${color}` }}>
+    <div style={styles.card}>
       <p>{title}</p>
-      <h3>KES {Number(value || 0).toLocaleString()}</h3>
+      <h3>{Number(value || 0).toLocaleString()}</h3>
     </div>
   );
 }
 
 function Panel({ title, children }) {
   return (
-    <div style={styles.panelBox}>
-      <h3 style={styles.sectionTitle}>{title}</h3>
+    <div style={styles.panel}>
+      <h3>{title}</h3>
       {children}
     </div>
   );
@@ -287,14 +260,14 @@ function Row({ label, value }) {
   return (
     <div style={styles.row}>
       <span>{label}</span>
-      <strong>KES {Number(value || 0).toLocaleString()}</strong>
+      <strong>{Number(value || 0).toLocaleString()}</strong>
     </div>
   );
 }
 
-function Risk({ label, value, color }) {
+function Risk({ label, value }) {
   return (
-    <div style={{ ...styles.riskCard, borderTop: `3px solid ${color}` }}>
+    <div style={styles.riskCard}>
       <p>{label}</p>
       <h4>{Number(value || 0).toFixed(2)}</h4>
     </div>
@@ -343,19 +316,6 @@ const styles = {
     borderRadius: 12,
   },
 
-  panelBox: {
-    background: "white",
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 15,
-  },
-
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: 700,
-    marginBottom: 10,
-  },
-
   row: {
     display: "flex",
     justifyContent: "space-between",
@@ -374,24 +334,30 @@ const styles = {
     borderRadius: 10,
   },
 
-  actions: {
-    display: "flex",
-    gap: 10,
-  },
-
   btnGreen: {
     background: "#16a34a",
     color: "white",
-    padding: 10,
-    border: "none",
+    padding: "8px 12px",
     borderRadius: 8,
+    border: "none",
+    cursor: "pointer",
   },
 
   btnBlue: {
     background: "#2563eb",
     color: "white",
-    padding: 10,
-    border: "none",
+    padding: "8px 12px",
     borderRadius: 8,
+    border: "none",
+    cursor: "pointer",
+  },
+
+  btnDark: {
+    background: "#111827",
+    color: "white",
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "none",
+    cursor: "pointer",
   },
 };

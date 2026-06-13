@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
 
 const SECTIONS = {
@@ -9,257 +9,244 @@ const SECTIONS = {
   dashboard: "Dashboard Controls",
   integrations: "Integrations",
   security: "Security & Roles",
-  audit: "Audit Logs"
+  audit: "Audit Logs",
+};
+
+// ================= FIELD SCHEMA =================
+const SCHEMA = {
+  members: [
+    { key: "member_id_format", label: "Member ID Format", type: "text" },
+    { key: "auto_approve_members", label: "Auto Approve Members", type: "boolean" },
+  ],
+  loans: [
+    { key: "loan_interest_rate", label: "Interest Rate (%)", type: "number" },
+    { key: "auto_disbursement", label: "Auto Disbursement", type: "boolean" },
+    { key: "loan_penalty_rate", label: "Penalty Rate (%)", type: "number" },
+  ],
+  integrations: [
+    { key: "sms_provider", label: "SMS Provider", type: "text" },
+    { key: "whatsapp_enabled", label: "WhatsApp Enabled", type: "boolean" },
+  ],
+  security: [
+    { key: "session_timeout", label: "Session Timeout (mins)", type: "number" },
+    { key: "max_login_attempts", label: "Max Login Attempts", type: "number" },
+  ],
+  dashboard: [
+    { key: "show_predictions", label: "AI Cashflow Widget", type: "boolean" },
+    { key: "enable_live_kpis", label: "Live KPI Updates", type: "boolean" },
+  ],
+};
+
+// ================= UTILS =================
+const debounce = (fn, delay = 500) => {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), delay);
+  };
 };
 
 export default function Settings() {
-
   const [view, setView] = useState("home");
   const [settings, setSettings] = useState({});
+  const [dirty, setDirty] = useState({});
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
+  // ================= LOAD =================
   useEffect(() => {
     loadSettings();
   }, []);
 
   const loadSettings = async () => {
-    const { data } = await supabase.from("system_settings").select("*");
+    setLoading(true);
+
+    const { data } = await supabase
+      .from("system_settings")
+      .select("*");
+
     const map = {};
-    (data || []).forEach(s => {
+    (data || []).forEach((s) => {
       map[s.key] = s.value;
     });
+
     setSettings(map);
+    setDirty({});
+    setLoading(false);
   };
 
-  const updateSetting = async (key, value) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-    await supabase.from("system_settings").upsert([{ key, value }]);
+  // ================= UPDATE =================
+  const updateSetting = (key, value) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+    setDirty((prev) => ({ ...prev, [key]: value }));
   };
 
-  // ================= HOME DASHBOARD =================
+  // ================= SAVE (DEBOUNCED) =================
+  const saveToDB = useMemo(
+    () =>
+      debounce(async (payload) => {
+        setSaving(true);
+
+        const rows = Object.entries(payload).map(([key, value]) => ({
+          key,
+          value,
+        }));
+
+        await supabase.from("system_settings").upsert(rows);
+
+        setDirty({});
+        setSaving(false);
+      }, 800),
+    []
+  );
+
+  useEffect(() => {
+    if (Object.keys(dirty).length > 0) {
+      saveToDB(dirty);
+    }
+  }, [dirty]);
+
+  // ================= FIELD RENDER =================
+  const Field = ({ item }) => {
+    const value = settings[item.key] ?? "";
+
+    const common = {
+      className: "border p-2 w-full rounded",
+      onChange: (e) => updateSetting(item.key, e.target.value),
+    };
+
+    return (
+      <div className="mb-4">
+        <label className="block text-sm font-medium mb-1">
+          {item.label}
+        </label>
+
+        {item.type === "boolean" ? (
+          <select
+            {...common}
+            value={value}
+          >
+            <option value="true">Enabled</option>
+            <option value="false">Disabled</option>
+          </select>
+        ) : item.type === "number" ? (
+          <input
+            type="number"
+            {...common}
+            value={value}
+          />
+        ) : (
+          <input
+            type="text"
+            {...common}
+            value={value}
+          />
+        )}
+      </div>
+    );
+  };
+
+  // ================= FILTERED SECTIONS =================
+  const filteredSections = Object.entries(SECTIONS).filter(([k, v]) =>
+    v.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // ================= HOME =================
   if (view === "home") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-200 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 to-blue-50 p-6">
 
         {/* HEADER */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-800">
-            ⚙️ System Control Center
-          </h1>
+          <h1 className="text-3xl font-bold">⚙️ Settings Engine</h1>
           <p className="text-slate-500">
-            Configure every module of your core banking system
+            Real-time system configuration center
           </p>
         </div>
 
-        {/* GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-5">
+        {/* SEARCH */}
+        <input
+          placeholder="Search settings section..."
+          className="border p-2 w-full rounded mb-4"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
 
-          {Object.entries(SECTIONS).map(([key, label]) => (
+        {/* STATUS */}
+        <div className="mb-4 text-sm">
+          {saving && (
+            <span className="text-green-600">● Saving changes...</span>
+          )}
+          {!saving && Object.keys(dirty).length === 0 && (
+            <span className="text-gray-500">All changes saved</span>
+          )}
+        </div>
+
+        {/* GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+          {filteredSections.map(([key, label]) => (
             <div
               key={key}
               onClick={() => setView(key)}
-              className="
-                bg-white
-                border
-                border-slate-200
-                rounded-xl
-                shadow-sm
-                hover:shadow-xl
-                hover:border-blue-300
-                transition-all
-                duration-200
-                cursor-pointer
-                p-5
-              "
+              className="bg-white p-5 rounded-xl shadow hover:shadow-lg cursor-pointer"
             >
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-slate-800">
-                  {label}
-                </h2>
-                <span className="text-blue-500">›</span>
-              </div>
-
-              <p className="text-sm text-slate-500 mt-2">
-                Click to configure settings
+              <h2 className="font-semibold">{label}</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Click to configure
               </p>
             </div>
           ))}
 
         </div>
 
-        {/* FOOTER */}
-        <div className="mt-10 text-center text-xs text-slate-400">
-          Core Banking ERP Settings Module v2.0
-        </div>
-
+        <button
+          onClick={loadSettings}
+          className="mt-6 bg-blue-600 text-white px-4 py-2 rounded"
+        >
+          🔄 Refresh Settings
+        </button>
       </div>
     );
   }
 
-  // ================= SECTION WRAPPER =================
+  // ================= SECTION =================
   const Section = ({ title, children }) => (
     <div className="min-h-screen bg-slate-100 p-6">
 
-      {/* TOP BAR */}
-      <div className="flex items-center justify-between mb-6 bg-white p-4 rounded-xl shadow-sm border">
+      <div className="flex justify-between items-center bg-white p-4 rounded mb-4">
         <button
           onClick={() => setView("home")}
-          className="text-blue-600 font-medium"
+          className="text-blue-600"
         >
           ← Back
         </button>
 
-        <h2 className="text-lg font-bold text-slate-800">
-          {title}
-        </h2>
+        <h2 className="font-bold">{title}</h2>
 
-        <div className="text-xs text-slate-400">
-          LIVE CONFIG MODE
-        </div>
+        <button
+          onClick={loadSettings}
+          className="text-sm bg-gray-200 px-3 py-1 rounded"
+        >
+          Refresh
+        </button>
       </div>
 
-      {/* CONTENT */}
-      <div className="bg-white rounded-xl shadow border p-6">
+      <div className="bg-white p-6 rounded shadow">
         {children}
       </div>
-
     </div>
   );
 
-  // ================= SIMPLE FIELD UI =================
-  const Field = ({ label, children }) => (
-    <div className="mb-5">
-      <label className="block text-sm font-medium text-slate-700 mb-2">
-        {label}
-      </label>
-      {children}
-    </div>
+  // ================= MODULE VIEW =================
+  const items = SCHEMA[view] || [];
+
+  return (
+    <Section title={SECTIONS[view]}>
+      {items.map((item) => (
+        <Field key={item.key} item={item} />
+      ))}
+    </Section>
   );
-
-  // ================= MODULES =================
-
-  if (view === "members") {
-    return (
-      <Section title="Member Settings">
-        <Field label="Member ID Format">
-          <input
-            className="border p-2 w-full rounded"
-            value={settings.member_id_format || ""}
-            onChange={(e) => updateSetting("member_id_format", e.target.value)}
-          />
-        </Field>
-
-        <Field label="Auto Approve Members">
-          <select
-            className="border p-2 w-full rounded"
-            value={settings.auto_approve_members || "false"}
-            onChange={(e) => updateSetting("auto_approve_members", e.target.value)}
-          >
-            <option value="true">Enabled</option>
-            <option value="false">Disabled</option>
-          </select>
-        </Field>
-      </Section>
-    );
-  }
-
-  if (view === "loans") {
-    return (
-      <Section title="Loan Engine Settings">
-        <Field label="Interest Rate (%)">
-          <input
-            type="number"
-            className="border p-2 w-full rounded"
-            value={settings.loan_interest_rate || ""}
-            onChange={(e) => updateSetting("loan_interest_rate", e.target.value)}
-          />
-        </Field>
-
-        <Field label="Auto Disbursement">
-          <select
-            className="border p-2 w-full rounded"
-            value={settings.auto_disbursement || "false"}
-            onChange={(e) => updateSetting("auto_disbursement", e.target.value)}
-          >
-            <option value="true">Enabled</option>
-            <option value="false">Disabled</option>
-          </select>
-        </Field>
-      </Section>
-    );
-  }
-
-  if (view === "integrations") {
-    return (
-      <Section title="Integration Hub">
-
-        <Field label="SMS Provider">
-          <input
-            className="border p-2 w-full rounded"
-            value={settings.sms_provider || ""}
-            onChange={(e) => updateSetting("sms_provider", e.target.value)}
-          />
-        </Field>
-
-        <Field label="WhatsApp Enabled">
-          <select
-            className="border p-2 w-full rounded"
-            value={settings.whatsapp_enabled || "false"}
-            onChange={(e) => updateSetting("whatsapp_enabled", e.target.value)}
-          >
-            <option value="true">Enabled</option>
-            <option value="false">Disabled</option>
-          </select>
-        </Field>
-
-      </Section>
-    );
-  }
-
-  if (view === "security") {
-    return (
-      <Section title="Security & Roles">
-
-        <Field label="Session Timeout (mins)">
-          <input
-            type="number"
-            className="border p-2 w-full rounded"
-            value={settings.session_timeout || ""}
-            onChange={(e) => updateSetting("session_timeout", e.target.value)}
-          />
-        </Field>
-
-      </Section>
-    );
-  }
-
-  if (view === "dashboard") {
-    return (
-      <Section title="Dashboard Controls">
-
-        <Field label="Show AI Cashflow Widget">
-          <select
-            className="border p-2 w-full rounded"
-            value={settings.show_predictions || "false"}
-            onChange={(e) => updateSetting("show_predictions", e.target.value)}
-          >
-            <option value="true">Enabled</option>
-            <option value="false">Disabled</option>
-          </select>
-        </Field>
-
-      </Section>
-    );
-  }
-
-  if (view === "audit") {
-    return (
-      <Section title="Audit Logs">
-        <p className="text-slate-500">
-          Connect to system_logs table to view change history
-        </p>
-      </Section>
-    );
-  }
-
-  return null;
 }

@@ -12,14 +12,13 @@ export default function JournalEntry() {
     domain: "member",
     transaction_type: "",
     member_no: "",
-    vendor: "",
-    invoice_no: "",
-    invoice_date: "",
     description: "",
-    amount: "",
-    debit: "",
-    credit: "",
   });
+
+  const [lines, setLines] = useState([
+    { type: "debit", account_id: "", amount: "" },
+    { type: "credit", account_id: "", amount: "" }
+  ]);
 
   // ================= LOAD =================
   useEffect(() => {
@@ -43,93 +42,149 @@ export default function JournalEntry() {
   };
 
   const generateRef = () => {
-    const ref = `JV-${Date.now()}`;
-    setForm((f) => ({ ...f, reference: ref }));
+    setForm(f => ({ ...f, reference: `JV-${Date.now()}` }));
   };
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // ================= SMART AUTO RULES =================
-  const autoSetAccounts = (type) => {
+  // ================= LINE HANDLERS =================
+  const updateLine = (index, field, value) => {
+    const updated = [...lines];
+    updated[index][field] = value;
+    setLines(updated);
+  };
+
+  const addLine = (type) => {
+    setLines([...lines, { type, account_id: "", amount: "" }]);
+  };
+
+  const removeLine = (index) => {
+    setLines(lines.filter((_, i) => i !== index));
+  };
+
+  // ================= TOTALS =================
+  const totalDebit = lines
+    .filter(l => l.type === "debit")
+    .reduce((s, l) => s + Number(l.amount || 0), 0);
+
+  const totalCredit = lines
+    .filter(l => l.type === "credit")
+    .reduce((s, l) => s + Number(l.amount || 0), 0);
+
+  const isBalanced = totalDebit === totalCredit && totalDebit > 0;
+
+  // ================= SMART TEMPLATES =================
+  const applyTemplate = (type) => {
+
+    let newLines = [];
 
     switch (type) {
 
       case "loan_repayment":
-        return { debit: 1007, credit: 1011 };
+        newLines = [
+          { type: "debit", account_id: 1007, amount: "" },
+          { type: "credit", account_id: 1011, amount: "" }
+        ];
+        break;
+
+      case "split_repayment":
+        newLines = [
+          { type: "debit", account_id: 1007, amount: "" },
+          { type: "credit", account_id: 1011, amount: "" },
+          { type: "credit", account_id: 1020, amount: "" }
+        ];
+        break;
 
       case "loan_disbursement":
-        return { debit: 1011, credit: 1007 };
+        newLines = [
+          { type: "debit", account_id: 1011, amount: "" },
+          { type: "credit", account_id: 1007, amount: "" }
+        ];
+        break;
 
       case "savings_deposit":
-        return { debit: 1007, credit: 1018 };
-
-      case "loan_interest":
-        return { debit: 1011, credit: 1020 };
-
-      case "savings_interest":
-        return { debit: 1006, credit: 1018 };
+        newLines = [
+          { type: "debit", account_id: 1007, amount: "" },
+          { type: "credit", account_id: 1018, amount: "" }
+        ];
+        break;
 
       default:
-        return { debit: "", credit: "" };
+        newLines = lines;
     }
+
+    setLines(newLines);
   };
 
   // ================= POST =================
   const postJournal = async () => {
 
-    const payload = {
-      date: form.date,
-      reference: form.reference,
-      domain: form.domain,
-      transaction_type: form.transaction_type,
-      member_no: form.member_no || null,
-      vendor: form.vendor || null,
-      invoice_no: form.invoice_no || null,
-      invoice_date: form.invoice_date || null,
-      description: form.description,
-      amount: Number(form.amount),
-      debit_account_id: Number(form.debit),
-      credit_account_id: Number(form.credit),
-      status: "pending",
-      created_at: new Date().toISOString()
-    };
-
-    const { error } = await supabase
-      .from("general_ledger")
-      .insert([payload]);
-
-    if (error) {
-      alert(error.message);
+    if (!isBalanced) {
+      alert("Debits and Credits must be equal");
       return;
     }
 
-    alert("Journal Posted Successfully");
+    try {
 
-    setForm({
-      ...form,
-      description: "",
-      amount: "",
-      debit: "",
-      credit: "",
-      vendor: "",
-      invoice_no: "",
-      invoice_date: "",
-      member_no: ""
-    });
+      const payload = {
+        date: form.date,
+        reference: form.reference,
+        domain: form.domain,
+        transaction_type: form.transaction_type,
+        member_no: form.member_no || null,
+        description: form.description,
+        status: "pending",
+        created_at: new Date().toISOString(),
 
-    generateRef();
+        lines: lines.map(l => ({
+          account_id: Number(l.account_id),
+          debit: l.type === "debit" ? Number(l.amount) : 0,
+          credit: l.type === "credit" ? Number(l.amount) : 0,
+        }))
+      };
+
+      const { error } = await supabase
+        .from("general_ledger")
+        .insert(payload.lines.map(l => ({
+          ...l,
+          date: payload.date,
+          reference: payload.reference,
+          domain: payload.domain,
+          transaction_type: payload.transaction_type,
+          member_no: payload.member_no,
+          description: payload.description,
+          status: payload.status,
+          created_at: payload.created_at
+        })));
+
+      if (error) throw error;
+
+      alert("Journal Posted Successfully");
+
+      setLines([
+        { type: "debit", account_id: "", amount: "" },
+        { type: "credit", account_id: "", amount: "" }
+      ]);
+
+      generateRef();
+
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   // ================= UI =================
   return (
-    <div className="p-4 bg-white rounded shadow">
+    <div className="p-6 bg-white rounded shadow max-w-4xl mx-auto">
 
-      <h2 className="font-bold mb-3">Journal Entry Engine</h2>
+      <h2 className="text-xl font-bold mb-4">
+        Advanced Multi-Line Journal Engine
+      </h2>
 
-      {/* DATE + REF */}
-      <div className="grid grid-cols-2 gap-2 mb-2">
+      {/* HEADER */}
+      <div className="grid grid-cols-2 gap-2 mb-3">
 
         <input
           type="date"
@@ -147,129 +202,126 @@ export default function JournalEntry() {
 
       </div>
 
-      {/* 🔷 FIRST LAYER: DOMAIN */}
-      <select
-        name="domain"
-        value={form.domain}
-        onChange={handleChange}
-        className="border p-2 w-full mb-2"
-      >
-        <option value="member">Member Transactions</option>
-        <option value="cash">Cash / Bank</option>
-        <option value="asset">Asset Transactions</option>
-        <option value="income">Income / Expense</option>
-        <option value="transfer">Internal Transfer</option>
-        <option value="system">System Adjustment</option>
-      </select>
-
-      {/* SECOND LAYER */}
-      <select
-        name="transaction_type"
-        value={form.transaction_type}
-        onChange={(e) => {
-          handleChange(e);
-
-          const auto = autoSetAccounts(e.target.value);
-          setForm(f => ({
-            ...f,
-            transaction_type: e.target.value,
-            debit: auto.debit,
-            credit: auto.credit
-          }));
-        }}
-        className="border p-2 w-full mb-2"
-      >
-        <option value="">Select Transaction Type</option>
-
-        <option value="loan_repayment">Loan Repayment</option>
-        <option value="loan_disbursement">Loan Disbursement</option>
-        <option value="savings_deposit">Savings Deposit</option>
-        <option value="loan_interest">Loan Interest</option>
-        <option value="savings_interest">Savings Interest</option>
-
-      </select>
-
       {/* MEMBER */}
-      {form.domain === "member" && (
-        <select
-          name="member_no"
-          onChange={handleChange}
-          className="border p-2 w-full mb-2"
-        >
-          <option>Select Member</option>
-          {members.map(m => (
-            <option key={m.member_no} value={m.member_no}>
-              {m.member_no} - {m.name}
-            </option>
-          ))}
-        </select>
-      )}
-
-      {/* VENDOR */}
-      {form.domain === "asset" && (
-        <>
-          <input
-            name="vendor"
-            placeholder="Vendor"
-            onChange={handleChange}
-            className="border p-2 w-full mb-2"
-          />
-
-          <input
-            name="invoice_no"
-            placeholder="Invoice No"
-            onChange={handleChange}
-            className="border p-2 w-full mb-2"
-          />
-
-          <input
-            type="date"
-            name="invoice_date"
-            onChange={handleChange}
-            className="border p-2 w-full mb-2"
-          />
-        </>
-      )}
+      <select
+        name="member_no"
+        onChange={handleChange}
+        className="border p-2 w-full mb-3"
+      >
+        <option value="">Select Member</option>
+        {members.map(m => (
+          <option key={m.member_no} value={m.member_no}>
+            {m.member_no} - {m.name}
+          </option>
+        ))}
+      </select>
 
       {/* DESCRIPTION */}
       <input
         name="description"
         placeholder="Description"
         onChange={handleChange}
-        className="border p-2 w-full mb-2"
+        className="border p-2 w-full mb-3"
       />
 
-      {/* AMOUNT */}
-      <input
-        name="amount"
-        placeholder="Amount"
-        onChange={handleChange}
-        className="border p-2 w-full mb-2"
-      />
+      {/* TEMPLATE BUTTONS */}
+      <div className="flex gap-2 mb-3 flex-wrap">
 
-      {/* ACCOUNTS */}
-      <select name="debit" onChange={handleChange} className="border p-2 w-full mb-2">
-        <option>Debit Account</option>
-        {accounts.map(a => (
-          <option key={a.code} value={a.code}>
-            {a.code} - {a.name}
-          </option>
+        <button onClick={() => applyTemplate("loan_repayment")} className="bg-blue-600 text-white px-3 py-1 rounded">
+          Loan Repayment
+        </button>
+
+        <button onClick={() => applyTemplate("split_repayment")} className="bg-purple-600 text-white px-3 py-1 rounded">
+          Split (Loan + Interest)
+        </button>
+
+        <button onClick={() => applyTemplate("loan_disbursement")} className="bg-green-600 text-white px-3 py-1 rounded">
+          Loan Disbursement
+        </button>
+
+        <button onClick={() => applyTemplate("savings_deposit")} className="bg-gray-600 text-white px-3 py-1 rounded">
+          Savings Deposit
+        </button>
+
+      </div>
+
+      {/* LINES */}
+      <div className="space-y-2">
+
+        {lines.map((l, i) => (
+          <div key={i} className="grid grid-cols-12 gap-2">
+
+            <select
+              className="col-span-3 border p-2"
+              value={l.type}
+              onChange={(e) => updateLine(i, "type", e.target.value)}
+            >
+              <option value="debit">Debit</option>
+              <option value="credit">Credit</option>
+            </select>
+
+            <select
+              className="col-span-5 border p-2"
+              value={l.account_id}
+              onChange={(e) => updateLine(i, "account_id", e.target.value)}
+            >
+              <option>Select Account</option>
+              {accounts.map(a => (
+                <option key={a.code} value={a.code}>
+                  {a.code} - {a.name}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="number"
+              className="col-span-3 border p-2"
+              placeholder="Amount"
+              value={l.amount}
+              onChange={(e) => updateLine(i, "amount", e.target.value)}
+            />
+
+            <button
+              className="col-span-1 bg-red-500 text-white"
+              onClick={() => removeLine(i)}
+            >
+              X
+            </button>
+
+          </div>
         ))}
-      </select>
 
-      <select name="credit" onChange={handleChange} className="border p-2 w-full mb-2">
-        <option>Credit Account</option>
-        {accounts.map(a => (
-          <option key={a.code} value={a.code}>
-            {a.code} - {a.name}
-          </option>
-        ))}
-      </select>
+      </div>
 
-      {/* SUBMIT */}
+      {/* ADD LINES */}
+      <div className="flex gap-2 mt-3">
+
+        <button onClick={() => addLine("debit")} className="bg-blue-500 text-white px-3 py-1 rounded">
+          + Debit Line
+        </button>
+
+        <button onClick={() => addLine("credit")} className="bg-green-500 text-white px-3 py-1 rounded">
+          + Credit Line
+        </button>
+
+      </div>
+
+      {/* BALANCE CHECK */}
+      <div className="mt-4 p-3 border rounded bg-gray-50 text-sm">
+
+        <p>Total Debit: <b>{totalDebit}</b></p>
+        <p>Total Credit: <b>{totalCredit}</b></p>
+
+        <p className={isBalanced ? "text-green-600" : "text-red-600 font-bold"}>
+          {isBalanced ? "Balanced ✓" : "Not Balanced ⚠"}
+        </p>
+
+      </div>
+
+      {/* POST */}
       <button
         onClick={postJournal}
-        className="bg-green-600 text-white px-4 py-2 rounded w-full"
+        className="bg-green-700 text-white w-full mt-4 py-2 rounded"
       >
         Post Journal Entry
       </button>
