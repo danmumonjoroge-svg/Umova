@@ -125,8 +125,8 @@ export default function PublicSite() {
       <nav className={`nav-bar ${scrolled ? "nav-bar--scrolled" : ""}`}>
         <div className="nav-inner">
           <div className="brand" onClick={() => navigate("/")}>
-            <img src={logo} className="logo" alt="UMOVA SACCO" />
-            <h5>UMOVA SACCO</h5>
+            <img src={logo} className="logo" alt="Umova investment ltd" />
+            <h5>Umova investment ltd</h5>
           </div>
 
           {/* Desktop links */}
@@ -182,9 +182,9 @@ export default function PublicSite() {
       <header className="hero">
         <div className="hero-glow" />
         <div className="hero-content">
-          <span className="hero-eyebrow">UMOVA SACCO</span>
+          <span className="hero-eyebrow">Umova investment ltd</span>
           <h1>Smart Savings. Secure Loans. Real Growth.</h1>
-          <p>An M-Pesa inspired financial ecosystem built for your community.</p>
+          <p>A trusted financial system for individuals and communities to save, lend, and grow together with confidence.</p>
 
           <div className="hero-actions">
             <a href="#apply" className="btn btn-primary">Become a Member</a>
@@ -316,10 +316,10 @@ export default function PublicSite() {
       <footer className="footer">
         <div className="footer-inner">
           <div className="brand brand--footer">
-            <img src={logo} className="logo" alt="UMOVA SACCO" />
-            <h5>UMOVA SACCO</h5>
+            <img src={logo} className="logo" alt="Umova investment ltd" />
+            <h5>Umova investment ltd</h5>
           </div>
-          <p>© {new Date().getFullYear()} UMOVA SACCO. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Umova investment ltd. All rights reserved.</p>
         </div>
       </footer>
 
