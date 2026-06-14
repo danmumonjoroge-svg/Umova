@@ -9,15 +9,36 @@ export default function ChamaLogin() {
   const { login } = useChama();
   const inputRef = useRef(null);
 
-  // Flow & State Architecture
-  const [step, setStep] = useState(1);
-  const [chamaNo, setChamaNo] = useState("");
-  const [phone, setPhone] = useState("");
-  const [chama, setChama] = useState(null);
-  const [member, setMember] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [isShaking, setIsShaking] = useState(false);
+// ────────────────────────────────────────────────────────
+// FLOW & AUTHENTICATION STATE ARCHITECTURE
+// ────────────────────────────────────────────────────────
+
+const [step, setStep] = useState(1);
+
+// Chama Identification
+const [chamaNo, setChamaNo] = useState("");
+
+// Member Credentials
+const [phone, setPhone] = useState("");
+const [pin, setPin] = useState("");
+
+// Retrieved Records
+const [chama, setChama] = useState(null);
+const [member, setMember] = useState(null);
+
+// UI State
+const [loading, setLoading] = useState(false);
+const [error, setError] = useState("");
+const [isShaking, setIsShaking] = useState(false);
+
+// Security & Login Experience
+const [showPin, setShowPin] = useState(false);
+const [loginAttempts, setLoginAttempts] = useState(0);
+const [isLocked, setIsLocked] = useState(false);
+const [lockCountdown, setLockCountdown] = useState(0);
+
+// Optional Remember Device
+const [rememberMe, setRememberMe] = useState(false);
 
   // Dynamic Step Focus Engine
   useEffect(() => {
@@ -68,39 +89,57 @@ export default function ChamaLogin() {
     }
   };
 
-  // ────────────────────────────────────────────────────────
-  // STEP 2: VERIFY REGISTERED MEMBER ACCOUNT DATA
-  // ────────────────────────────────────────────────────────
-  const verifyMember = async (e) => {
-    if (e) e.preventDefault();
-    setError("");
+const verifyMember = async (e) => {
+  if (e) e.preventDefault();
 
-    const cleanPhone = clean(phone);
-    if (!cleanPhone) return triggerError("Please enter your registered mobile index");
+  setError("");
 
-    setLoading(true);
-    try {
-      const { data, error: sbError } = await supabase
-        .from("chama_members")
-        .select("*")
-        .eq("phone", cleanPhone)
-        .eq("chama_id", chama.id)
-        .maybeSingle();
+  const cleanPhone = clean(phone);
+  const cleanPin = clean(pin);
 
-      if (sbError) throw sbError;
+  if (!cleanPhone) {
+    return triggerError("Please enter your phone number");
+  }
 
-      if (!data) {
-        return triggerError("Member credentials could not be verified for this group.");
-      }
+  if (!cleanPin) {
+    return triggerError("Please enter your PIN");
+  }
 
-      setMember(data);
-      setStep(3);
-    } catch (err) {
-      triggerError("System balance validation timeout.");
-    } finally {
-      setLoading(false);
+  setLoading(true);
+
+  try {
+    const { data, error: sbError } = await supabase
+      .from("chama_members")
+      .select("*")
+      .eq("phone", cleanPhone)
+      .eq("pin", cleanPin)
+      .eq("chama_id", chama.id)
+      .maybeSingle();
+
+    if (sbError) throw sbError;
+
+    if (!data) {
+      return triggerError("Invalid phone number or PIN");
     }
-  };
+
+    setMember(data);
+
+    await supabase
+      .from("chama_members")
+      .update({
+        last_login: new Date().toISOString()
+      })
+      .eq("id", data.id);
+
+    setStep(3);
+
+  } catch (err) {
+    console.error(err);
+    triggerError("Unable to verify member");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ────────────────────────────────────────────────────────
   // STEP 3: DISPATCH STATE MUTATION AND NAVIGATE
@@ -137,39 +176,55 @@ export default function ChamaLogin() {
 
           <div className="cl-panel__content">
             <h1 className="cl-panel__headline">
-              Secure Core <br />
-              <span className="cl-panel__accent">Ledger Management</span>
-            </h1>
-            <p className="cl-panel__sub">
-              Access decentralized financial ledgers, audit trails, and automated group accounting analytics inside an isolated enterprise network infrastructure.
-            </p>
+              Growing Together <br />
+              <span className="cl-panel__accent">Strong & Trusted Chamas</span>
+              </h1>
+
+              <p className="cl-panel__sub">
+                 A simple and trusted space where your group saves together, lends together, and grows financial strength as one family.
+                </p>
           </div>
 
-          <ul className="cl-features">
-            <li className="cl-feature">
-              <div className="cl-feature__icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              </div>
-              <div>
-                <strong>Military-Grade Auditing</strong>
-                <span>Realtime SASRA & compliance tracing pipelines.</span>
-              </div>
-            </li>
-            <li className="cl-feature">
-              <div className="cl-feature__icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-              </div>
-              <div>
-                <strong>Automated Micro-Loans</strong>
-                <span>Smart credit assignment and algorithmic penalty loops.</span>
-              </div>
-            </li>
-          </ul>
+              <ul className="cl-features">
 
-          <div className="cl-panel__badge">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <span>End-to-End Cryptographic Validation Active</span>
-          </div>
+             <li className="cl-feature">
+             <div className="cl-feature__icon">
+             <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
+             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+               </svg>
+              </div>
+               <div>
+               <strong>Trusted & Transparent Records</strong>
+              <span>Every contribution is clearly tracked so your group grows in confidence and trust.</span>
+              </div>
+              </li>
+
+  <li className="cl-feature">
+    <div className="cl-feature__icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2">
+        <path d="M12 2v20"/>
+        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+      </svg>
+    </div>
+    <div>
+      <strong>Fair & Simple Group Lending</strong>
+      <span>Loans are managed fairly to help every member grow financially together.</span>
+    </div>
+  </li>
+
+</ul>
+
+            <div className="cl-panel__badge">
+
+            <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
+            <path d="M12 1l3 6 6 .5-4.5 4 1.5 6-6-3.5-6 3.5 1.5-6L3 7.5 9 7z"/>
+            </svg>
+
+            <span>
+              Your Chama is Safe, Transparent & Always Growing Together
+             </span>
+
+             </div>
         </div>
       </aside>
 
@@ -223,12 +278,12 @@ export default function ChamaLogin() {
           {step === 1 && (
             <form onSubmit={findChama} className="cl-form cl-anim-in">
               <div className="cl-form__head">
-                <h2>Identify Chama Ecosystem</h2>
-                <p>Provide your cluster identity key token code to route your data parameters securely.</p>
+                <h2>Search Your Chama</h2>
+                <p>Enter your Chama No (e.g. CHM-xxx)</p>
               </div>
 
               <div className="cl-field">
-                <label htmlFor="chama-code-input">Registry Identity Key</label>
+                <label htmlFor="chama-code-input">Find My Chama</label>
                 <div className="cl-input-wrap">
                   <input
                     id="chama-code-input"
@@ -245,11 +300,31 @@ export default function ChamaLogin() {
                   </div>
                 </div>
               </div>
+              <div className="cl-field">
+  <label htmlFor="member-pin-input">
+    Member PIN
+  </label>
+
+  <div className="cl-input-wrap">
+    <input
+      id="member-pin-input"
+      type="password"
+      value={pin}
+      onChange={(e) => setPin(e.target.value)}
+      placeholder="Enter your PIN"
+      disabled={loading}
+    />
+
+    <div className="cl-input-icon">
+      🔒
+    </div>
+  </div>
+</div>
 
               <button type="submit" className="cl-btn cl-btn--primary" disabled={loading}>
                 {loading ? <span className="cl-spinner" /> : (
                   <>
-                    <span>Resolve Security Target</span>
+                    <span>join</span>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                   </>
                 )}
@@ -261,8 +336,8 @@ export default function ChamaLogin() {
           {step === 2 && (
             <form onSubmit={verifyMember} className="cl-form cl-anim-in">
               <div className="cl-form__head">
-                <h2>Verify Member Identity</h2>
-                <p>Verify your explicit record index status within this platform core.</p>
+                <h2>Verification</h2>
+                <p>Insert Phone Number to verify</p>
               </div>
 
               <div className="cl-chama-pill">
@@ -272,7 +347,7 @@ export default function ChamaLogin() {
               </div>
 
               <div className="cl-field">
-                <label htmlFor="member-phone-input">System Verification Mobile Index</label>
+                <label htmlFor="member-phone-input">Phone Number</label>
                 <div className="cl-input-wrap">
                   <input
                     id="member-phone-input"
@@ -293,13 +368,13 @@ export default function ChamaLogin() {
                 <button type="submit" className="cl-btn cl-btn--primary" disabled={loading}>
                   {loading ? <span className="cl-spinner" /> : (
                     <>
-                      <span>Execute Ledger Handshake</span>
+                      <span>Join My Chama</span>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                     </>
                   )}
                 </button>
                 <button type="button" className="cl-btn cl-btn--ghost" onClick={() => { setStep(1); setError(""); }} disabled={loading}>
-                  Modify Cluster Target
+                  Almost There
                 </button>
               </div>
             </form>
@@ -320,12 +395,12 @@ export default function ChamaLogin() {
               </div>
 
               <p className="cl-welcome__sub">
-                Security clearance verified. Communication pipelines are fully cryptographically isolated.
+                Welcome back {member?.full_name}. Your Chama account has been verified successfully.
               </p>
 
               <div className="cl-button-stack" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 <button type="button" onClick={handleLogin} className="cl-btn cl-btn--primary cl-btn--enter">
-                  <span>Enter Dynamic Dashboard Workspace</span>
+                  <span>Enter</span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13 12H3"/></svg>
                 </button>
                 <button type="button" className="cl-btn cl-btn--ghost" onClick={() => { setStep(1); setChama(null); setMember(null); setChamaNo(""); setPhone(""); setError(""); }}>
