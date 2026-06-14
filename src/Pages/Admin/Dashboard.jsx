@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
+import "./Dashboard.css";
 
 export default function Dashboard() {
   const [ledger, setLedger] = useState([]);
@@ -133,13 +134,6 @@ export default function Dashboard() {
     };
   }, [kpi]);
 
-  // ================= FORMAT =================
-  const format = (v) =>
-    new Intl.NumberFormat("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(v || 0);
-
   // ================= EXPORT =================
   const exportCSV = () => {
     const rows = [
@@ -171,34 +165,44 @@ export default function Dashboard() {
   // ================= PRINT =================
   const printReport = () => window.print();
 
+  // ================= LOADING STATE =================
+  if (loading) {
+    return (
+      <div className="dash-page dash-loading">
+        <div className="dash-spinner" />
+        <p>Loading ledger data…</p>
+      </div>
+    );
+  }
+
   // ================= UI =================
   return (
-    <div style={styles.page}>
+    <div className="dash-page">
 
       {/* HEADER */}
-      <div style={styles.header}>
-        <h1 style={styles.title}>🏦 SACCO Executive Dashboard</h1>
-        <p style={styles.subtitle}>
+      <div className="dash-header">
+        <h1 className="dash-title">🏦 SACCO Executive Dashboard</h1>
+        <p className="dash-subtitle">
           Real-time General Ledger Intelligence Engine
         </p>
 
-        <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
-          <button style={styles.btnGreen} onClick={refresh}>
+        <div className="dash-actions">
+          <button className="dash-btn dash-btn-green" onClick={refresh}>
             {refreshing ? "Refreshing..." : "Refresh"}
           </button>
 
-          <button style={styles.btnBlue} onClick={exportCSV}>
+          <button className="dash-btn dash-btn-blue" onClick={exportCSV}>
             Export CSV
           </button>
 
-          <button style={styles.btnDark} onClick={printReport}>
+          <button className="dash-btn dash-btn-dark" onClick={printReport}>
             Print
           </button>
         </div>
       </div>
 
       {/* KPI */}
-      <div style={styles.kpiGrid}>
+      <div className="dash-kpi-grid">
         <Card title="Cash" value={kpi.cash} />
         <Card title="Loans" value={kpi.loans} />
         <Card title="Savings" value={kpi.savings} />
@@ -206,7 +210,7 @@ export default function Dashboard() {
       </div>
 
       {/* MAIN GRID */}
-      <div style={styles.grid2}>
+      <div className="dash-grid-2">
 
         <Panel title="💰 Balance Sheet">
           <Row label="Assets" value={bs.assets} />
@@ -223,10 +227,10 @@ export default function Dashboard() {
       </div>
 
       {/* RISK */}
-      <div style={styles.panel}>
+      <div className="dash-panel">
         <h3>🧠 Risk Engine</h3>
 
-        <div style={styles.riskGrid}>
+        <div className="dash-risk-grid">
           <Risk label="Liquidity %" value={risk.liquidity} />
           <Risk label="PAR %" value={risk.par} />
           <Risk label="Risk Score" value={risk.score} />
@@ -240,7 +244,7 @@ export default function Dashboard() {
 // ================= COMPONENTS =================
 function Card({ title, value }) {
   return (
-    <div style={styles.card}>
+    <div className="dash-card">
       <p>{title}</p>
       <h3>{Number(value || 0).toLocaleString()}</h3>
     </div>
@@ -249,7 +253,7 @@ function Card({ title, value }) {
 
 function Panel({ title, children }) {
   return (
-    <div style={styles.panel}>
+    <div className="dash-panel">
       <h3>{title}</h3>
       {children}
     </div>
@@ -258,7 +262,7 @@ function Panel({ title, children }) {
 
 function Row({ label, value }) {
   return (
-    <div style={styles.row}>
+    <div className="dash-row">
       <span>{label}</span>
       <strong>{Number(value || 0).toLocaleString()}</strong>
     </div>
@@ -267,97 +271,9 @@ function Row({ label, value }) {
 
 function Risk({ label, value }) {
   return (
-    <div style={styles.riskCard}>
+    <div className="dash-risk-card">
       <p>{label}</p>
       <h4>{Number(value || 0).toFixed(2)}</h4>
     </div>
   );
 }
-
-// ================= STYLES =================
-const styles = {
-  page: {
-    padding: 28,
-    fontFamily: "Inter, Arial",
-    background: "linear-gradient(135deg,#eef2ff,#f8fafc)",
-    minHeight: "100vh",
-  },
-
-  header: { marginBottom: 20 },
-
-  title: { fontSize: 26, fontWeight: 800 },
-
-  subtitle: { color: "#6b7280", fontSize: 13 },
-
-  kpiGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4,1fr)",
-    gap: 12,
-    marginBottom: 20,
-  },
-
-  grid2: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 12,
-  },
-
-  card: {
-    background: "white",
-    padding: 14,
-    borderRadius: 12,
-    boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
-  },
-
-  panel: {
-    marginTop: 15,
-    background: "white",
-    padding: 16,
-    borderRadius: 12,
-  },
-
-  row: {
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "6px 0",
-  },
-
-  riskGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3,1fr)",
-    gap: 10,
-  },
-
-  riskCard: {
-    background: "#f9fafb",
-    padding: 12,
-    borderRadius: 10,
-  },
-
-  btnGreen: {
-    background: "#16a34a",
-    color: "white",
-    padding: "8px 12px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-  },
-
-  btnBlue: {
-    background: "#2563eb",
-    color: "white",
-    padding: "8px 12px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-  },
-
-  btnDark: {
-    background: "#111827",
-    color: "white",
-    padding: "8px 12px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-  },
-};

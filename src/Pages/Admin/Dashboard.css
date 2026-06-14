@@ -1,0 +1,294 @@
+/* ════════════════════════════════════════════════════════════
+   SACCO EXECUTIVE DASHBOARD — RESPONSIVE STYLES
+   Fits phones (incl. iPhone), tablets, and laptops.
+════════════════════════════════════════════════════════════ */
+
+* {
+  box-sizing: border-box;
+}
+
+.dash-page {
+  padding: 28px;
+  font-family: 'Inter', Arial, sans-serif;
+  background: linear-gradient(135deg, #eef2ff, #f8fafc);
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* ================= LOADING ================= */
+
+.dash-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #6b7280;
+}
+
+.dash-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(37,99,235,0.15);
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: dash-spin 0.8s linear infinite;
+}
+
+@keyframes dash-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ================= HEADER ================= */
+
+.dash-header {
+  margin-bottom: 20px;
+}
+
+.dash-title {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.dash-subtitle {
+  color: #6b7280;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.dash-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dash-btn {
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 38px; /* comfortable touch target */
+  flex: 0 0 auto;
+}
+
+.dash-btn-green { background: #16a34a; }
+.dash-btn-blue  { background: #2563eb; }
+.dash-btn-dark  { background: #111827; }
+
+.dash-btn:active {
+  transform: scale(0.98);
+}
+
+/* ================= KPI GRID ================= */
+
+.dash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.dash-card {
+  background: white;
+  padding: 14px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+  min-width: 0; /* allow shrinking inside grid */
+}
+
+.dash-card p {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0 0 6px;
+}
+
+.dash-card h3 {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0;
+  word-break: break-word;
+}
+
+/* ================= MAIN 2-COLUMN GRID ================= */
+
+.dash-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ================= PANELS ================= */
+
+.dash-panel {
+  margin-top: 15px;
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+  overflow-x: auto; /* in case content is wider than panel on small screens */
+  min-width: 0;
+}
+
+.dash-panel h3 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.dash-grid-2 .dash-panel {
+  margin-top: 0;
+}
+
+.dash-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.dash-row span {
+  color: #475569;
+}
+
+.dash-row strong {
+  word-break: break-word;
+  text-align: right;
+}
+
+/* ================= RISK GRID ================= */
+
+.dash-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.dash-risk-card {
+  background: #f9fafb;
+  padding: 12px;
+  border-radius: 10px;
+  min-width: 0;
+}
+
+.dash-risk-card p {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0 0 4px;
+}
+
+.dash-risk-card h4 {
+  font-size: 18px;
+  margin: 0;
+  word-break: break-word;
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+════════════════════════════════════════════════════════════ */
+
+/* ----- Tablets / small laptops ----- */
+@media (max-width: 1024px) {
+  .dash-page {
+    padding: 20px;
+  }
+
+  .dash-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .dash-grid-2 {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .dash-risk-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ----- Phones (incl. iPhone portrait & landscape) ----- */
+@media (max-width: 640px) {
+  .dash-page {
+    padding: 14px;
+  }
+
+  .dash-title {
+    font-size: 20px;
+  }
+
+  .dash-subtitle {
+    font-size: 12px;
+  }
+
+  .dash-actions {
+    gap: 8px;
+  }
+
+  .dash-btn {
+    flex: 1 1 auto; /* buttons share row width, wrap if needed */
+    text-align: center;
+  }
+
+  .dash-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .dash-card {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .dash-card h3 {
+    font-size: 18px;
+  }
+
+  .dash-panel {
+    padding: 12px;
+    border-radius: 10px;
+    margin-top: 10px;
+  }
+
+  .dash-risk-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+/* ----- Very small phones (e.g. iPhone SE) ----- */
+@media (max-width: 380px) {
+  .dash-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-title {
+    font-size: 18px;
+  }
+}
+
+/* ----- Print ----- */
+@media print {
+  .dash-actions {
+    display: none;
+  }
+
+  .dash-page {
+    background: white;
+    padding: 0;
+  }
+
+  .dash-card,
+  .dash-panel {
+    box-shadow: none;
+    border: 1px solid #e5e7eb;
+  }
+}
