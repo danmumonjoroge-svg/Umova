@@ -7,7 +7,6 @@
 
 html, body {
   height: 100%;
-  /* Prevent iOS bounce/zoom issues */
   -webkit-text-size-adjust: 100%;
 }
 
@@ -20,6 +19,7 @@ html, body {
   overflow: hidden;
   background: linear-gradient(135deg, #f6f8fc, #eef2f7, #f9fafb);
   color: #0f172a;
+  position: relative;
 }
 
 /* ================= SIDEBAR ================= */
@@ -33,7 +33,6 @@ html, body {
   flex-direction: column;
   transition: width 0.3s ease, transform 0.3s ease;
   box-shadow: 8px 0 30px rgba(0,0,0,0.12);
-  /* Account for iPhone notch / home indicator when sidebar is fixed on mobile */
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -48,6 +47,13 @@ html, body {
   flex-shrink: 0;
 }
 
+.sidebar-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .toggle-btn {
   width: 44px;
   height: 44px;
@@ -58,10 +64,16 @@ html, body {
   cursor: pointer;
   background: rgba(255,255,255,0.08);
   transition: 0.2s ease;
+  flex-shrink: 0;
 }
 
 .toggle-btn:hover {
   background: rgba(255,255,255,0.16);
+}
+
+/* The X close button only makes sense on the mobile drawer */
+.toggle-btn.mobile-only {
+  display: none;
 }
 
 .brand-title {
@@ -71,26 +83,8 @@ html, body {
   background: linear-gradient(90deg, #fff, #facc15);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  /* Prevent overflow when sidebar collapses */
   white-space: nowrap;
   overflow: hidden;
-}
-
-.sidebar.collapsed .brand-title,
-.sidebar.collapsed .search-input,
-.sidebar.collapsed .group-title,
-.sidebar.collapsed .menu-item span,
-.sidebar.collapsed .admin-name,
-.sidebar.collapsed .admin-role {
-  display: none;
-}
-
-.sidebar.collapsed .menu-item {
-  justify-content: center;
-}
-
-.sidebar.collapsed .profile-section {
-  justify-content: center;
 }
 
 .search-input {
@@ -115,7 +109,7 @@ html, body {
   flex: 1;
   overflow-y: auto;
   padding: 10px;
-  -webkit-overflow-scrolling: touch; /* smooth momentum scroll on iOS */
+  -webkit-overflow-scrolling: touch;
 }
 
 .group-title {
@@ -136,7 +130,6 @@ html, body {
   cursor: pointer;
   transition: 0.2s ease;
   color: rgba(255,255,255,0.9);
-  /* Comfortable tap target on touch devices */
   min-height: 44px;
 }
 
@@ -197,7 +190,7 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-width: 0; /* prevents flex child from forcing horizontal overflow */
+  min-width: 0;
 }
 
 /* ================= TOPBAR ================= */
@@ -211,9 +204,9 @@ html, body {
   padding: 0 22px;
   background: rgba(255,255,255,0.85);
   backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid rgba(15,23,42,0.05);
   gap: 12px;
-  /* Respect iPhone notch when topbar sits at the very top */
   padding-top: env(safe-area-inset-top);
   height: calc(72px + env(safe-area-inset-top));
 }
@@ -247,7 +240,7 @@ html, body {
   font-weight: 700;
 }
 
-/* Hamburger button — hidden on desktop, shown on mobile */
+/* Hamburger button in topbar — hidden on desktop, shown on mobile */
 .mobile-menu-btn {
   display: none;
   width: 44px;
@@ -261,6 +254,7 @@ html, body {
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   border: none;
   flex-shrink: 0;
+  color: #14532d;
 }
 
 /* ================= NOTIFICATIONS ================= */
@@ -298,12 +292,12 @@ html, body {
   right: 0;
   top: 55px;
   width: 280px;
-  max-width: calc(100vw - 32px); /* never overflow viewport on small phones */
+  max-width: calc(100vw - 32px);
   background: white;
   border-radius: 16px;
   box-shadow: 0 18px 40px rgba(0,0,0,0.12);
   padding: 10px;
-  z-index: 50;
+  z-index: 250;
 }
 
 .dropdown-item {
@@ -324,7 +318,6 @@ html, body {
   overflow-x: hidden;
   padding: 22px;
   -webkit-overflow-scrolling: touch;
-  /* Respect iPhone home indicator at the bottom of scroll area */
   padding-bottom: calc(22px + env(safe-area-inset-bottom));
 }
 
@@ -371,7 +364,6 @@ html, body {
   padding: 24px;
   min-height: 400px;
   box-shadow: 0 10px 26px rgba(0,0,0,0.05);
-  /* Let wide tables/content scroll within the card instead of breaking layout */
   overflow-x: auto;
 }
 
@@ -411,11 +403,7 @@ html, body {
 /* ----- Mobile phones (incl. iPhone in portrait & landscape) ----- */
 @media (max-width: 768px) {
 
-  .admin-container {
-    position: relative;
-  }
-
-  /* Sidebar becomes an off-canvas drawer */
+  /* Sidebar becomes an off-canvas drawer, hidden by default */
   .sidebar {
     position: fixed;
     top: 0;
@@ -424,16 +412,18 @@ html, body {
     height: 100dvh;
     width: 260px;
     max-width: 80vw;
-    z-index: 200;
+    z-index: 300;
     transform: translateX(-100%);
     box-shadow: 8px 0 30px rgba(0,0,0,0.25);
   }
 
+  /* When opened via hamburger, slide into view */
   .sidebar.open {
     transform: translateX(0);
   }
 
-  /* Collapsed state is meaningless on mobile drawer — always full width when open */
+  /* On mobile, "collapsed" desktop state is irrelevant — the drawer
+     is always full width when open, regardless of collapsed flag */
   .sidebar.collapsed {
     width: 260px;
   }
@@ -452,13 +442,25 @@ html, body {
     justify-content: flex-start;
   }
 
+  /* Show the mobile-only close (X) button inside the drawer */
+  .toggle-btn.mobile-only {
+    display: flex;
+  }
+
+  /* The desktop "collapse to icons" hamburger inside the sidebar
+     is redundant on mobile (the drawer is open/closed, not
+     collapsed/expanded) — hide it to avoid confusing dual controls */
+  .sidebar-top-row .toggle-btn:not(.mobile-only) {
+    display: none;
+  }
+
   /* Dark backdrop behind open sidebar */
   .sidebar-overlay {
     display: block;
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.45);
-    z-index: 150;
+    z-index: 250;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s ease;
@@ -469,7 +471,7 @@ html, body {
     pointer-events: auto;
   }
 
-  /* Show hamburger, it controls the drawer */
+  /* Show hamburger in topbar — this is what opens the drawer */
   .mobile-menu-btn {
     display: flex;
   }
@@ -493,7 +495,7 @@ html, body {
   }
 
   .online-status {
-    display: none; /* save space on small screens */
+    display: none;
   }
 
   .page-content {
@@ -530,7 +532,7 @@ html, body {
 /* ----- Very small phones (e.g. iPhone SE, narrow Androids) ----- */
 @media (max-width: 380px) {
   .kpi-grid {
-    grid-template-columns: 1fr; /* stack KPIs on very narrow screens */
+    grid-template-columns: 1fr;
   }
 
   .topbar h3 {

@@ -29,7 +29,7 @@ import Payments from "./Payments";
 /* NEW WHATSAPP */
 import WhatsAppCenter from "./WhatsAppCenter";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 import {
   Home,
@@ -44,6 +44,7 @@ import {
   Activity,
   Bell,
   Menu,
+  X,
   PieChart,
   MessageCircle
 } from "lucide-react";
@@ -127,6 +128,11 @@ export default function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
+  // Mobile drawer state — separate from desktop "collapsed" state.
+  // On mobile, the sidebar is hidden off-screen by default and slides
+  // in over the content when mobileOpen is true.
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   const filteredMenu = useMemo(() => {
 
     if (!search) return MENU;
@@ -150,20 +156,52 @@ export default function AdminLayout() {
     });
   });
 
+  // Close the mobile drawer whenever a nav item is selected, so the
+  // user immediately sees the page they tapped instead of the sidebar.
+  const handleSelectTab = (key) => {
+    setActiveTab(key);
+    setMobileOpen(false);
+  };
+
+  // Prevent body scroll while the mobile drawer is open (avoids the
+  // page scrolling underneath the overlay).
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileOpen]);
+
   return (
     <div className="admin-container">
 
+      {/* MOBILE OVERLAY — tap to close the drawer */}
+      <div
+        className={`sidebar-overlay ${mobileOpen ? "visible" : ""}`}
+        onClick={() => setMobileOpen(false)}
+      />
+
       {/* SIDEBAR */}
 
-      <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
+      <aside className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileOpen ? "open" : ""}`}>
 
         <div className="sidebar-top">
 
-          <div
-            className="toggle-btn"
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            <Menu size={20} />
+          <div className="sidebar-top-row">
+            <div
+              className="toggle-btn"
+              onClick={() => setCollapsed(!collapsed)}
+              title="Collapse sidebar"
+            >
+              <Menu size={20} />
+            </div>
+
+            {/* Close button — only meaningful on mobile drawer */}
+            <div
+              className="toggle-btn mobile-only"
+              onClick={() => setMobileOpen(false)}
+              title="Close menu"
+            >
+              <X size={20} />
+            </div>
           </div>
 
           {!collapsed && (
@@ -203,7 +241,7 @@ export default function AdminLayout() {
                     className={`menu-item ${
                       activeTab === item.key ? "active" : ""
                     }`}
-                    onClick={() => setActiveTab(item.key)}
+                    onClick={() => handleSelectTab(item.key)}
                   >
                     <Icon size={20} />
 
@@ -250,9 +288,20 @@ export default function AdminLayout() {
 
         <div className="topbar">
 
-          <h3>
-            {activeTab.replaceAll("_", " ").toUpperCase()}
-          </h3>
+          <div className="topbar-left">
+            {/* Hamburger — opens the mobile drawer. Hidden on desktop via CSS. */}
+            <button
+              className="mobile-menu-btn"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu size={20} />
+            </button>
+
+            <h3>
+              {activeTab.replaceAll("_", " ").toUpperCase()}
+            </h3>
+          </div>
 
           <div className="topbar-right">
 
