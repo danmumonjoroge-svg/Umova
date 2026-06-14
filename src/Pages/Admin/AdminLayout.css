@@ -3,315 +3,562 @@
   padding: 0;
   box-sizing: border-box;
   font-family: 'Inter', sans-serif;
-  }
+}
+
+html, body {
+  height: 100%;
+  /* Prevent iOS bounce/zoom issues */
+  -webkit-text-size-adjust: 100%;
+}
 
 /* ================= APP WRAPPER ================= */
 
 .admin-container {
-display: flex;
-height: 100vh;
-overflow: hidden;
-background: linear-gradient(135deg, #f6f8fc, #eef2f7, #f9fafb);
-color: #0f172a;
+  display: flex;
+  height: 100vh;
+  height: 100dvh; /* dynamic viewport height — fixes iOS Safari toolbar resize jumps */
+  overflow: hidden;
+  background: linear-gradient(135deg, #f6f8fc, #eef2f7, #f9fafb);
+  color: #0f172a;
 }
 
 /* ================= SIDEBAR ================= */
 
 .sidebar {
-width: 280px;
-background: linear-gradient(180deg, #052e16, #14532d, #166534);
-color: white;
-display: flex;
-flex-direction: column;
-transition: width 0.3s ease;
-box-shadow: 8px 0 30px rgba(0,0,0,0.12);
+  width: 280px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #052e16, #14532d, #166534);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s ease, transform 0.3s ease;
+  box-shadow: 8px 0 30px rgba(0,0,0,0.12);
+  /* Account for iPhone notch / home indicator when sidebar is fixed on mobile */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .sidebar.collapsed {
-width: 85px;
+  width: 85px;
 }
 
 .sidebar-top {
-padding: 20px;
-border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
 }
 
 .toggle-btn {
-width: 44px;
-height: 44px;
-border-radius: 12px;
-display: flex;
-align-items: center;
-justify-content: center;
-cursor: pointer;
-background: rgba(255,255,255,0.08);
-transition: 0.2s ease;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: rgba(255,255,255,0.08);
+  transition: 0.2s ease;
 }
 
 .toggle-btn:hover {
-background: rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.16);
 }
 
 .brand-title {
-margin-top: 14px;
-font-size: 22px;
-font-weight: 800;
-background: linear-gradient(90deg, #fff, #facc15);
--webkit-background-clip: text;
--webkit-text-fill-color: transparent;
+  margin-top: 14px;
+  font-size: 22px;
+  font-weight: 800;
+  background: linear-gradient(90deg, #fff, #facc15);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  /* Prevent overflow when sidebar collapses */
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar.collapsed .brand-title,
+.sidebar.collapsed .search-input,
+.sidebar.collapsed .group-title,
+.sidebar.collapsed .menu-item span,
+.sidebar.collapsed .admin-name,
+.sidebar.collapsed .admin-role {
+  display: none;
+}
+
+.sidebar.collapsed .menu-item {
+  justify-content: center;
+}
+
+.sidebar.collapsed .profile-section {
+  justify-content: center;
 }
 
 .search-input {
-margin-top: 16px;
-width: 100%;
-padding: 12px 14px;
-border-radius: 12px;
-border: 1px solid rgba(255,255,255,0.12);
-background: rgba(255,255,255,0.08);
-color: white;
-outline: none;
+  margin-top: 16px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.08);
+  color: white;
+  outline: none;
+  font-size: 14px;
 }
 
 .search-input::placeholder {
-color: rgba(255,255,255,0.6);
+  color: rgba(255,255,255,0.6);
 }
 
 /* ================= MENU ================= */
 
 .menu-scroll {
-flex: 1;
-overflow-y: auto;
-padding: 10px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  -webkit-overflow-scrolling: touch; /* smooth momentum scroll on iOS */
 }
 
 .group-title {
-font-size: 11px;
-color: #facc15;
-font-weight: 700;
-letter-spacing: 1.3px;
-padding: 16px 12px 6px;
+  font-size: 11px;
+  color: #facc15;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+  padding: 16px 12px 6px;
 }
 
 .menu-item {
-display: flex;
-align-items: center;
-gap: 12px;
-padding: 12px 14px;
-margin: 6px 10px;
-border-radius: 14px;
-cursor: pointer;
-transition: 0.2s ease;
-color: rgba(255,255,255,0.9);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin: 6px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: 0.2s ease;
+  color: rgba(255,255,255,0.9);
+  /* Comfortable tap target on touch devices */
+  min-height: 44px;
 }
 
 .menu-item:hover {
-background: rgba(255,255,255,0.08);
-transform: translateX(4px);
+  background: rgba(255,255,255,0.08);
+  transform: translateX(4px);
 }
 
 .menu-item.active {
-background: rgba(250,204,21,0.15);
-border: 1px solid rgba(250,204,21,0.25);
-box-shadow: 0 8px 18px rgba(0,0,0,0.15);
+  background: rgba(250,204,21,0.15);
+  border: 1px solid rgba(250,204,21,0.25);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.15);
 }
 
 /* ================= PROFILE ================= */
 
 .profile-section {
-display: flex;
-align-items: center;
-gap: 12px;
-padding: 16px;
-border-top: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
 }
 
 .avatar {
-width: 44px;
-height: 44px;
-border-radius: 50%;
-background: linear-gradient(135deg, #facc15, #eab308);
-display: flex;
-align-items: center;
-justify-content: center;
-font-weight: 800;
-color: #14532d;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #facc15, #eab308);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #14532d;
 }
 
 .admin-name {
-font-weight: 700;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-role {
-font-size: 12px;
-opacity: 0.7;
+  font-size: 12px;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ================= MAIN ================= */
 
 .main-content {
-flex: 1;
-display: flex;
-flex-direction: column;
-overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0; /* prevents flex child from forcing horizontal overflow */
 }
 
 /* ================= TOPBAR ================= */
 
 .topbar {
-height: 72px;
-display: flex;
-justify-content: space-between;
-align-items: center;
-padding: 0 22px;
-background: rgba(255,255,255,0.85);
-backdrop-filter: blur(14px);
-border-bottom: 1px solid rgba(15,23,42,0.05);
+  height: 72px;
+  min-height: 72px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 22px;
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(15,23,42,0.05);
+  gap: 12px;
+  /* Respect iPhone notch when topbar sits at the very top */
+  padding-top: env(safe-area-inset-top);
+  height: calc(72px + env(safe-area-inset-top));
 }
 
 .topbar h3 {
-font-size: 18px;
-font-weight: 800;
+  font-size: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
 }
 
 .topbar-right {
-display: flex;
-align-items: center;
-gap: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
 }
 
 .online-status {
-color: #16a34a;
-font-weight: 700;
+  color: #16a34a;
+  font-weight: 700;
+}
+
+/* Hamburger button — hidden on desktop, shown on mobile */
+.mobile-menu-btn {
+  display: none;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: white;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  border: none;
+  flex-shrink: 0;
 }
 
 /* ================= NOTIFICATIONS ================= */
 
 .notification-wrapper {
-position: relative;
+  position: relative;
 }
 
 .notification-btn {
-width: 44px;
-height: 44px;
-border-radius: 12px;
-background: white;
-display: flex;
-align-items: center;
-justify-content: center;
-cursor: pointer;
-box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
 .badge {
-position: absolute;
-top: 2px;
-right: 2px;
-background: #ef4444;
-color: white;
-font-size: 10px;
-border-radius: 999px;
-padding: 2px 6px;
-font-weight: bold;
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  border-radius: 999px;
+  padding: 2px 6px;
+  font-weight: bold;
 }
 
 .notification-dropdown {
-position: absolute;
-right: 0;
-top: 55px;
-width: 280px;
-background: white;
-border-radius: 16px;
-box-shadow: 0 18px 40px rgba(0,0,0,0.12);
-padding: 10px;
-z-index: 50;
+  position: absolute;
+  right: 0;
+  top: 55px;
+  width: 280px;
+  max-width: calc(100vw - 32px); /* never overflow viewport on small phones */
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.12);
+  padding: 10px;
+  z-index: 50;
 }
 
 .dropdown-item {
-padding: 12px;
-border-radius: 10px;
-cursor: pointer;
+  padding: 12px;
+  border-radius: 10px;
+  cursor: pointer;
 }
 
 .dropdown-item:hover {
-background: #f8fafc;
+  background: #f8fafc;
 }
 
 /* ================= PAGE ================= */
 
 .page-content {
-flex: 1;
-overflow-y: auto;
-padding: 22px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 22px;
+  -webkit-overflow-scrolling: touch;
+  /* Respect iPhone home indicator at the bottom of scroll area */
+  padding-bottom: calc(22px + env(safe-area-inset-bottom));
 }
 
 /* ================= KPI ================= */
 
 .kpi-grid {
-display: grid;
-grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-gap: 18px;
-margin-bottom: 22px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  margin-bottom: 22px;
 }
 
 .kpi-card {
-background: white;
-border-radius: 20px;
-padding: 22px;
-box-shadow: 0 8px 22px rgba(0,0,0,0.06);
-transition: 0.2s ease;
+  background: white;
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.06);
+  transition: 0.2s ease;
+  min-width: 0;
 }
 
 .kpi-card:hover {
-transform: translateY(-3px);
+  transform: translateY(-3px);
 }
 
 .kpi-card h4 {
-font-size: 13px;
-color: #64748b;
-margin-bottom: 10px;
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 10px;
 }
 
 .kpi-card h2 {
-font-size: 26px;
-font-weight: 800;
-color: #14532d;
+  font-size: 26px;
+  font-weight: 800;
+  color: #14532d;
+  word-break: break-word;
 }
 
 /* ================= CONTENT ================= */
 
 .content-area {
-background: white;
-border-radius: 22px;
-padding: 24px;
-min-height: 400px;
-box-shadow: 0 10px 26px rgba(0,0,0,0.05);
+  background: white;
+  border-radius: 22px;
+  padding: 24px;
+  min-height: 400px;
+  box-shadow: 0 10px 26px rgba(0,0,0,0.05);
+  /* Let wide tables/content scroll within the card instead of breaking layout */
+  overflow-x: auto;
 }
 
 /* ================= SCROLL ================= */
 
 ::-webkit-scrollbar {
-width: 6px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-thumb {
-background: rgba(100,116,139,0.35);
-border-radius: 10px;
+  background: rgba(100,116,139,0.35);
+  border-radius: 10px;
 }
 
-/* ================= MOBILE ================= */
+/* ================= SIDEBAR OVERLAY (mobile) ================= */
 
+.sidebar-overlay {
+  display: none;
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+════════════════════════════════════════════════════════════ */
+
+/* ----- Tablets & small laptops ----- */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 240px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+}
+
+/* ----- Mobile phones (incl. iPhone in portrait & landscape) ----- */
 @media (max-width: 768px) {
-.sidebar {
-position: fixed;
-height: 100%;
-z-index: 100;
+
+  .admin-container {
+    position: relative;
+  }
+
+  /* Sidebar becomes an off-canvas drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    height: 100dvh;
+    width: 260px;
+    max-width: 80vw;
+    z-index: 200;
+    transform: translateX(-100%);
+    box-shadow: 8px 0 30px rgba(0,0,0,0.25);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Collapsed state is meaningless on mobile drawer — always full width when open */
+  .sidebar.collapsed {
+    width: 260px;
+  }
+
+  .sidebar.collapsed .brand-title,
+  .sidebar.collapsed .search-input,
+  .sidebar.collapsed .group-title,
+  .sidebar.collapsed .menu-item span,
+  .sidebar.collapsed .admin-name,
+  .sidebar.collapsed .admin-role {
+    display: block;
+  }
+
+  .sidebar.collapsed .menu-item,
+  .sidebar.collapsed .profile-section {
+    justify-content: flex-start;
+  }
+
+  /* Dark backdrop behind open sidebar */
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 150;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .sidebar-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Show hamburger, it controls the drawer */
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .main-content {
+    width: 100%;
+  }
+
+  .topbar {
+    padding: 0 14px;
+    height: calc(64px + env(safe-area-inset-top));
+    min-height: 64px;
+  }
+
+  .topbar h3 {
+    font-size: 15px;
+  }
+
+  .topbar-right {
+    gap: 8px;
+  }
+
+  .online-status {
+    display: none; /* save space on small screens */
+  }
+
+  .page-content {
+    padding: 14px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .kpi-card {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .kpi-card h2 {
+    font-size: 20px;
+  }
+
+  .content-area {
+    padding: 16px;
+    border-radius: 16px;
+    min-height: 0;
+  }
+
+  .notification-dropdown {
+    width: 260px;
+  }
 }
 
-.topbar h3 {
-font-size: 16px;
+/* ----- Very small phones (e.g. iPhone SE, narrow Androids) ----- */
+@media (max-width: 380px) {
+  .kpi-grid {
+    grid-template-columns: 1fr; /* stack KPIs on very narrow screens */
+  }
+
+  .topbar h3 {
+    font-size: 14px;
+  }
+
+  .notification-dropdown {
+    width: calc(100vw - 24px);
+    right: -8px;
+  }
 }
 
-.page-content {
-padding: 14px;
-}
+/* ----- Landscape phones (short height) ----- */
+@media (max-height: 480px) and (orientation: landscape) {
+  .topbar {
+    height: 56px;
+    min-height: 56px;
+  }
+
+  .sidebar-top {
+    padding: 12px;
+  }
+
+  .profile-section {
+    padding: 10px;
+  }
+
+  .page-content {
+    padding: 10px;
+  }
 }
