@@ -1,114 +1,112 @@
-import React, { useState } from "react";
-import { supabase } from "../../supabaseClient";
-import { useChama } from "./ChamaContext";
-import ChamaDashboardLayout from "./ChamaDashboardLayout";
+/* ════════════════════════════════════════════════════════════════════════════
+   CHAMA CONTRIBUTIONS ANALYZER v3.3
+   Optimized for Supabase 'chama_contributions' schema
+════════════════════════════════════════════════════════════════════════════ */
 
-export default function ChamaContribute() {
-  const { chama, member } = useChama();
+import React, { useState, useMemo, useEffect, useReducer } from 'react';
+import { toast } from 'react-hot-toast';
+import { supabase } from '../../supabaseClient';
+import { BarChart3, TrendingUp, Search, Download, RefreshCw, X, Wallet, AlertTriangle } from 'lucide-react';
 
-  const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("mpesa");
-  const [reference, setReference] = useState("");
-  const [loading, setLoading] = useState(false);
+/* Financial Logic */
+const FinancialEngine = {
+  formatKES: (val) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(val || 0),
+  
+  processRow: (row) => ({
+    ...row,
+    savings: Number(row.savings) || 0,
+    fines: Number(row.fines) || 0,
+    loans: Number(row.loans) || 0,
+    welfare: Number(row.welfare) || 0,
+    get grandTotal() { return this.savings + this.fines + this.loans + this.welfare; }
+  })
+};
 
-  // ─────────────────────────────
-  // SUBMIT CONTRIBUTION
-  // ─────────────────────────────
-  const submitContribution = async () => {
-    if (!amount) return alert("Enter amount");
+/* State Management */
+const initialState = { search: '', view: 'table' };
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'SET_SEARCH': return { ...state, search: action.payload };
+    case 'SET_VIEW': return { ...state, view: action.payload };
+    default: return state;
+  }
+};
 
-    setLoading(true);
+export default function ChamaAnalyzer({ chamaId }) {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    const { error } = await supabase.from("chama_contributions").insert([
-      {
-        chama_id: chama.id,
-        member_id: member.id,
-        member_name: member.full_name,
-        phone: member.phone,
-        amount: Number(amount),
-        method,
-        reference,
-        status: "pending",
-      },
-    ]);
+  useEffect(() => {
+    if (!chamaId) return;
 
-    setLoading(false);
+    // Fetch initial data
+    const loadData = async () => {
+      const { data: fetched, error } = await supabase
+        .from('chama_contributions')
+        .select('*')
+        .eq('chama_id', chamaId);
+      
+      if (error) toast.error('Failed to load contributions');
+      else setData(fetched.map(FinancialEngine.processRow));
+      setLoading(false);
+    };
 
-    if (error) return alert(error.message);
+    loadData();
 
-    alert("Contribution submitted for approval");
+    // Real-time subscription
+    const channel = supabase.channel('realtime-contributions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chama_contributions', filter: `chama_id=eq.${chamaId}` }, 
+      (payload) => {
+        if (payload.eventType === 'INSERT') setData(prev => [...prev, FinancialEngine.processRow(payload.new)]);
+        if (payload.eventType === 'UPDATE') setData(prev => prev.map(m => m.id === payload.new.id ? FinancialEngine.processRow(payload.new) : m));
+      }).subscribe();
 
-    setAmount("");
-    setReference("");
-  };
+    return () => supabase.removeChannel(channel);
+  }, [chamaId]);
+
+  const filteredData = useMemo(() => 
+    data.filter(m => m.name?.toLowerCase().includes(state.search.toLowerCase())),
+  [data, state.search]);
+
+  if (loading) return <div className="p-8 text-center">Loading Contribution Data...</div>;
 
   return (
-    <ChamaDashboardLayout activeTab="contributions">
-
-      <h2>💰 Contribute to Chama</h2>
-
-      <p style={{ opacity: 0.6 }}>
-        Submit your contribution. It will be approved by the treasurer.
-      </p>
-
-      {/* FORM */}
-      <div style={{
-        maxWidth: 400,
-        background: "#fff",
-        padding: 15,
-        borderRadius: 10,
-        marginTop: 20
-      }}>
-
-        {/* AMOUNT */}
-        <label>Amount (KES)</label>
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          style={{ width: "100%", padding: 8, marginBottom: 10 }}
+    <div className="chama-container">
+      <header className="toolbar">
+        <input 
+          placeholder="Search member..." 
+          onChange={(e) => dispatch({ type: 'SET_SEARCH', payload: e.target.value })}
         />
-
-        {/* METHOD */}
-        <label>Payment Method</label>
-        <select
-          value={method}
-          onChange={(e) => setMethod(e.target.value)}
-          style={{ width: "100%", padding: 8, marginBottom: 10 }}
-        >
-          <option value="mpesa">M-Pesa</option>
-          <option value="cash">Cash</option>
-          <option value="bank">Bank</option>
-        </select>
-
-        {/* REFERENCE */}
-        <label>Reference (Optional)</label>
-        <input
-          type="text"
-          placeholder="Mpesa code / receipt / bank ref"
-          value={reference}
-          onChange={(e) => setReference(e.target.value)}
-          style={{ width: "100%", padding: 8, marginBottom: 15 }}
-        />
-
-        {/* BUTTON */}
-        <button
-          onClick={submitContribution}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: 10,
-            background: "#10B981",
-            color: "#fff",
-            border: "none",
-            borderRadius: 8,
-            cursor: "pointer"
-          }}
-        >
-          {loading ? "Submitting..." : "Submit Contribution"}
+        <button onClick={() => dispatch({ type: 'SET_VIEW', payload: state.view === 'table' ? 'charts' : 'table' })}>
+          Toggle {state.view === 'table' ? 'Charts' : 'Table'}
         </button>
-      </div>
+      </header>
 
-    </ChamaDashboardLayout>
+      <table className="chama_contributions">
+        <thead>
+          <tr>
+            <th>name</th>
+            <th>savings</th>
+            <th>loans</th>
+            <th>fines</th>
+            <th>welfare</th>
+            <th>total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredData.map(m => (
+            <tr key={m.id}>
+              <td>{m.name}</td>
+              <td>{FinancialEngine.formatKES(m.savings)}</td>
+              <td>{FinancialEngine.formatKES(m.loans)}</td>
+              <td>{FinancialEngine.formatKES(m.fines)}</td>
+              <td>{FinancialEngine.formatKES(m.welfare)}</td>
+              <td className="font-bold">{FinancialEngine.formatKES(m.grandTotal)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

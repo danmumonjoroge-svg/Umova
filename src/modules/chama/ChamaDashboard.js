@@ -1,1005 +1,1425 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+/* ────────────────────────────────────────────────────────────────
+   CHAMA DASHBOARD v5.0 — FINAL PRODUCTION-READY
+   - Full Supabase integration with Send & Merry-Go-Round features
+   - Working modals & drawers with complete functionality
+   - Dynamic fund management with transaction tracking
+   - Officer approval workflows
+   - Monthly statements & minutes
+   - Fully functional sidebar navigation
+   - Send Money feature (to treasurer, bank, welfare recipients)
+   - Merry-Go-Round rotation management
+──────────────────────────────────────────────────────────────── */
+
+import React, {
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+  useReducer,
+  Suspense,
+  memo
+} from "react";
+
 import { supabase } from "../../supabaseClient";
 import { useChama } from "./ChamaContext";
+
 import {
-  Wallet, Briefcase, Clock, Search, Filter,
-  TrendingUp, Building2, Check, X, BadgeCheck,
-  Send, Users, Scale, ChevronRight, Upload,
-  Plus, Eye, ArrowUpRight, ArrowDownLeft,
-  Landmark, PiggyBank, ShieldCheck, HeartHandshake,
-  AlertCircle, FileText, CreditCard, BarChart3,
-  Home, RefreshCw, DollarSign, Receipt, Settings,
-  ChevronLeft, Menu, CheckCircle2, XCircle, Loader2
+  Users,
+  Wallet,
+  Landmark,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Menu,
+  X,
+  Search,
+  TrendingUp,
+  Settings,
+  Download,
+  Banknote,
+  Shield,
+  Building2,
+  User,
+  RefreshCw,
+  Activity,
+  ShieldAlert,
+  FileText,
+  ShieldCheck,
+  BarChart3,
+  Plus,
+  Edit2,
+  Trash2,
+  Eye,
+  Clock,
+  DollarSign,
+  Calendar,
+  ChevronDown,
+  Save,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Send,
+  Repeat2,
+  Check,
+  AlertCircle
 } from "lucide-react";
 
 import "./ChamaDashboard.css";
 
-// ─── FORMATTERS ───────────────────────────────────────────────────────────────
-const fmt = (n) =>
-  new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 2 }).format(n || 0);
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-const fmtTime = (d) => d ? new Date(d).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" }) : "";
+/* ════════════════════════════════════════════════════════════════
+   FINANCIAL ENGINE
+════════════════════════════════════════════════════════════════ */
 
-// ─── ACCOUNT TYPE CONFIG ──────────────────────────────────────────────────────
-const ACCOUNT_TYPES = {
-  savings:  { label: "Savings",   color: "emerald", icon: PiggyBank,      sidebar: true },
-  loans:    { label: "Loans",     color: "amber",   icon: Briefcase,      sidebar: true },
-  fines:    { label: "Fines",     color: "rose",    icon: Scale,          sidebar: true },
-  welfare:  { label: "Welfare",   color: "violet",  icon: HeartHandshake, sidebar: true },
+const FinancialEngine = {
+  formatKES(value) {
+    return new Intl.NumberFormat("en-KE", {
+      style: "currency",
+      currency: "KES",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number(value || 0));
+  },
+
+  safeNumber(value) {
+    return Number(parseFloat(value || 0).toFixed(2));
+  },
+
+  calculateLoanSchedule(principal, annualRate, months) {
+    const r = annualRate / 12 / 100;
+    const monthly =
+      (principal * r * Math.pow(1 + r, months)) /
+      (Math.pow(1 + r, months) - 1);
+
+    const schedule = [];
+    let balance = principal;
+
+    for (let i = 1; i <= months; i++) {
+      const interest = balance * r;
+      const principalPaid = monthly - interest;
+      balance -= principalPaid;
+
+      schedule.push({
+        month: i,
+        payment: this.safeNumber(monthly),
+        principal: this.safeNumber(principalPaid),
+        interest: this.safeNumber(interest),
+        balance: this.safeNumber(balance < 0 ? 0 : balance)
+      });
+    }
+
+    return schedule;
+  },
+
+  reconcileLedger(transactions = [], walletBalance = 0) {
+    const approved = transactions.filter(t => t.status === "approved");
+    const ledgerTotal = approved.reduce(
+      (sum, t) => sum + Number(t.amount || 0),
+      0
+    );
+    const variance = walletBalance - ledgerTotal;
+
+    return {
+      ledgerTotal: this.safeNumber(ledgerTotal),
+      walletBalance: this.safeNumber(walletBalance),
+      variance: this.safeNumber(variance),
+      isBalanced: Math.abs(variance) < 0.01,
+      status: Math.abs(variance) < 0.01 ? "HEALTHY" : "IMBALANCE"
+    };
+  },
+
+  computeBreakdown(transactions = []) {
+    const breakdown = {
+      savings: 0,
+      loans: 0,
+      fines: 0,
+      welfare: 0
+    };
+
+    for (const t of transactions) {
+      const type = t.account_type;
+      if (breakdown[type] !== undefined && t.status === "approved") {
+        breakdown[type] += Number(t.amount || 0);
+      }
+    }
+
+    return breakdown;
+  },
+
+  computeFundsByLocation(funds = []) {
+    const summary = {
+      total: 0,
+      byLocation: {}
+    };
+
+    funds.forEach(f => {
+      const location = f.fund_location || "Unspecified";
+      if (!summary.byLocation[location]) {
+        summary.byLocation[location] = {
+          current: 0,
+          deposited: 0,
+          withdrawn: 0,
+          transactions: []
+        };
+      }
+
+      summary.byLocation[location].current += Number(f.current_amount || 0);
+      summary.byLocation[location].deposited += Number(f.total_deposited || 0);
+      summary.byLocation[location].withdrawn += Number(f.total_withdrawn || 0);
+      summary.byLocation[location].transactions.push(f);
+      summary.total += Number(f.current_amount || 0);
+    });
+
+    return summary;
+  }
 };
 
-// ─── STATUS BADGE ─────────────────────────────────────────────────────────────
-const StatusBadge = ({ status }) => {
-  const map = {
-    pending:  { cls: "badge-pending",  icon: Clock,         label: "Pending" },
-    approved: { cls: "badge-approved", icon: CheckCircle2,  label: "Approved" },
-    rejected: { cls: "badge-rejected", icon: XCircle,       label: "Rejected" },
-  };
-  const cfg = map[status] || map.pending;
-  const Icon = cfg.icon;
+/* ════════════════════════════════════════════════════════════════
+   PERMISSION GUARD
+════════════════════════════════════════════════════════════════ */
+
+const PermissionGuard = {
+  roles: {
+    admin: ["*"],
+    chairperson: ["APPROVE", "VIEW_ALL", "MANAGE_OFFICERS"],
+    treasurer: ["APPROVE", "EXPORT", "RECONCILE", "MANAGE_FUNDS", "RECEIVE_SEND"],
+    secretary: ["VIEW_ALL", "MANAGE_DOCUMENTS", "APPROVE_MINUTES"],
+    member: ["SUBMIT", "VIEW", "SEND_MONEY"]
+  },
+
+  can(role, permission) {
+    const perms = this.roles[role] || [];
+    return perms.includes("*") || perms.includes(permission);
+  }
+};
+
+/* ════════════════════════════════════════════════════════════════
+   DATA LAYER — SUPABASE QUERIES
+════════════════════════════════════════════════════════════════ */
+
+async function fetchChamaCoreData(chamaId) {
+  try {
+    const [
+      chamaRes,
+      membersRes,
+      txRes,
+      loansRes,
+      finesRes,
+      welfareRes,
+      fundsRes,
+      transactionsRes,
+      minutesRes,
+      statementsRes,
+      officersRes,
+      sendRes,
+      merryGoRoundRes
+    ] = await Promise.all([
+      supabase.from("chamas").select("*").eq("id", chamaId).single(),
+      supabase.from("chama_members").select("*").eq("chama_id", chamaId),
+      supabase
+        .from("chama_contributions")
+        .select("*")
+        .eq("chama_id", chamaId)
+        .order("created_at", { ascending: false }),
+      supabase.from("chama_loans").select("*").eq("chama_id", chamaId),
+      supabase.from("chama_fines").select("*").eq("chama_id", chamaId),
+      supabase.from("chama_welfare").select("*").eq("chama_id", chamaId),
+      supabase
+        .from("chama_funds")
+        .select("*")
+        .eq("chama_id", chamaId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("chama_fund_transactions")
+        .select("*")
+        .eq("chama_id", chamaId)
+        .order("transaction_date", { ascending: false }),
+      supabase
+        .from("chama_minutes")
+        .select("*")
+        .eq("chama_id", chamaId)
+        .order("meeting_date", { ascending: false }),
+      supabase
+        .from("chama_statements")
+        .select("*")
+        .eq("chama_id", chamaId)
+        .order("statement_date", { ascending: false }),
+      supabase
+        .from("chama_officers")
+        .select("*")
+        .eq("chama_id", chamaId),
+      supabase
+        .from("chama_send_money")
+        .select("*")
+        .eq("chama_id", chamaId)
+        .order("sent_date", { ascending: false }),
+      supabase
+        .from("chama_merry_go_round")
+        .select("*")
+        .eq("chama_id", chamaId)
+        .order("scheduled_date", { ascending: false })
+    ]);
+
+    return {
+      chama: chamaRes.data || {},
+      members: membersRes.data || [],
+      contributions: txRes.data || [],
+      loans: loansRes.data || [],
+      fines: finesRes.data || [],
+      welfare: welfareRes.data || [],
+      funds: fundsRes.data || [],
+      fundTransactions: transactionsRes.data || [],
+      minutes: minutesRes.data || [],
+      statements: statementsRes.data || [],
+      officers: officersRes.data || [],
+      sendMoney: sendRes.data || [],
+      merryGoRound: merryGoRoundRes.data || []
+    };
+  } catch (error) {
+    console.error("Error fetching chama data:", error);
+    return {
+      chama: {},
+      members: [],
+      contributions: [],
+      loans: [],
+      fines: [],
+      welfare: [],
+      funds: [],
+      fundTransactions: [],
+      minutes: [],
+      statements: [],
+      officers: [],
+      sendMoney: [],
+      merryGoRound: []
+    };
+  }
+}
+
+function subscribeToChamaRealtime(chamaId, onUpdate) {
+  const channel = supabase
+    .channel(`chama-realtime-${chamaId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "chama_contributions",
+        filter: `chama_id=eq.${chamaId}`
+      },
+      payload => onUpdate(payload)
+    )
+    .subscribe();
+
+  return () => supabase.removeChannel(channel);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   UI STATE & REDUCER
+════════════════════════════════════════════════════════════════ */
+
+const uiInitialState = {
+  sidebarOpen: true,
+  activeTab: "overview",
+  modals: {
+    members: false,
+    contributions: false,
+    funds: false,
+    fundDetails: false,
+    addFund: false,
+    addTransaction: false,
+    minutes: false,
+    statements: false,
+    approvals: false,
+    officers: false,
+    sendMoney: false,
+    merryGoRound: false
+  },
+  drawer: {
+    open: false,
+    type: null,
+    payload: null
+  },
+  filters: {
+    search: "",
+    type: "all",
+    status: "all"
+  }
+};
+
+function uiReducer(state, action) {
+  switch (action.type) {
+    case "TOGGLE_SIDEBAR":
+      return { ...state, sidebarOpen: !state.sidebarOpen };
+
+    case "SET_TAB":
+      return { ...state, activeTab: action.payload };
+
+    case "OPEN_MODAL":
+      return {
+        ...state,
+        modals: { ...state.modals, [action.payload]: true }
+      };
+
+    case "CLOSE_MODAL":
+      return {
+        ...state,
+        modals: { ...state.modals, [action.payload]: false }
+      };
+
+    case "OPEN_DRAWER":
+      return {
+        ...state,
+        drawer: {
+          open: true,
+          type: action.payload.type,
+          payload: action.payload.data || null
+        }
+      };
+
+    case "CLOSE_DRAWER":
+      return {
+        ...state,
+        drawer: { open: false, type: null, payload: null }
+      };
+
+    default:
+      return state;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CARDS & OVERVIEW COMPONENTS
+════════════════════════════════════════════════════════════════ */
+
+const FundsOverview = memo(({ funds = [] }) => {
+  const summary = useMemo(() => {
+    return FinancialEngine.computeFundsByLocation(funds);
+  }, [funds]);
+
   return (
-    <span className={`status-badge ${cfg.cls}`}>
-      <Icon size={11} /> {cfg.label}
-    </span>
+    <div className="grid-cards">
+      {Object.entries(summary.byLocation).length === 0 ? (
+        <div className="card" style={{ gridColumn: "1 / -1" }}>
+          <p className="empty">No fund locations added yet</p>
+        </div>
+      ) : (
+        Object.entries(summary.byLocation).map(([location, data]) => (
+          <div key={location} className="card card-emerald" style={{ "--card-accent": "var(--emerald)", "--card-accent-bg": "var(--emerald-bg)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <Landmark size={18} style={{ color: "var(--emerald)" }} />
+              <span style={{ fontSize: "10px", fontWeight: "700", color: "var(--text-3)", textTransform: "uppercase" }}>
+                {location}
+              </span>
+            </div>
+            <h4>{location}</h4>
+            <p style={{ color: "var(--emerald)", fontWeight: "750" }}>
+              {FinancialEngine.formatKES(data.current)}
+            </p>
+            <div style={{ fontSize: "11px", color: "var(--text-2)", marginTop: "8px", display: "flex", gap: "8px" }}>
+              <span>↑ {FinancialEngine.formatKES(data.deposited)}</span>
+              <span>↓ {FinancialEngine.formatKES(data.withdrawn)}</span>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
   );
-};
+});
 
-// ─── TYPE PILL ────────────────────────────────────────────────────────────────
-const TypePill = ({ type }) => {
-  const cfg = ACCOUNT_TYPES[type] || { label: type, color: "slate" };
-  return <span className={`type-pill pill-${cfg.color}`}>{cfg.label}</span>;
-};
+FundsOverview.displayName = "FundsOverview";
 
-// ─── AVATAR ───────────────────────────────────────────────────────────────────
-const Avatar = ({ name, size = "md" }) => (
-  <div className={`avatar avatar-${size}`}>
-    {String(name || "?").charAt(0).toUpperCase()}
+const BreakdownCards = memo(({ breakdown = {} }) => (
+  <div className="grid-cards">
+    <div className="card card-emerald">
+      <h4>Savings</h4>
+      <p>{FinancialEngine.formatKES(breakdown.savings || 0)}</p>
+    </div>
+    <div className="card card-amber">
+      <h4>Loans</h4>
+      <p>{FinancialEngine.formatKES(breakdown.loans || 0)}</p>
+    </div>
+    <div className="card card-rose">
+      <h4>Fines</h4>
+      <p>{FinancialEngine.formatKES(breakdown.fines || 0)}</p>
+    </div>
+    <div className="card card-violet">
+      <h4>Welfare</h4>
+      <p>{FinancialEngine.formatKES(breakdown.welfare || 0)}</p>
+    </div>
   </div>
-);
+));
 
-// ─── EMPTY STATE ──────────────────────────────────────────────────────────────
-const EmptyState = ({ icon: Icon, title, sub }) => (
-  <div className="empty-state">
-    <div className="empty-icon"><Icon size={28} /></div>
-    <h4>{title}</h4>
-    {sub && <p>{sub}</p>}
-  </div>
-);
+BreakdownCards.displayName = "BreakdownCards";
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MODAL: MEMBERS LIST
-// ═══════════════════════════════════════════════════════════════════════════════
-const MembersModal = ({ members, onClose }) => {
-  const [search, setSearch] = useState("");
-  const filtered = members.filter(m =>
-    m.member_name?.toLowerCase().includes(search.toLowerCase()) ||
-    m.role?.toLowerCase().includes(search.toLowerCase()) ||
-    m.phone?.includes(search)
-  );
+/* ════════════════════════════════════════════════════════════════
+   SEND MONEY MODAL
+════════════════════════════════════════════════════════════════ */
+
+const SendMoneyModal = memo(({ open, onClose, chamaId, members = [], onSend }) => {
+  const [formData, setFormData] = useState({
+    sender_member_id: "",
+    amount: "",
+    sent_date: new Date().toISOString().split("T")[0],
+    reference_code: "",
+    send_to_type: "treasurer", // treasurer, bank, welfare, merry_go_round, other
+    send_to_details: "",
+    description: ""
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!formData.sender_member_id || !formData.amount || !formData.reference_code) {
+      alert("Please fill all required fields");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.from("chama_send_money").insert([
+        {
+          chama_id: chamaId,
+          sender_member_id: formData.sender_member_id,
+          amount: Number(formData.amount),
+          sent_date: formData.sent_date,
+          reference_code: formData.reference_code,
+          send_to_type: formData.send_to_type,
+          send_to_details: formData.send_to_details,
+          description: formData.description,
+          status: "pending",
+          created_at: new Date().toISOString()
+        }
+      ]);
+
+      if (error) throw error;
+
+      setFormData({
+        sender_member_id: "",
+        amount: "",
+        sent_date: new Date().toISOString().split("T")[0],
+        reference_code: "",
+        send_to_type: "treasurer",
+        send_to_details: "",
+        description: ""
+      });
+
+      alert("✅ Money send recorded successfully!");
+      onSend?.();
+    } catch (e) {
+      console.error("Error recording send:", e);
+      alert("❌ Failed to record send");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!open) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-lg" onClick={e => e.stopPropagation()}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <div className="modal-title-group">
-            <Users size={20} />
-            <div>
-              <h3>Chama Members</h3>
-              <p>{members.length} registered member{members.length !== 1 ? "s" : ""}</p>
+          <h3>💸 Send Money</h3>
+          <button className="close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="modal-body scroll">
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="field-group">
+              <label>From Member *</label>
+              <select
+                value={formData.sender_member_id}
+                onChange={e => setFormData({ ...formData, sender_member_id: e.target.value })}
+                disabled={loading}
+              >
+                <option value="">Select member sending money...</option>
+                {members.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field-group">
+              <label>Amount (KES) *</label>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={formData.amount}
+                onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="field-group">
+              <label>Reference Code *</label>
+              <input
+                type="text"
+                placeholder="e.g., MPESA123456"
+                value={formData.reference_code}
+                onChange={e => setFormData({ ...formData, reference_code: e.target.value })}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="field-group">
+              <label>Sent Date *</label>
+              <input
+                type="date"
+                value={formData.sent_date}
+                onChange={e => setFormData({ ...formData, sent_date: e.target.value })}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="field-group">
+              <label>Send To (Where) *</label>
+              <select
+                value={formData.send_to_type}
+                onChange={e => setFormData({ ...formData, send_to_type: e.target.value })}
+                disabled={loading}
+              >
+                <option value="treasurer">Treasurer (Safekeeping)</option>
+                <option value="bank">Bank Account</option>
+                <option value="welfare">Welfare Recipient</option>
+                <option value="merry_go_round">Merry-Go-Round Recipient</option>
+                <option value="loan">Loan Repayment</option>
+                <option value="fine">Fine Payment</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div className="field-group">
+              <label>Details/Notes</label>
+              <input
+                type="text"
+                placeholder={
+                  formData.send_to_type === "bank"
+                    ? "e.g., KCB Account 12345"
+                    : formData.send_to_type === "welfare"
+                    ? "e.g., John Doe (Welfare)"
+                    : formData.send_to_type === "merry_go_round"
+                    ? "e.g., Jane Smith (MGR)"
+                    : "Additional details..."
+                }
+                value={formData.send_to_details}
+                onChange={e => setFormData({ ...formData, send_to_details: e.target.value })}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="field-group">
+              <label>Description</label>
+              <textarea
+                rows="3"
+                placeholder="Add any additional notes..."
+                value={formData.description}
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                disabled={loading}
+                style={{ resize: "vertical" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                className="btn-primary"
+                onClick={handleSubmit}
+                disabled={loading}
+                style={{ flex: 1 }}
+              >
+                <Send size={16} />
+                {loading ? "Recording..." : "Record Send"}
+              </button>
+              <button
+                className="btn-ghost"
+                onClick={onClose}
+                disabled={loading}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
-          <button className="modal-close" onClick={onClose}><X size={18} /></button>
-        </div>
-
-        <div className="modal-search-bar">
-          <Search size={14} />
-          <input placeholder="Search by name, role or phone…" value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-
-        <div className="modal-table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Member</th>
-                <th>Role</th>
-                <th>Phone</th>
-                <th>Joined</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((m, i) => (
-                <tr key={m.id}>
-                  <td className="td-num">{i + 1}</td>
-                  <td>
-                    <div className="td-member">
-                      <Avatar name={m.member_name} size="sm" />
-                      <span>{m.member_name}</span>
-                    </div>
-                  </td>
-                  <td><span className={`role-tag role-${m.role?.toLowerCase()}`}>{m.role || "Member"}</span></td>
-                  <td className="td-mono">{m.phone || "—"}</td>
-                  <td>{fmtDate(m.created_at)}</td>
-                  <td>
-                    <span className={`dot-status ${m.status === "active" ? "dot-active" : "dot-inactive"}`}>
-                      {m.status || "active"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={6} className="td-empty">No members match your search.</td></tr>
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
     </div>
   );
-};
+});
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MODAL: CONTRIBUTIONS TABLE (all members × all types)
-// ═══════════════════════════════════════════════════════════════════════════════
-const ContributionsModal = ({ transactions, members, onClose }) => {
-  const [typeFilter, setTypeFilter] = useState("ALL");
-  const [memberFilter, setMemberFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+SendMoneyModal.displayName = "SendMoneyModal";
 
-  const filtered = transactions.filter(tx => {
-    const okType   = typeFilter   === "ALL" || tx.account_type === typeFilter;
-    const okMember = memberFilter === "ALL" || tx.member_id    === memberFilter;
-    const okStatus = statusFilter === "ALL" || tx.status       === statusFilter;
-    return okType && okMember && okStatus;
-  });
+/* ════════════════════════════════════════════════════════════════
+   SEND MONEY HISTORY MODAL
+════════════════════════════════════════════════════════════════ */
 
-  const total = filtered.filter(t => t.status === "approved").reduce((s, t) => s + Number(t.amount || 0), 0);
+const SendMoneyHistoryModal = memo(({ open, onClose, sendRecords = [], members = [] }) => {
+  const [filterType, setFilterType] = useState("all");
+
+  const filtered = useMemo(() => {
+    if (filterType === "all") return sendRecords;
+    return sendRecords.filter(r => r.send_to_type === filterType);
+  }, [sendRecords, filterType]);
+
+  if (!open) return null;
+
+  const getSendTypeLabel = (type) => {
+    const labels = {
+      treasurer: "👤 Treasurer",
+      bank: "🏦 Bank",
+      welfare: "❤️ Welfare",
+      merry_go_round: "🔄 Merry-Go-Round",
+      loan: "📈 Loan",
+      fine: "⚠️ Fine",
+      other: "📋 Other"
+    };
+    return labels[type] || type;
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-xl" onClick={e => e.stopPropagation()}>
+      <div className="modal-content large" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <div className="modal-title-group">
-            <Receipt size={20} />
-            <div>
-              <h3>All Contributions</h3>
-              <p>{filtered.length} transaction{filtered.length !== 1 ? "s" : ""} · Approved total: {fmt(total)}</p>
-            </div>
-          </div>
-          <button className="modal-close" onClick={onClose}><X size={18} /></button>
+          <h3>💸 Send Money History</h3>
+          <button className="close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
         </div>
 
         <div className="modal-filter-row">
-          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-            <option value="ALL">All Types</option>
-            {Object.entries(ACCOUNT_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          <select
+            value={filterType}
+            onChange={e => setFilterType(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "8px 12px",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+              background: "var(--bg-4)",
+              color: "var(--text)",
+              fontSize: "12.5px",
+              fontWeight: "500",
+              outline: "none",
+              cursor: "pointer"
+            }}
+          >
+            <option value="all">All Types</option>
+            <option value="treasurer">Treasurer</option>
+            <option value="bank">Bank</option>
+            <option value="welfare">Welfare</option>
+            <option value="merry_go_round">Merry-Go-Round</option>
+            <option value="loan">Loan</option>
+            <option value="fine">Fine</option>
           </select>
-          <select value={memberFilter} onChange={e => setMemberFilter(e.target.value)}>
-            <option value="ALL">All Members</option>
-            {members.map(m => <option key={m.id} value={m.id}>{m.member_name}</option>)}
-          </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-            <option value="ALL">All Statuses</option>
+        </div>
+
+        <div className="modal-body scroll">
+          {filtered.length === 0 ? (
+            <p className="empty">No send records found</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {filtered.map(record => {
+                const sender = members.find(m => m.id === record.sender_member_id);
+                return (
+                  <div
+                    key={record.id}
+                    className="card"
+                    style={{
+                      padding: "14px",
+                      borderLeft: "4px solid var(--blue)"
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "8px" }}>
+                      <div>
+                        <h4 style={{ fontSize: "13px", fontWeight: "650", marginBottom: "2px" }}>
+                          {sender?.name || "Unknown"} → {getSendTypeLabel(record.send_to_type)}
+                        </h4>
+                        <p style={{ fontSize: "11px", color: "var(--text-2)" }}>
+                          {new Date(record.sent_date).toLocaleDateString()} · {record.reference_code}
+                        </p>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <p style={{ fontSize: "15px", fontWeight: "750", color: "var(--emerald)" }}>
+                          {FinancialEngine.formatKES(record.amount)}
+                        </p>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            fontSize: "10px",
+                            fontWeight: "700",
+                            color: record.status === "confirmed" ? "var(--emerald)" : "var(--amber)",
+                            background: record.status === "confirmed" ? "var(--emerald-bg)" : "var(--amber-bg)",
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                            marginTop: "4px"
+                          }}
+                        >
+                          {record.status}
+                        </span>
+                      </div>
+                    </div>
+                    {record.send_to_details && (
+                      <p style={{ fontSize: "11px", color: "var(--text-2)", marginTop: "8px" }}>
+                        📍 {record.send_to_details}
+                      </p>
+                    )}
+                    {record.description && (
+                      <p style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "4px", fontStyle: "italic" }}>
+                        {record.description}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+SendMoneyHistoryModal.displayName = "SendMoneyHistoryModal";
+
+/* ════════════════════════════════════════════════════════════════
+   MERRY-GO-ROUND MODAL
+════════════════════════════════════════════════════════════════ */
+
+const MerryGoRoundModal = memo(({ open, onClose, merryGoRound = [], members = [], chamaId, onAdd }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({
+    member_id: "",
+    scheduled_date: new Date().toISOString().split("T")[0],
+    expected_amount: "",
+    status: "pending", // pending, received, delayed
+    received_date: "",
+    actual_amount: ""
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!formData.member_id || !formData.expected_amount) {
+      alert("Please fill required fields");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.from("chama_merry_go_round").insert([
+        {
+          chama_id: chamaId,
+          member_id: formData.member_id,
+          scheduled_date: formData.scheduled_date,
+          expected_amount: Number(formData.expected_amount),
+          status: formData.status,
+          received_date: formData.received_date || null,
+          actual_amount: formData.actual_amount ? Number(formData.actual_amount) : null,
+          created_at: new Date().toISOString()
+        }
+      ]);
+
+      if (error) throw error;
+
+      setFormData({
+        member_id: "",
+        scheduled_date: new Date().toISOString().split("T")[0],
+        expected_amount: "",
+        status: "pending",
+        received_date: "",
+        actual_amount: ""
+      });
+      setShowForm(false);
+      alert("✅ Merry-Go-Round entry added!");
+      onAdd?.();
+    } catch (e) {
+      console.error("Error adding MGR:", e);
+      alert("❌ Failed to add entry");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusColor = (status) => {
+    if (status === "received") return { bg: "var(--emerald-bg)", color: "var(--emerald)", text: "✅ Received" };
+    if (status === "pending") return { bg: "var(--amber-bg)", color: "var(--amber)", text: "⏳ Pending" };
+    return { bg: "var(--rose-bg)", color: "var(--rose)", text: "⚠️ Delayed" };
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content large" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>🔄 Merry-Go-Round Rotation</h3>
+          <button className="close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="modal-body scroll">
+          {!showForm ? (
+            <>
+              <button
+                className="btn-primary"
+                onClick={() => setShowForm(true)}
+                style={{ width: "100%", marginBottom: "16px" }}
+              >
+                <Plus size={16} />
+                Add Rotation Entry
+              </button>
+
+              {merryGoRound.length === 0 ? (
+                <p className="empty">No merry-go-round entries yet</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {/* Upcoming */}
+                  <div>
+                    <h4 style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-2)", textTransform: "uppercase", marginBottom: "8px", paddingLeft: "4px" }}>
+                      ⏳ Upcoming & Pending
+                    </h4>
+                    {merryGoRound
+                      .filter(m => m.status !== "received")
+                      .map(mgr => {
+                        const member = members.find(m => m.id === mgr.member_id);
+                        const statusData = getStatusColor(mgr.status);
+                        const daysUntil = Math.ceil(
+                          (new Date(mgr.scheduled_date) - new Date()) / (1000 * 60 * 60 * 24)
+                        );
+                        return (
+                          <div
+                            key={mgr.id}
+                            className="card"
+                            style={{
+                              padding: "12px",
+                              borderLeft: `4px solid ${statusData.color}`
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                              <div style={{ flex: 1 }}>
+                                <h4 style={{ fontSize: "13px", fontWeight: "650", marginBottom: "4px" }}>
+                                  {member?.name || "Unknown"}
+                                </h4>
+                                <p style={{ fontSize: "11px", color: "var(--text-2)", marginBottom: "6px" }}>
+                                  📅 {new Date(mgr.scheduled_date).toLocaleDateString()}
+                                  {daysUntil > 0 && ` (in ${daysUntil} days)`}
+                                  {daysUntil === 0 && " (Today)"}
+                                  {daysUntil < 0 && ` (${Math.abs(daysUntil)} days ago)`}
+                                </p>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <p style={{ fontSize: "14px", fontWeight: "750", color: "var(--emerald)", marginBottom: "4px" }}>
+                                  {FinancialEngine.formatKES(mgr.expected_amount)}
+                                </p>
+                                <span
+                                  style={{
+                                    display: "inline-block",
+                                    fontSize: "10px",
+                                    fontWeight: "700",
+                                    color: statusData.color,
+                                    background: statusData.bg,
+                                    padding: "3px 8px",
+                                    borderRadius: "4px"
+                                  }}
+                                >
+                                  {statusData.text}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+
+                  {/* Received */}
+                  {merryGoRound.filter(m => m.status === "received").length > 0 && (
+                    <div style={{ marginTop: "16px" }}>
+                      <h4 style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-2)", textTransform: "uppercase", marginBottom: "8px", paddingLeft: "4px" }}>
+                        ✅ Already Received
+                      </h4>
+                      {merryGoRound
+                        .filter(m => m.status === "received")
+                        .map(mgr => {
+                          const member = members.find(m => m.id === mgr.member_id);
+                          return (
+                            <div
+                              key={mgr.id}
+                              className="card"
+                              style={{
+                                padding: "12px",
+                                borderLeft: "4px solid var(--emerald)",
+                                opacity: 0.8
+                              }}
+                            >
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                                <div style={{ flex: 1 }}>
+                                  <h4 style={{ fontSize: "13px", fontWeight: "650", marginBottom: "4px" }}>
+                                    {member?.name || "Unknown"}
+                                  </h4>
+                                  <p style={{ fontSize: "11px", color: "var(--text-2)" }}>
+                                    Received: {new Date(mgr.received_date).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <div style={{ textAlign: "right" }}>
+                                  <p style={{ fontSize: "14px", fontWeight: "750", color: "var(--emerald)" }}>
+                                    {FinancialEngine.formatKES(mgr.actual_amount || mgr.expected_amount)}
+                                  </p>
+                                  <span
+                                    style={{
+                                      display: "inline-block",
+                                      fontSize: "10px",
+                                      fontWeight: "700",
+                                      color: "var(--emerald)",
+                                      background: "var(--emerald-bg)",
+                                      padding: "3px 8px",
+                                      borderRadius: "4px",
+                                      marginTop: "4px"
+                                    }}
+                                  >
+                                    ✅ Received
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div className="field-group">
+                <label>Member *</label>
+                <select
+                  value={formData.member_id}
+                  onChange={e => setFormData({ ...formData, member_id: e.target.value })}
+                  disabled={loading}
+                >
+                  <option value="">Select member...</option>
+                  {members.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field-group">
+                <label>Scheduled Date *</label>
+                <input
+                  type="date"
+                  value={formData.scheduled_date}
+                  onChange={e => setFormData({ ...formData, scheduled_date: e.target.value })}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="field-group">
+                <label>Expected Amount (KES) *</label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={formData.expected_amount}
+                  onChange={e => setFormData({ ...formData, expected_amount: e.target.value })}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="field-group">
+                <label>Status</label>
+                <select
+                  value={formData.status}
+                  onChange={e => setFormData({ ...formData, status: e.target.value })}
+                  disabled={loading}
+                >
+                  <option value="pending">Pending</option>
+                  <option value="received">Received</option>
+                  <option value="delayed">Delayed</option>
+                </select>
+              </div>
+
+              {formData.status === "received" && (
+                <>
+                  <div className="field-group">
+                    <label>Received Date</label>
+                    <input
+                      type="date"
+                      value={formData.received_date}
+                      onChange={e => setFormData({ ...formData, received_date: e.target.value })}
+                      disabled={loading}
+                    />
+                  </div>
+
+                  <div className="field-group">
+                    <label>Actual Amount (KES)</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      value={formData.actual_amount}
+                      onChange={e => setFormData({ ...formData, actual_amount: e.target.value })}
+                      disabled={loading}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  className="btn-primary"
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  style={{ flex: 1 }}
+                >
+                  <Save size={16} />
+                  {loading ? "Saving..." : "Save Entry"}
+                </button>
+                <button
+                  className="btn-ghost"
+                  onClick={() => setShowForm(false)}
+                  disabled={loading}
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+MerryGoRoundModal.displayName = "MerryGoRoundModal";
+
+/* ════════════════════════════════════════════════════════════════
+   FUND MANAGEMENT MODAL
+════════════════════════════════════════════════════════════════ */
+
+const FundManagementModal = memo(({ open, onClose, funds = [], onAddFund, chamaId }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({
+    fund_location: "",
+    current_amount: "",
+    total_deposited: "",
+    total_withdrawn: "",
+    notes: ""
+  });
+
+  const handleSubmit = async () => {
+    if (!formData.fund_location || !formData.current_amount) {
+      alert("Please fill required fields");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("chama_funds").insert([
+        {
+          chama_id: chamaId,
+          fund_location: formData.fund_location,
+          current_amount: Number(formData.current_amount),
+          total_deposited: Number(formData.total_deposited || 0),
+          total_withdrawn: Number(formData.total_withdrawn || 0),
+          notes: formData.notes,
+          created_at: new Date().toISOString()
+        }
+      ]);
+
+      if (error) throw error;
+
+      setFormData({
+        fund_location: "",
+        current_amount: "",
+        total_deposited: "",
+        total_withdrawn: "",
+        notes: ""
+      });
+      setShowForm(false);
+      onAddFund?.();
+    } catch (e) {
+      console.error("Error adding fund:", e);
+      alert("Failed to add fund");
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>💰 Fund Management</h3>
+          <button className="close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="modal-body scroll">
+          {!showForm ? (
+            <>
+              <button
+                className="btn-primary"
+                onClick={() => setShowForm(true)}
+                style={{ width: "100%", marginBottom: "16px" }}
+              >
+                <Plus size={16} />
+                Add Fund Location
+              </button>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {funds.length === 0 ? (
+                  <p className="empty">No fund locations added yet</p>
+                ) : (
+                  funds.map(fund => (
+                    <div key={fund.id} className="card" style={{ padding: "12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                        <div>
+                          <h4 style={{ marginBottom: "4px" }}>{fund.fund_location}</h4>
+                          <p style={{ color: "var(--emerald)", fontWeight: "750" }}>
+                            {FinancialEngine.formatKES(fund.current_amount)}
+                          </p>
+                        </div>
+                        <div style={{ textAlign: "right", fontSize: "11px", color: "var(--text-2)" }}>
+                          <div>↑ {FinancialEngine.formatKES(fund.total_deposited)}</div>
+                          <div>↓ {FinancialEngine.formatKES(fund.total_withdrawn)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div className="field-group">
+                <label>Fund Location</label>
+                <input
+                  type="text"
+                  placeholder="e.g., KCB Bank, Equity Bank, Bull Purchase, SAF Shares"
+                  value={formData.fund_location}
+                  onChange={e => setFormData({ ...formData, fund_location: e.target.value })}
+                />
+              </div>
+
+              <div className="field-group">
+                <label>Current Amount</label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={formData.current_amount}
+                  onChange={e => setFormData({ ...formData, current_amount: e.target.value })}
+                />
+              </div>
+
+              <div className="field-group">
+                <label>Total Deposited</label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={formData.total_deposited}
+                  onChange={e => setFormData({ ...formData, total_deposited: e.target.value })}
+                />
+              </div>
+
+              <div className="field-group">
+                <label>Total Withdrawn</label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={formData.total_withdrawn}
+                  onChange={e => setFormData({ ...formData, total_withdrawn: e.target.value })}
+                />
+              </div>
+
+              <div className="field-group">
+                <label>Notes</label>
+                <textarea
+                  rows="3"
+                  placeholder="Additional notes..."
+                  value={formData.notes}
+                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                  style={{ resize: "vertical" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  className="btn-primary"
+                  onClick={handleSubmit}
+                  style={{ flex: 1 }}
+                >
+                  <Save size={16} />
+                  Save Fund
+                </button>
+                <button
+                  className="btn-ghost"
+                  onClick={() => setShowForm(false)}
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+FundManagementModal.displayName = "FundManagementModal";
+
+/* ════════════════════════════════════════════════════════════════
+   MEMBERS MODAL
+════════════════════════════════════════════════════════════════ */
+
+const MembersModal = memo(({ open, onClose, members = [] }) => {
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(
+    () =>
+      members.filter(
+        m =>
+          (m.name || "").toLowerCase().includes(query.toLowerCase()) ||
+          (m.role || "").toLowerCase().includes(query.toLowerCase())
+      ),
+    [members, query]
+  );
+
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>👥 Members</h3>
+          <button className="close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="modal-search-bar">
+          <Search size={16} style={{ color: "var(--text-3)" }} />
+          <input
+            type="text"
+            placeholder="Search members..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            style={{
+              flex: 1,
+              background: "none",
+              border: "none",
+              color: "var(--text)",
+              fontSize: "13.5px",
+              outline: "none"
+            }}
+          />
+        </div>
+
+        <div className="modal-body scroll">
+          {filtered.length === 0 ? (
+            <p className="empty">No members found</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {filtered.map(m => (
+                <div key={m.id} className="row">
+                  <div
+                    className="avatar avatar-md"
+                    style={{
+                      background: "linear-gradient(135deg, var(--emerald-2), var(--blue-2))"
+                    }}
+                  >
+                    {m.name?.charAt(0)?.toUpperCase() || "?"}
+                  </div>
+                  <div className="member-info" style={{ flex: 1 }}>
+                    <strong style={{ fontSize: "13px", fontWeight: "650" }}>
+                      {m.name || "Unknown"}
+                    </strong>
+                    <span style={{ fontSize: "11px", color: "var(--text-2)" }}>
+                      {m.phone || m.email || "No contact"}
+                    </span>
+                  </div>
+                  <span
+                    className="status-badge"
+                    style={{
+                      background: m.role === "treasurer" ? "var(--violet-bg)" : "var(--slate-bg)",
+                      color: m.role === "treasurer" ? "var(--violet)" : "var(--text-2)",
+                      border:
+                        m.role === "treasurer"
+                          ? "1px solid var(--violet-border)"
+                          : "1px solid var(--slate-border)"
+                    }}
+                  >
+                    {m.role || "member"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+MembersModal.displayName = "MembersModal";
+
+/* ════════════════════════════════════════════════════════════════
+   CONTRIBUTIONS MODAL
+════════════════════════════════════════════════════════════════ */
+
+const ContributionsModal = memo(({ open, onClose, contributions = [], members = [] }) => {
+  const [filterStatus, setFilterStatus] = useState("all");
+
+  const filtered = useMemo(() => {
+    let result = contributions;
+    if (filterStatus !== "all") {
+      result = result.filter(c => c.status === filterStatus);
+    }
+    return result;
+  }, [contributions, filterStatus]);
+
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content large" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>💳 Contributions</h3>
+          <button className="close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="modal-filter-row">
+          <select
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "8px 12px",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+              background: "var(--bg-4)",
+              color: "var(--text)",
+              fontSize: "12.5px",
+              fontWeight: "500",
+              outline: "none",
+              cursor: "pointer"
+            }}
+          >
+            <option value="all">All Status</option>
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
           </select>
         </div>
 
-        <div className="modal-table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Date</th>
-                <th>Member</th>
-                <th>Type</th>
-                <th>Amount</th>
-                <th>M-Pesa Ref</th>
-                <th>Notes</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((tx, i) => (
-                <tr key={tx.id}>
-                  <td className="td-num">{i + 1}</td>
-                  <td>
-                    <div className="td-date">
-                      <span>{fmtDate(tx.created_at)}</span>
-                      <span className="td-time">{fmtTime(tx.created_at)}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="td-member">
-                      <Avatar name={tx.member_name} size="sm" />
-                      <span>{tx.member_name}</span>
-                    </div>
-                  </td>
-                  <td><TypePill type={tx.account_type} /></td>
-                  <td className="td-amount">{fmt(tx.amount)}</td>
-                  <td className="td-mono">{tx.mpesa_ref || "—"}</td>
-                  <td className="td-notes">{tx.notes || "—"}</td>
-                  <td><StatusBadge status={tx.status} /></td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={8} className="td-empty">No transactions match selected filters.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MODAL: SEND CONTRIBUTION (member-facing)
-// ═══════════════════════════════════════════════════════════════════════════════
-const SendContributionModal = ({ member, chama, onClose, onSuccess }) => {
-  const [form, setForm] = useState({ amount: "", account_type: "savings", mpesa_ref: "", notes: "" });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSubmit = async () => {
-    setError("");
-    if (!form.amount || parseFloat(form.amount) <= 0) return setError("Enter a valid amount.");
-    if (!form.mpesa_ref.trim()) return setError("M-Pesa reference code is required.");
-
-    setSubmitting(true);
-    try {
-      const { error: err } = await supabase.from("chama_contributions").insert([{
-        chama_id: chama.id,
-        member_id: member?.id,
-        member_name: member?.member_name || "Unknown",
-        amount: parseFloat(form.amount),
-        account_type: form.account_type,
-        mpesa_ref: form.mpesa_ref.trim().toUpperCase(),
-        notes: form.notes,
-        status: "pending",
-        created_at: new Date().toISOString(),
-      }]);
-      if (err) throw err;
-      onSuccess();
-      onClose();
-    } catch (e) {
-      setError(e.message || "Submission failed. Try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const types = Object.entries(ACCOUNT_TYPES);
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-md" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title-group">
-            <Send size={20} />
-            <div>
-              <h3>Record Contribution</h3>
-              <p>M-Pesa payment confirmation</p>
-            </div>
-          </div>
-          <button className="modal-close" onClick={onClose}><X size={18} /></button>
-        </div>
-
-        <div className="modal-body">
-          {/* Type selector cards */}
-          <div className="field-group">
-            <label>Contribution Type</label>
-            <div className="type-card-grid">
-              {types.map(([key, cfg]) => {
-                const Icon = cfg.icon;
-                return (
-                  <button
-                    key={key}
-                    className={`type-card ${form.account_type === key ? `type-card-active tc-${cfg.color}` : ""}`}
-                    onClick={() => setForm(f => ({ ...f, account_type: key }))}
-                    type="button"
-                  >
-                    <Icon size={18} />
-                    <span>{cfg.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="field-group">
-            <label>Amount You Sent (KES)</label>
-            <div className="amount-input-wrap">
-              <span className="amount-prefix">KES</span>
-              <input
-                type="number"
-                placeholder="e.g. 500"
-                value={form.amount}
-                onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <div className="field-group">
-            <label>M-Pesa Reference Code</label>
-            <input
-              type="text"
-              placeholder="e.g. QHG7X8KP21"
-              value={form.mpesa_ref}
-              onChange={e => setForm(f => ({ ...f, mpesa_ref: e.target.value }))}
-              className="mono-input"
-            />
-            <span className="field-hint">Found in the M-Pesa confirmation SMS you received.</span>
-          </div>
-
-          <div className="field-group">
-            <label>Notes (optional)</label>
-            <input
-              type="text"
-              placeholder="e.g. June mandatory contribution"
-              value={form.notes}
-              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-            />
-          </div>
-
-          {error && (
-            <div className="form-error">
-              <AlertCircle size={14} /> {error}
-            </div>
-          )}
-
-          <div className="send-modal-notice">
-            <ShieldCheck size={15} />
-            <p>Your payment will stay <strong>pending</strong> until the Treasurer verifies your M-Pesa reference code against the received amount.</p>
-          </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? <><Loader2 size={14} className="spin" /> Submitting…</> : <><Send size={14} /> Submit Payment</>}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MODAL: FUND LOCATIONS (Treasurer only)
-// ═══════════════════════════════════════════════════════════════════════════════
-const FundLocationsModal = ({ wallets, onClose, onSave, isTreasurer }) => {
-  const [entries, setEntries] = useState(
-    wallets.length > 0
-      ? wallets.map(w => ({ ...w, _editing: false }))
-      : [{ id: null, name: "", type: "bank", balance: "", institution: "" }]
-  );
-  const [saving, setSaving] = useState(false);
-
-  const addEntry = () => setEntries(e => [...e, { id: null, name: "", type: "bank", balance: "", institution: "" }]);
-  const removeEntry = (i) => setEntries(e => e.filter((_, idx) => idx !== i));
-  const updateEntry = (i, field, val) => setEntries(e => e.map((en, idx) => idx === i ? { ...en, [field]: val } : en));
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await onSave(entries);
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-md" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title-group">
-            <Building2 size={20} />
-            <div>
-              <h3>Fund Locations</h3>
-              <p>Where the chama money is held</p>
-            </div>
-          </div>
-          <button className="modal-close" onClick={onClose}><X size={18} /></button>
-        </div>
-
-        <div className="modal-body">
-          {entries.map((entry, i) => (
-            <div key={i} className="wallet-entry-card">
-              <div className="wallet-entry-head">
-                <span className="wallet-entry-num">Account {i + 1}</span>
-                {isTreasurer && entries.length > 1 && (
-                  <button className="remove-entry-btn" onClick={() => removeEntry(i)}><X size={12} /></button>
-                )}
-              </div>
-              {isTreasurer ? (
-                <div className="wallet-entry-fields">
-                  <div className="field-row-2">
-                    <div className="field-group">
-                      <label>Institution Name</label>
-                      <input value={entry.institution || entry.name || ""} onChange={e => updateEntry(i, "institution", e.target.value)} placeholder="e.g. KCB, Umoja Sacco" />
-                    </div>
-                    <div className="field-group">
-                      <label>Type</label>
-                      <select value={entry.type} onChange={e => updateEntry(i, "type", e.target.value)}>
-                        <option value="bank">Bank</option>
-                        <option value="sacco">Sacco</option>
-                        <option value="mobile">Mobile Money</option>
-                        <option value="cash">Cash in Hand</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="field-group">
-                    <label>Current Balance (KES)</label>
-                    <div className="amount-input-wrap">
-                      <span className="amount-prefix">KES</span>
-                      <input type="number" value={entry.balance} onChange={e => updateEntry(i, "balance", e.target.value)} placeholder="0.00" />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="wallet-readonly">
-                  <span className="wallet-ro-name">{entry.institution || entry.name}</span>
-                  <span className="wallet-ro-type">{entry.type}</span>
-                  <span className="wallet-ro-balance">{fmt(entry.balance)}</span>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {isTreasurer && (
-            <button className="add-wallet-btn" onClick={addEntry}>
-              <Plus size={14} /> Add Another Account
-            </button>
-          )}
-        </div>
-
-        {isTreasurer && (
-          <div className="modal-footer">
-            <button className="btn-ghost" onClick={onClose}>Cancel</button>
-            <button className="btn-primary" onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 size={14} className="spin" /> : <Check size={14} />} Save Fund Locations
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MODAL: BANK STATEMENT UPLOAD
-// ═══════════════════════════════════════════════════════════════════════════════
-const BankStatementModal = ({ chama, member, onClose }) => {
-  const [file, setFile] = useState(null);
-  const [month, setMonth] = useState("");
-  const [institution, setInstitution] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState("");
-  const fileRef = useRef();
-
-  const handleUpload = async () => {
-    if (!file || !month || !institution) return setError("Fill in all fields and select a file.");
-    setUploading(true);
-    setError("");
-    try {
-      const ext = file.name.split(".").pop();
-      const path = `statements/${chama.id}/${institution}-${month}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("chama-documents").upload(path, file, { upsert: true });
-      if (upErr) throw upErr;
-
-      await supabase.from("chama_bank_statements").insert([{
-        chama_id: chama.id,
-        uploaded_by: member?.member_name,
-        institution,
-        month,
-        file_path: path,
-        created_at: new Date().toISOString(),
-      }]);
-      setDone(true);
-    } catch (e) {
-      setError(e.message || "Upload failed.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-md" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title-group">
-            <Upload size={20} />
-            <div>
-              <h3>Upload Bank Statement</h3>
-              <p>Monthly financial records</p>
-            </div>
-          </div>
-          <button className="modal-close" onClick={onClose}><X size={18} /></button>
-        </div>
-
-        {done ? (
-          <div className="modal-body upload-success">
-            <CheckCircle2 size={48} className="success-big-icon" />
-            <h4>Statement uploaded successfully</h4>
-            <p>The document has been stored securely.</p>
-            <button className="btn-primary mt-16" onClick={onClose}>Done</button>
-          </div>
-        ) : (
-          <>
-            <div className="modal-body">
-              <div className="field-group">
-                <label>Bank / Institution</label>
-                <input value={institution} onChange={e => setInstitution(e.target.value)} placeholder="e.g. KCB, Equity, Cooperative" />
-              </div>
-              <div className="field-group">
-                <label>Statement Month</label>
-                <input type="month" value={month} onChange={e => setMonth(e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label>Statement File (PDF or image)</label>
-                <div className="file-drop-zone" onClick={() => fileRef.current?.click()}>
-                  {file ? (
-                    <div className="file-selected">
-                      <FileText size={20} />
-                      <span>{file.name}</span>
-                      <span className="file-size">{(file.size / 1024).toFixed(0)} KB</span>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload size={24} />
-                      <p>Click to select or drag & drop</p>
-                      <span>PDF, JPG, PNG accepted</span>
-                    </>
-                  )}
-                </div>
-                <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={e => setFile(e.target.files[0])} />
-              </div>
-              {error && <div className="form-error"><AlertCircle size={14} /> {error}</div>}
-            </div>
-            <div className="modal-footer">
-              <button className="btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="btn-primary" onClick={handleUpload} disabled={uploading}>
-                {uploading ? <><Loader2 size={14} className="spin" /> Uploading…</> : <><Upload size={14} /> Upload Statement</>}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SIDEBAR PANEL: Per-type ledger view
-// ═══════════════════════════════════════════════════════════════════════════════
-const SidebarLedger = ({ type, transactions, members, onClose }) => {
-  const cfg = ACCOUNT_TYPES[type];
-  const Icon = cfg?.icon || Wallet;
-  const [search, setSearch] = useState("");
-
-  const typeTxs = transactions.filter(tx => tx.account_type === type);
-
-  // Build per-member summary
-  const memberSummary = useMemo(() => {
-    const map = {};
-    members.forEach(m => {
-      map[m.id] = { member: m, approved: 0, pending: 0, rejected: 0, txs: [] };
-    });
-    typeTxs.forEach(tx => {
-      if (!map[tx.member_id]) {
-        map[tx.member_id] = { member: { member_name: tx.member_name, id: tx.member_id }, approved: 0, pending: 0, rejected: 0, txs: [] };
-      }
-      map[tx.member_id][tx.status] += Number(tx.amount || 0);
-      map[tx.member_id].txs.push(tx);
-    });
-    return Object.values(map);
-  }, [typeTxs, members]);
-
-  const [expanded, setExpanded] = useState(null);
-
-  const filtered = memberSummary.filter(r =>
-    r.member?.member_name?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const grandTotal = memberSummary.reduce((s, r) => s + r.approved, 0);
-
-  return (
-    <div className="sidebar-ledger-overlay" onClick={onClose}>
-      <div className="sidebar-ledger-panel" onClick={e => e.stopPropagation()}>
-        <div className={`sidebar-ledger-header slh-${cfg?.color}`}>
-          <div className="sidebar-ledger-title">
-            <Icon size={22} />
-            <div>
-              <h2>{cfg?.label} Ledger</h2>
-              <p>Per-member breakdown · Total approved: {fmt(grandTotal)}</p>
-            </div>
-          </div>
-          <button className="modal-close" onClick={onClose}><X size={18} /></button>
-        </div>
-
-        <div className="sidebar-ledger-search">
-          <Search size={14} />
-          <input placeholder="Search members…" value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-
-        <div className="sidebar-ledger-body">
-          {filtered.map((row, i) => (
-            <div key={row.member?.id || i} className="member-ledger-block">
-              <div className="mlb-summary" onClick={() => setExpanded(expanded === i ? null : i)}>
-                <div className="mlb-left">
-                  <Avatar name={row.member?.member_name} />
-                  <div>
-                    <h4>{row.member?.member_name}</h4>
-                    <div className="mlb-mini-stats">
-                      <span className="mms-approved">{fmt(row.approved)} approved</span>
-                      {row.pending > 0 && <span className="mms-pending">· {fmt(row.pending)} pending</span>}
-                    </div>
-                  </div>
-                </div>
-                <div className="mlb-right">
-                  <span className="mlb-count">{row.txs.length} tx{row.txs.length !== 1 ? "s" : ""}</span>
-                  <ChevronRight size={14} className={`mlb-chevron ${expanded === i ? "rotated" : ""}`} />
-                </div>
-              </div>
-
-              {expanded === i && (
-                <div className="mlb-transactions">
-                  {row.txs.length === 0 ? (
-                    <p className="mlb-empty">No {cfg?.label.toLowerCase()} transactions yet.</p>
-                  ) : (
-                    <table className="data-table compact-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Amount</th>
-                          <th>M-Pesa Ref</th>
-                          <th>Notes</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {row.txs.map(tx => (
-                          <tr key={tx.id}>
-                            <td>{fmtDate(tx.created_at)}</td>
-                            <td className="td-amount">{fmt(tx.amount)}</td>
-                            <td className="td-mono">{tx.mpesa_ref || "—"}</td>
-                            <td className="td-notes">{tx.notes || "—"}</td>
-                            <td><StatusBadge status={tx.status} /></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {filtered.length === 0 && (
-            <EmptyState icon={Icon} title="No results" sub="No members match your search." />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN DASHBOARD
-// ═══════════════════════════════════════════════════════════════════════════════
-export default function ChamaDashboard() {
-  const { chama, member } = useChama();
-  const role = String(member?.role || "member").toLowerCase().trim();
-  const isTreasurerOrAdmin = ["treasurer", "admin", "super_admin"].includes(role);
-
-  // ── DATA ──────────────────────────────────────────────────────────────────
-  const [transactions, setTransactions] = useState([]);
-  const [wallets, setWallets] = useState([]);
-  const [membersList, setMembersList] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [actioningId, setActioningId] = useState(null);
-
-  // ── UI STATE ──────────────────────────────────────────────────────────────
-  const [modal, setModal] = useState(null); // "members" | "contributions" | "send" | "funds" | "statement"
-  const [sidebarType, setSidebarType] = useState(null); // "savings" | "loans" | "fines" | "welfare"
-  const [txTypeFilter, setTxTypeFilter] = useState("ALL");
-
-  // ── LOAD DATA ─────────────────────────────────────────────────────────────
-  const loadData = useCallback(async (silent = false) => {
-    if (!chama?.id) return;
-    if (!silent) setLoading(true);
-    else setRefreshing(true);
-    try {
-      const [txRaw, walletRaw, membersRaw] = await Promise.all([
-        supabase.from("chama_contributions").select("*").eq("chama_id", chama.id).order("created_at", { ascending: false }),
-        supabase.from("chama_wallets").select("*").eq("chama_id", chama.id),
-        supabase.from("chama_members").select("*").eq("chama_id", chama.id).order("member_name", { ascending: true }),
-      ]);
-      setTransactions(txRaw.data || []);
-      setWallets(walletRaw.data || []);
-      setMembersList(membersRaw.data || []);
-    } catch (err) {
-      console.error("Data load error:", err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [chama?.id]);
-
-  useEffect(() => { loadData(); }, [loadData]);
-
-  // ── COMPUTED ──────────────────────────────────────────────────────────────
-  const { pending, approved } = useMemo(() => {
-    return transactions.reduce((acc, tx) => {
-      if (tx.status === "pending") acc.pending.push(tx);
-      else if (tx.status === "approved") acc.approved.push(tx);
-      return acc;
-    }, { pending: [], approved: [] });
-  }, [transactions]);
-
-  const summary = useMemo(() => {
-    const totals = { savings: 0, loans: 0, fines: 0, welfare: 0, pending: 0 };
-    approved.forEach(tx => { totals[tx.account_type] = (totals[tx.account_type] || 0) + Number(tx.amount || 0); });
-    pending.forEach(tx => { totals.pending += Number(tx.amount || 0); });
-    return totals;
-  }, [approved, pending]);
-
-  const filteredPending = useMemo(() => {
-    if (txTypeFilter === "ALL") return pending;
-    return pending.filter(tx => tx.account_type === txTypeFilter.toLowerCase());
-  }, [pending, txTypeFilter]);
-
-  // ── APPROVE / REJECT ──────────────────────────────────────────────────────
-  const handleProcess = async (id, status) => {
-    setActioningId(id);
-    try {
-      const { error } = await supabase.from("chama_contributions")
-        .update({ status, approved_at: status === "approved" ? new Date().toISOString() : null, processed_by: member?.member_name })
-        .eq("id", id);
-      if (error) throw error;
-      await loadData(true);
-    } catch (err) {
-      console.error("Process error:", err);
-    } finally {
-      setActioningId(null);
-    }
-  };
-
-  // ── SAVE WALLETS ──────────────────────────────────────────────────────────
-  const handleSaveWallets = async (entries) => {
-    for (const entry of entries) {
-      const payload = {
-        chama_id: chama.id,
-        name: entry.institution || entry.name,
-        type: entry.type,
-        balance: parseFloat(entry.balance) || 0,
-      };
-      if (entry.id) {
-        await supabase.from("chama_wallets").update(payload).eq("id", entry.id);
-      } else {
-        await supabase.from("chama_wallets").insert([payload]);
-      }
-    }
-    await loadData(true);
-  };
-
-  if (loading) {
-    return (
-      <div className="cdash-loading-screen">
-        <div className="loading-pulse"><Landmark size={32} /></div>
-        <p>Loading chama data…</p>
-      </div>
-    );
-  }
-
-  const totalFunds = wallets.reduce((s, w) => s + Number(w.balance || 0), 0);
-
-  return (
-    <div className="cdash">
-
-      {/* ── TOP BAR ───────────────────────────────────────────────────────── */}
-      <header className="cdash-topbar">
-        <div className="topbar-left">
-          <div className="chama-badge">
-            <Landmark size={16} />
-            <span>{chama?.name}</span>
-            <span className="chama-code">{chama?.chama_no}</span>
-          </div>
-        </div>
-        <div className="topbar-right">
-          <button className="topbar-btn" onClick={() => loadData(true)} title="Refresh">
-            <RefreshCw size={15} className={refreshing ? "spin" : ""} />
-          </button>
-          <button className="topbar-btn highlight" onClick={() => setModal("send")}>
-            <Send size={15} /> Record Payment
-          </button>
-        </div>
-      </header>
-
-      {/* ── KPI CARDS ─────────────────────────────────────────────────────── */}
-      <section className="kpi-grid">
-        {Object.entries(ACCOUNT_TYPES).map(([key, cfg]) => {
-          const Icon = cfg.icon;
-          return (
-            <div key={key} className={`kpi-card kpi-${cfg.color}`} onClick={() => setSidebarType(key)}>
-              <div className="kpi-top">
-                <span>{cfg.label}</span>
-                <div className="kpi-icon"><Icon size={16} /></div>
-              </div>
-              <div className="kpi-value">{fmt(summary[key])}</div>
-              <div className="kpi-action">View breakdown <ChevronRight size={12} /></div>
-            </div>
-          );
-        })}
-        <div className="kpi-card kpi-slate" onClick={() => setModal("funds")}>
-          <div className="kpi-top">
-            <span>Total Funds</span>
-            <div className="kpi-icon"><Building2 size={16} /></div>
-          </div>
-          <div className="kpi-value">{fmt(totalFunds)}</div>
-          <div className="kpi-action">
-            {wallets.length > 0 ? `Across ${wallets.length} account${wallets.length > 1 ? "s" : ""}` : "Set fund locations"}
-            <ChevronRight size={12} />
-          </div>
-        </div>
-        <div className="kpi-card kpi-rose-pending">
-          <div className="kpi-top">
-            <span>Pending Review</span>
-            <div className="kpi-icon"><Clock size={16} /></div>
-          </div>
-          <div className="kpi-value">{fmt(summary.pending)}</div>
-          <div className="kpi-action">{pending.length} transaction{pending.length !== 1 ? "s" : ""} waiting</div>
-        </div>
-      </section>
-
-      {/* ── QUICK ACTION BUTTONS ──────────────────────────────────────────── */}
-      <section className="quick-actions">
-        <button className="qa-btn" onClick={() => setModal("members")}>
-          <Users size={18} />
-          <div>
-            <span>Members</span>
-            <small>{membersList.length} registered</small>
-          </div>
-          <ChevronRight size={14} className="qa-arrow" />
-        </button>
-        <button className="qa-btn" onClick={() => setModal("contributions")}>
-          <Receipt size={18} />
-          <div>
-            <span>All Contributions</span>
-            <small>{transactions.length} records</small>
-          </div>
-          <ChevronRight size={14} className="qa-arrow" />
-        </button>
-        <button className="qa-btn" onClick={() => setModal("funds")}>
-          <Building2 size={18} />
-          <div>
-            <span>Fund Locations</span>
-            <small>{wallets.length > 0 ? `${wallets.length} account${wallets.length > 1 ? "s" : ""}` : "Not configured"}</small>
-          </div>
-          <ChevronRight size={14} className="qa-arrow" />
-        </button>
-        {isTreasurerOrAdmin && (
-          <button className="qa-btn" onClick={() => setModal("statement")}>
-            <Upload size={18} />
-            <div>
-              <span>Bank Statement</span>
-              <small>Upload monthly statement</small>
-            </div>
-            <ChevronRight size={14} className="qa-arrow" />
-          </button>
-        )}
-      </section>
-
-      {/* ── FUND LOCATIONS STRIP ──────────────────────────────────────────── */}
-      {wallets.length > 0 && (
-        <section className="fund-strip">
-          <div className="fund-strip-label">
-            <Building2 size={14} /> Fund Locations
-          </div>
-          <div className="fund-strip-cards">
-            {wallets.map((w) => (
-              <div key={w.id} className="fund-strip-card">
-                <span className="fsc-type">{w.type?.toUpperCase()}</span>
-                <span className="fsc-name">{w.name}</span>
-                <span className="fsc-balance">{fmt(w.balance)}</span>
-              </div>
-            ))}
-          </div>
-          {isTreasurerOrAdmin && (
-            <button className="fund-strip-edit" onClick={() => setModal("funds")}>
-              <Settings size={13} /> Edit
-            </button>
-          )}
-        </section>
-      )}
-
-      {/* ── MAIN CONTENT: pending approvals ──────────────────────────────── */}
-      <div className="cdash-main">
-
-        {/* PENDING APPROVAL QUEUE */}
-        <section className="panel panel-full">
-          <div className="panel-header">
-            <div>
-              <h2>Pending Approvals</h2>
-              <p>{filteredPending.length} transaction{filteredPending.length !== 1 ? "s" : ""} awaiting verification</p>
-            </div>
-            <div className="panel-header-actions">
-              <div className="filter-select-wrap">
-                <Filter size={12} />
-                <select value={txTypeFilter} onChange={e => setTxTypeFilter(e.target.value)}>
-                  <option value="ALL">All Types</option>
-                  {Object.entries(ACCOUNT_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {filteredPending.length === 0 ? (
-            <EmptyState icon={BadgeCheck} title="All clear" sub="No pending transactions to review." />
+        <div className="modal-body scroll">
+          {filtered.length === 0 ? (
+            <p className="empty">No contributions found</p>
           ) : (
-            <div className="approval-list">
-              {filteredPending.map(tx => (
-                <div key={tx.id} className={`approval-row ${actioningId === tx.id ? "row-processing" : ""}`}>
-                  <Avatar name={tx.member_name} />
-                  <div className="ar-info">
-                    <strong>{tx.member_name}</strong>
-                    <div className="ar-meta">
-                      <TypePill type={tx.account_type} />
-                      {tx.mpesa_ref && <span className="ar-ref"><CreditCard size={10} /> {tx.mpesa_ref}</span>}
-                      {tx.notes && <span className="ar-notes">{tx.notes}</span>}
-                    </div>
-                  </div>
-                  <div className="ar-right">
-                    <span className="ar-amount">{fmt(tx.amount)}</span>
-                    <span className="ar-date">{fmtDate(tx.created_at)}</span>
-                  </div>
-                  {isTreasurerOrAdmin ? (
-                    <div className="ar-actions">
-                      <button
-                        className="icon-btn btn-approve"
-                        disabled={actioningId !== null}
-                        onClick={() => handleProcess(tx.id, "approved")}
-                        title="Approve"
-                      >
-                        {actioningId === tx.id ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
-                      </button>
-                      <button
-                        className="icon-btn btn-reject"
-                        disabled={actioningId !== null}
-                        onClick={() => handleProcess(tx.id, "rejected")}
-                        title="Reject"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="pending-label"><span className="pulse-dot" /> Pending</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* RECENT APPROVED */}
-        <section className="panel panel-full">
-          <div className="panel-header">
-            <div>
-              <h2>Recent Approved</h2>
-              <p>Last 10 verified transactions</p>
-            </div>
-            <button className="panel-link" onClick={() => setModal("contributions")}>
-              View all <ArrowUpRight size={13} />
-            </button>
-          </div>
-
-          <div className="modal-table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
@@ -1007,60 +1427,417 @@ export default function ChamaDashboard() {
                   <th>Member</th>
                   <th>Type</th>
                   <th>Amount</th>
-                  <th>Ref</th>
+                  <th>Reference</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {approved.slice(0, 10).map(tx => (
-                  <tr key={tx.id}>
-                    <td>{fmtDate(tx.created_at)}</td>
-                    <td>
-                      <div className="td-member">
-                        <Avatar name={tx.member_name} size="sm" />
-                        {tx.member_name}
-                      </div>
-                    </td>
-                    <td><TypePill type={tx.account_type} /></td>
-                    <td className="td-amount">{fmt(tx.amount)}</td>
-                    <td className="td-mono">{tx.mpesa_ref || "—"}</td>
-                  </tr>
-                ))}
-                {approved.length === 0 && (
-                  <tr><td colSpan={5} className="td-empty">No approved transactions yet.</td></tr>
-                )}
+                {filtered.map(c => {
+                  const member = members.find(m => m.id === c.member_id);
+                  return (
+                    <tr key={c.id}>
+                      <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                      <td>{member?.name || "Unknown"}</td>
+                      <td>{c.account_type || "General"}</td>
+                      <td style={{ fontWeight: "700", color: "var(--emerald)" }}>
+                        {FinancialEngine.formatKES(c.amount)}
+                      </td>
+                      <td style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>
+                        {c.mpesa_ref || "-"}
+                      </td>
+                      <td>
+                        <span
+                          className={`status-badge ${c.status}`}
+                          style={{
+                            background:
+                              c.status === "approved"
+                                ? "var(--emerald-bg)"
+                                : c.status === "pending"
+                                ? "var(--amber-bg)"
+                                : "var(--rose-bg)",
+                            color:
+                              c.status === "approved"
+                                ? "var(--emerald)"
+                                : c.status === "pending"
+                                ? "var(--amber)"
+                                : "var(--rose)",
+                            border:
+                              c.status === "approved"
+                                ? "1px solid var(--emerald-border)"
+                                : c.status === "pending"
+                                ? "1px solid var(--amber-border)"
+                                : "1px solid var(--rose-border)"
+                          }}
+                        >
+                          {c.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          </div>
-        </section>
-
+          )}
+        </div>
       </div>
+    </div>
+  );
+});
 
-      {/* ── MODALS ────────────────────────────────────────────────────────── */}
-      {modal === "members" && (
-        <MembersModal members={membersList} onClose={() => setModal(null)} />
-      )}
-      {modal === "contributions" && (
-        <ContributionsModal transactions={transactions} members={membersList} onClose={() => setModal(null)} />
-      )}
-      {modal === "send" && (
-        <SendContributionModal member={member} chama={chama} onClose={() => setModal(null)} onSuccess={() => loadData(true)} />
-      )}
-      {modal === "funds" && (
-        <FundLocationsModal wallets={wallets} onClose={() => setModal(null)} onSave={handleSaveWallets} isTreasurer={isTreasurerOrAdmin} />
-      )}
-      {modal === "statement" && (
-        <BankStatementModal chama={chama} member={member} onClose={() => setModal(null)} />
-      )}
+ContributionsModal.displayName = "ContributionsModal";
 
-      {/* ── SIDEBAR LEDGERS ───────────────────────────────────────────────── */}
-      {sidebarType && (
-        <SidebarLedger
-          type={sidebarType}
-          transactions={transactions}
-          members={membersList}
-          onClose={() => setSidebarType(null)}
-        />
-      )}
+/* ════════════════════════════════════════════════════════════════
+   MAIN DASHBOARD
+════════════════════════════════════════════════════════════════ */
+
+export default function ChamaDashboard() {
+  const context = useChama();
+
+  if (!context) {
+    return <div className="error-container">⚠️ Chama context not available</div>;
+  }
+
+  const { chama, member } = context;
+
+  if (!chama || !member) {
+    return <div className="error-container">⏳ Loading context...</div>;
+  }
+
+  const [ui, dispatch] = useReducer(uiReducer, uiInitialState);
+  const [state, setState] = useState({
+    chama: {},
+    members: [],
+    contributions: [],
+    loans: [],
+    fines: [],
+    welfare: [],
+    funds: [],
+    fundTransactions: [],
+    minutes: [],
+    statements: [],
+    officers: [],
+    sendMoney: [],
+    merryGoRound: []
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await fetchChamaCoreData(chama.id);
+      setState(data);
+    } catch (e) {
+      setError(e.message);
+      console.error("Error loading data:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [chama.id]);
+
+  useEffect(() => {
+    loadData();
+
+    const unsubscribe = subscribeToChamaRealtime(chama.id, () => {
+      loadData();
+    });
+
+    return () => unsubscribe?.();
+  }, [chama.id, loadData]);
+
+  const breakdown = useMemo(
+    () => FinancialEngine.computeBreakdown(state.contributions),
+    [state.contributions]
+  );
+
+  const canSendMoney = PermissionGuard.can(member.role, "SEND_MONEY");
+  const canManageFunds = PermissionGuard.can(member.role, "MANAGE_FUNDS");
+
+  if (loading) {
+    return (
+      <div className="dashboard-loading">
+        <div className="spinner"></div>
+        <p>Loading dashboard...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashboard-shell">
+      {/* SIDEBAR */}
+      <aside className={`sidebar ${ui.sidebarOpen ? "open" : "closed"}`}>
+        <button
+          className="toggle-btn"
+          onClick={() => dispatch({ type: "TOGGLE_SIDEBAR" })}
+          aria-label="Toggle sidebar"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "40px",
+            height: "40px",
+            margin: "16px",
+            border: "1px solid var(--border)",
+            background: "var(--bg-3)",
+            borderRadius: "8px",
+            color: "var(--text-2)",
+            cursor: "pointer"
+          }}
+        >
+          {ui.sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+
+        <nav className="sidebar-nav">
+          {[
+            { id: "overview", label: "📊 Overview", icon: Wallet },
+            { id: "members", label: "👥 Members", icon: Users },
+            { id: "funds", label: "💰 Funds", icon: Banknote },
+            { id: "contributions", label: "💳 Contributions", icon: DollarSign },
+            { id: "send", label: "💸 Send Money", icon: Send },
+            { id: "merry", label: "🔄 Merry-Go-Round", icon: Repeat2 }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              className={`nav-item ${ui.activeTab === tab.id ? "active" : ""}`}
+              onClick={() => dispatch({ type: "SET_TAB", payload: tab.id })}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "12px 16px",
+                borderRadius: "12px",
+                border: "1px solid transparent",
+                background: "transparent",
+                color: ui.activeTab === tab.id ? "var(--emerald)" : "var(--text-2)",
+                fontSize: "13px",
+                fontWeight: "600",
+                cursor: "pointer",
+                transition: "all 200ms",
+                width: "100%"
+              }}
+            >
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      {/* MAIN AREA */}
+      <main className="main-area">
+        {error && (
+          <div
+            style={{
+              padding: "16px 28px",
+              background: "var(--rose-bg)",
+              borderBottom: "1px solid var(--rose-border)",
+              color: "var(--rose)",
+              fontSize: "13px",
+              fontWeight: "600"
+            }}
+          >
+            ⚠️ {error}
+          </div>
+        )}
+
+        {ui.activeTab === "overview" && (
+          <div>
+            <div style={{ padding: "28px 28px 0" }}>
+              <h2 style={{ fontSize: "24px", fontWeight: "750", marginBottom: "4px" }}>
+                {state.chama.name || "Chama"}
+              </h2>
+              <p style={{ fontSize: "13px", color: "var(--text-2)" }}>
+                {state.members.length} members · {state.contributions.length} contributions
+              </p>
+            </div>
+
+            <FundsOverview funds={state.funds} />
+            <BreakdownCards breakdown={breakdown} />
+
+            <div style={{ padding: "0 28px 28px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
+              <button
+                className="btn-primary"
+                onClick={() => dispatch({ type: "OPEN_MODAL", payload: "members" })}
+                style={{ justifyContent: "center", gap: "8px" }}
+              >
+                <Users size={16} />
+                Members
+              </button>
+              <button
+                className="btn-primary"
+                onClick={() => dispatch({ type: "OPEN_MODAL", payload: "contributions" })}
+                style={{ justifyContent: "center", gap: "8px" }}
+              >
+                <DollarSign size={16} />
+                Contributions
+              </button>
+              {canSendMoney && (
+                <button
+                  className="btn-primary"
+                  onClick={() => dispatch({ type: "OPEN_MODAL", payload: "sendMoney" })}
+                  style={{ justifyContent: "center", gap: "8px", background: "linear-gradient(135deg, var(--blue), var(--blue-2))" }}
+                >
+                  <Send size={16} />
+                  Send Money
+                </button>
+              )}
+              {canManageFunds && (
+                <button
+                  className="btn-primary"
+                  onClick={() => dispatch({ type: "OPEN_MODAL", payload: "funds" })}
+                  style={{ justifyContent: "center", gap: "8px" }}
+                >
+                  <Plus size={16} />
+                  Manage Funds
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {ui.activeTab === "members" && (
+          <div style={{ padding: "28px" }}>
+            <button
+              className="btn-primary"
+              onClick={() => dispatch({ type: "OPEN_MODAL", payload: "members" })}
+              style={{ marginBottom: "16px", width: "100%" }}
+            >
+              <Users size={16} />
+              View All Members ({state.members.length})
+            </button>
+            <div className="grid-cards">
+              {state.members.slice(0, 6).map(m => (
+                <div key={m.id} className="card" style={{ padding: "16px" }}>
+                  <div
+                    className="avatar avatar-md"
+                    style={{
+                      margin: "0 auto 12px",
+                      background: "linear-gradient(135deg, var(--emerald-2), var(--blue-2))"
+                    }}
+                  >
+                    {m.name?.charAt(0)?.toUpperCase()}
+                  </div>
+                  <h4 style={{ marginBottom: "4px", textAlign: "center", fontSize: "13px" }}>
+                    {m.name}
+                  </h4>
+                  <p style={{ textAlign: "center", fontSize: "11px", color: "var(--text-2)" }}>
+                    {m.role || "Member"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {ui.activeTab === "funds" && (
+          <div style={{ padding: "28px" }}>
+            <button
+              className="btn-primary"
+              onClick={() => dispatch({ type: "OPEN_MODAL", payload: "funds" })}
+              style={{ marginBottom: "16px", width: "100%" }}
+            >
+              <Plus size={16} />
+              Manage Fund Locations
+            </button>
+            <FundsOverview funds={state.funds} />
+          </div>
+        )}
+
+        {ui.activeTab === "contributions" && (
+          <div style={{ padding: "28px" }}>
+            <button
+              className="btn-primary"
+              onClick={() => dispatch({ type: "OPEN_MODAL", payload: "contributions" })}
+              style={{ marginBottom: "16px", width: "100%" }}
+            >
+              <DollarSign size={16} />
+              View All Contributions ({state.contributions.length})
+            </button>
+          </div>
+        )}
+
+        {ui.activeTab === "send" && (
+          <div style={{ padding: "28px" }}>
+            <button
+              className="btn-primary"
+              onClick={() => dispatch({ type: "OPEN_MODAL", payload: "sendMoney" })}
+              style={{ marginBottom: "16px", width: "100%", background: "linear-gradient(135deg, var(--blue), var(--blue-2))" }}
+            >
+              <Send size={16} />
+              Record Money Send
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => dispatch({ type: "OPEN_MODAL", payload: "sendHistory" })}
+              style={{ marginBottom: "16px", width: "100%" }}
+            >
+              <Eye size={16} />
+              View Send History ({state.sendMoney.length})
+            </button>
+          </div>
+        )}
+
+        {ui.activeTab === "merry" && (
+          <div style={{ padding: "28px" }}>
+            <button
+              className="btn-primary"
+              onClick={() => dispatch({ type: "OPEN_MODAL", payload: "merryGoRound" })}
+              style={{ marginBottom: "16px", width: "100%", background: "linear-gradient(135deg, var(--violet), var(--violet-2))" }}
+            >
+              <Repeat2 size={16} />
+              Merry-Go-Round Rotation
+            </button>
+          </div>
+        )}
+      </main>
+
+      {/* MODALS */}
+      <MembersModal
+        open={ui.modals.members}
+        onClose={() => dispatch({ type: "CLOSE_MODAL", payload: "members" })}
+        members={state.members}
+      />
+
+      <ContributionsModal
+        open={ui.modals.contributions}
+        onClose={() => dispatch({ type: "CLOSE_MODAL", payload: "contributions" })}
+        contributions={state.contributions}
+        members={state.members}
+      />
+
+      <FundManagementModal
+        open={ui.modals.funds}
+        onClose={() => dispatch({ type: "CLOSE_MODAL", payload: "funds" })}
+        funds={state.funds}
+        onAddFund={loadData}
+        chamaId={chama.id}
+      />
+
+      <SendMoneyModal
+        open={ui.modals.sendMoney}
+        onClose={() => dispatch({ type: "CLOSE_MODAL", payload: "sendMoney" })}
+        chamaId={chama.id}
+        members={state.members}
+        onSend={loadData}
+      />
+
+      <SendMoneyHistoryModal
+        open={ui.modals.sendHistory}
+        onClose={() => dispatch({ type: "CLOSE_MODAL", payload: "sendHistory" })}
+        sendRecords={state.sendMoney}
+        members={state.members}
+      />
+
+      <MerryGoRoundModal
+        open={ui.modals.merryGoRound}
+        onClose={() => dispatch({ type: "CLOSE_MODAL", payload: "merryGoRound" })}
+        merryGoRound={state.merryGoRound}
+        members={state.members}
+        chamaId={chama.id}
+        onAdd={loadData}
+      />
     </div>
   );
 }
