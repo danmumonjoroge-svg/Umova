@@ -1,0 +1,186 @@
+
+/* ================= BASE CARD ================= */
+.send-container {
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 18px;
+
+  border: 1px solid #e2e8f0;
+
+  max-width: 460px;
+  width: 100%;
+
+  box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+}
+
+/* TITLE */
+.send-container h2 {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 18px;
+  color: #0f172a;
+}
+
+/* ================= INPUT FIELDS ================= */
+.field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+
+  padding: 12px;
+  border-radius: 14px;
+
+  margin-bottom: 14px;
+
+  transition: 0.2s ease;
+}
+
+.field:focus-within {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22,163,74,0.12);
+}
+
+.field input,
+.field select,
+textarea {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+/* ================= TYPE SECTION (IMPORTANT UPGRADE) ================= */
+.type-wrapper {
+  margin-bottom: 16px;
+}
+
+/* label stronger visibility */
+.type-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 10px;
+}
+
+/* grid layout */
+.type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/* TYPE BUTTON */
+.type-btn {
+  padding: 12px 10px;
+
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+
+  background: #f8fafc;
+
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: capitalize;
+
+  cursor: pointer;
+
+  transition: all 0.2s ease;
+
+  color: #334155;
+}
+
+/* hover effect */
+.type-btn:hover {
+  border-color: #16a34a;
+  transform: translateY(-2px);
+  background: #f0fdf4;
+}
+
+/* active state (VERY IMPORTANT VISUAL PRIORITY) */
+.type-btn.active {
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  color: white;
+
+  border-color: #16a34a;
+
+  box-shadow: 0 8px 18px rgba(22,163,74,0.25);
+}
+
+/* ================= TEXTAREA ================= */
+textarea {
+  width: 100%;
+  padding: 14px;
+
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+
+  background: #f8fafc;
+
+  height: 95px;
+  margin-bottom: 16px;
+
+  resize: none;
+}
+
+textarea:focus {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22,163,74,0.12);
+}
+
+/* ================= SUBMIT BUTTON ================= */
+.send-btn {
+  width: 100%;
+  padding: 14px;
+
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  color: white;
+
+  border: none;
+  border-radius: 14px;
+
+  font-size: 15px;
+  font-weight: 700;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  cursor: pointer;
+
+  transition: 0.2s ease;
+}
+
+.send-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(22,163,74,0.25);
+}
+
+.send-btn:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 480px) {
+  .send-container {
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .type-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .send-container h2 {
+    font-size: 18px;
+  }
+}

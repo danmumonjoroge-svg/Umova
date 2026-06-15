@@ -1,0 +1,90 @@
+
+.contributions-container {
+  padding: 16px;
+  background: #f8fafc;
+}
+
+.contributions-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.contributions-title {
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.contributions-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.contributions-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.contributions-search input {
+  border: none;
+  outline: none;
+  font-size: 13px;
+}
+
+.refresh-btn {
+  background: #0f172a;
+  color: white;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.table-wrapper {
+  background: white;
+  border-radius: 12px;
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+}
+
+.contributions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.contributions-table th,
+.contributions-table td {
+  padding: 10px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.contributions-table th {
+  background: #f1f5f9;
+  font-weight: 600;
+}
+
+.name-cell {
+  font-weight: 600;
+}
+
+.green { color: #16a34a; }
+.red { color: #dc2626; }
+.blue { color: #2563eb; }
+.purple { color: #7c3aed; }
+.orange { color: #ea580c; }
+
+.total {
+  font-weight: 800;
+  color: #059669;
+}

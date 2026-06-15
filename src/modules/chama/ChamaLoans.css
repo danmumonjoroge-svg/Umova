@@ -1,0 +1,105 @@
+
+.loans-container {
+  padding: 16px;
+  background: #f8fafc;
+}
+
+/* HEADER */
+.loans-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.loans-title {
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.loans-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* SEARCH */
+.loans-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.loans-search input {
+  border: none;
+  outline: none;
+  font-size: 13px;
+}
+
+/* KPI */
+.loan-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.kpi-card {
+  background: white;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.kpi-card h3 {
+  margin-top: 5px;
+  font-size: 16px;
+}
+
+.kpi-card.danger {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+/* TABLE */
+.table-wrapper {
+  background: white;
+  border-radius: 12px;
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+}
+
+.loans-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.loans-table th,
+.loans-table td {
+  padding: 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.loans-table th {
+  background: #f1f5f9;
+}
+
+.name-cell {
+  font-weight: 600;
+}
+
+/* COLORS */
+.blue { color: #2563eb; }
+.green { color: #16a34a; }
+
+.total {
+  font-weight: 800;
+  color: #059669;
+}

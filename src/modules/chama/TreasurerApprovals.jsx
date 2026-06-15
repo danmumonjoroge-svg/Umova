@@ -1,164 +1,103 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
-import { useChama } from "./ChamaContext";
 
-export default function TreasurerApprovals() {
-  const { chama, member } = useChama() || {};
+const ChamaFunds = ({ chamaId, user }) => {
+  const [form, setForm] = useState({
+    type: "deposit",
+    amount: "",
+    from_source: "",
+    to_destination: "",
+    asset_name: "",
+    asset_value: "",
+    description: ""
+  });
 
-  const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState([]);
-  const [actionLoading, setActionLoading] = useState(null);
-
-  // ─────────────────────────────────────────────
-  // LOAD PENDING CONTRIBUTIONS
-  // ─────────────────────────────────────────────
-  const load = async () => {
-    if (!chama?.id) return;
-
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("chama_contributions")
-      .select("*")
-      .eq("chama_id", chama.id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error(error.message);
-      setItems([]);
-    } else {
-      setItems(data || []);
-    }
-
-    setLoading(false);
-  };
+  const [data, setData] = useState([]);
 
   useEffect(() => {
     load();
-  }, [chama?.id]);
+  }, []);
 
-  // ─────────────────────────────────────────────
-  // APPROVE CONTRIBUTION
-  // ─────────────────────────────────────────────
-  const approve = async (id) => {
-    setActionLoading(id);
+  const load = async () => {
+    const { data } = await supabase
+      .from("chama_fund_movements")
+      .select("*")
+      .eq("chama_id", chamaId);
 
-    const { error } = await supabase
-      .from("chama_contributions")
-      .update({
-        status: "approved",
-        approved_by: member?.id || null,
-        approved_at: new Date(),
-      })
-      .eq("id", id);
+    setData(data || []);
+  };
 
-    setActionLoading(null);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
+  const submit = async () => {
+    await supabase.from("chama_fund_movements").insert([
+      {
+        ...form,
+        chama_id: chamaId,
+        created_by: user.id
+      }
+    ]);
 
     load();
   };
-
-  // ─────────────────────────────────────────────
-  // REJECT CONTRIBUTION
-  // ─────────────────────────────────────────────
-  const reject = async (id) => {
-    setActionLoading(id);
-
-    const { error } = await supabase
-      .from("chama_contributions")
-      .update({
-        status: "rejected",
-        approved_by: member?.id || null,
-        approved_at: new Date(),
-      })
-      .eq("id", id);
-
-    setActionLoading(null);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    load();
-  };
-
-  // ─────────────────────────────────────────────
-  // UI
-  // ─────────────────────────────────────────────
-
-  if (!chama?.id) {
-    return <p>Loading session...</p>;
-  }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Pending Contributions</h2>
+    <div>
+      <h2>Funds Management</h2>
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : items.length === 0 ? (
-        <p style={{ opacity: 0.6 }}>No pending contributions</p>
-      ) : (
-        items.map((c) => (
-          <div
-            key={c.id}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: 12,
-              border: "1px solid #eee",
-              marginBottom: 10,
-              borderRadius: 8,
-            }}
-          >
-            <div>
-              <b>KES {Number(c.amount).toLocaleString()}</b>
-              <div style={{ fontSize: 12, opacity: 0.6 }}>
-                Month: {c.month}
-              </div>
-            </div>
+      <select
+        onChange={(e) => setForm({ ...form, type: e.target.value })}
+      >
+        <option value="deposit">Deposit</option>
+        <option value="withdrawal">Withdrawal</option>
+        <option value="transfer">Transfer</option>
+        <option value="investment">Investment</option>
+        <option value="asset">Asset Purchase</option>
+      </select>
 
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={() => approve(c.id)}
-                disabled={actionLoading === c.id}
-                style={{
-                  background: "#10b981",
-                  color: "white",
-                  border: "none",
-                  padding: "6px 10px",
-                  borderRadius: 5,
-                  cursor: "pointer",
-                }}
-              >
-                Approve
-              </button>
+      <input
+        placeholder="Amount"
+        onChange={(e) => setForm({ ...form, amount: e.target.value })}
+      />
 
-              <button
-                onClick={() => reject(c.id)}
-                disabled={actionLoading === c.id}
-                style={{
-                  background: "#ef4444",
-                  color: "white",
-                  border: "none",
-                  padding: "6px 10px",
-                  borderRadius: 5,
-                  cursor: "pointer",
-                }}
-              >
-                Reject
-              </button>
-            </div>
-          </div>
-        ))
-      )}
+      <input
+        placeholder="From (e.g KCB Bank)"
+        onChange={(e) => setForm({ ...form, from_source: e.target.value })}
+      />
+
+      <input
+        placeholder="To (e.g CIC Money Market)"
+        onChange={(e) => setForm({ ...form, to_destination: e.target.value })}
+      />
+
+      <input
+        placeholder="Asset name (e.g 3 sheep)"
+        onChange={(e) => setForm({ ...form, asset_name: e.target.value })}
+      />
+
+      <input
+        placeholder="Asset value"
+        onChange={(e) => setForm({ ...form, asset_value: e.target.value })}
+      />
+
+      <textarea
+        placeholder="Description"
+        onChange={(e) => setForm({ ...form, description: e.target.value })}
+      />
+
+      <button onClick={submit}>Save Movement</button>
+
+      <hr />
+
+      {data.map((d) => (
+        <div key={d.id}>
+          <b>{d.type}</b> - {d.amount}
+          <br />
+          {d.from_source} → {d.to_destination}
+          <br />
+          {d.asset_name && `${d.asset_name} (${d.asset_value})`}
+        </div>
+      ))}
     </div>
   );
-}
+};
+
+export default ChamaFunds;

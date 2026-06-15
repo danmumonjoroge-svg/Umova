@@ -1,0 +1,192 @@
+
+/* ================= BASE WRAPPER ================= */
+.members-container {
+  padding: 16px;
+  background: #f8fafc;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ================= HEADER ================= */
+.members-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.members-title {
+  display: flex;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 18px;
+  align-items: center;
+}
+
+/* ================= SEARCH + ACTIONS ================= */
+.members-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.members-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  min-width: 180px;
+}
+
+.members-search input {
+  border: none;
+  outline: none;
+  font-size: 13px;
+  width: 100%;
+}
+
+.refresh-btn {
+  background: #16a34a;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* ================= TABLE WRAPPER (CRITICAL FIX) ================= */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto; /* allows scroll on small screens */
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+
+  /* smooth mobile experience */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ================= TABLE ================= */
+.members-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px; /* prevents squashing columns */
+  font-size: 13px;
+}
+
+/* HEADER */
+.members-table th {
+  background: #f1f5f9;
+  text-align: left;
+  padding: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* CELLS */
+.members-table td {
+  padding: 10px;
+  border-bottom: 1px solid #e2e8f0;
+
+  /* prevents text overflow breaking layout */
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* NAME CELL FLEX */
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  min-width: 160px;
+}
+
+/* ================= ROLE BADGES ================= */
+.role-badge {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.role-chair {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.role-treasurer {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.role-secretary {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.role-member {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+/* ================= STATUS ================= */
+.status-active {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.status-inactive {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+/* ================= MOBILE OPTIMIZATION ================= */
+@media (max-width: 768px) {
+
+  .members-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .members-table {
+    min-width: 700px; /* ensures horizontal scroll instead of collapse */
+  }
+
+  .members-table td,
+  .members-table th {
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  .members-search {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+
+  .members-title {
+    font-size: 16px;
+  }
+
+  .refresh-btn {
+    width: 100%;
+    text-align: center;
+  }
+}

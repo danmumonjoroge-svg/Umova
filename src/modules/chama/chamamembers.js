@@ -1,115 +1,151 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { toast } from 'react-hot-toast';
+import React, { useEffect, useState, useMemo } from "react";
+import { supabase } from "../../supabaseClient";
+import "./chamamembers.css";
 
-const ChamaMembers = ({ authContext, api }) => {
-    const [members, setMembers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [view, setView] = useState('all');
-    const [searchQuery, setSearchQuery] = useState('');
+import { Users, Search, RefreshCcw, Phone, Shield } from "lucide-react";
 
-    useEffect(() => {
-        fetchMembers();
-    }, []);
+const ChamaMembers = ({ chamaId }) => {
+  const [members, setMembers] = useState([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
 
-    const fetchMembers = async () => {
-        setLoading(true);
-        try {
-            // Ensure your backend endpoint fetches the aggregated financial data
-            const { data } = await api.get('/members');
-            setMembers(data);
-        } catch (err) {
-            toast.error("Failed to load members");
-        } finally {
-            setLoading(false);
-        }
-    };
+  /* ================= FETCH MEMBERS ================= */
+  const fetchMembers = async () => {
+    setLoading(true);
 
-    const handleMemberAction = async (memberId, action, payload = {}) => {
-        if (!window.confirm(`Confirm action: ${action}?`)) return;
+    let query = supabase.from("chama_members").select("*");
 
-        try {
-            await api.post(`/members/${memberId}/action`, { action, ...payload });
-            toast.success("Audit log recorded & status updated.");
-            fetchMembers(); 
-        } catch (err) {
-            toast.error("Operation unauthorized or failed.");
-        }
-    };
+    // IMPORTANT: filter by chama_id (multi-chama support)
+    if (chamaId) {
+      query = query.eq("chama_id", chamaId);
+    }
 
-    // Memoized filter for performance with large datasets
-    const filteredMembers = useMemo(() => {
-        return members.filter(m => {
-            const matchesView = view === 'all' || m.status === view;
-            const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase());
-            return matchesView && matchesSearch;
-        });
-    }, [members, view, searchQuery]);
+    const { data, error } = await query.order("created_at", {
+      ascending: false,
+    });
 
-    if (loading) return <div className="loader">Loading member data...</div>;
+    if (!error) setMembers(data || []);
 
-    return (
-        <div className="members-dashboard">
-            <div className="toolbar">
-                <input 
-                    type="text" 
-                    placeholder="Search members..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)} 
-                />
-                <select onChange={(e) => setView(e.target.value)} value={view}>
-                    <option value="all">All Members</option>
-                    <option value="pending">Pending Approval</option>
-                    <option value="active">Active</option>
-                </select>
-            </div>
+    setLoading(false);
+  };
 
-            <table className="members-table">
-                <thead>
-                    <tr>
-                        <th>Member</th>
-                        <th>Role</th>
-                        <th>Status</th>
-                        <th>Savings</th>
-                        <th>Loan Bal</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {filteredMembers.length > 0 ? (
-                        filteredMembers.map(m => (
-                            <tr key={m.id} className={m.status}>
-                                <td>{m.name}<br/><small>{m.phone}</small></td>
-                                <td><span className={`badge ${m.role}`}>{m.role}</span></td>
-                                <td><span className={`status-pill ${m.status}`}>{m.status}</span></td>
-                                <td>KES {m.total_contributions?.toLocaleString() || 0}</td>
-                                <td>KES {m.loan_balance?.toLocaleString() || 0}</td>
-                                <td>
-                                    {authContext?.user?.role === 'chairman' && (
-                                        <div className="action-group">
-                                            {m.status === 'pending' && (
-                                                <button onClick={() => handleMemberAction(m.id, 'approve')}>Approve</button>
-                                            )}
-                                            <button onClick={() => handleMemberAction(m.id, 'suspend')}>Suspend</button>
-                                            <select onChange={(e) => handleMemberAction(m.id, 'change_role', { role: e.target.value })}>
-                                                <option>Change Role</option>
-                                                <option value="chairman">Chairman</option>
-                                                <option value="treasurer">Treasurer</option>
-                                                <option value="member">Member</option>
-                                            </select>
-                                        </div>
-                                    )}
-                                </td>
-                            </tr>
-                        ))
-                    ) : (
-                        <tr>
-                            <td colSpan="6" style={{ textAlign: 'center' }}>No members found matching your filters.</td>
-                        </tr>
-                    )}
-                </tbody>
-            </table>
-        </div>
+  useEffect(() => {
+    fetchMembers();
+  }, [chamaId]);
+
+  /* ================= FILTER ================= */
+  const filtered = useMemo(() => {
+    return members.filter((m) =>
+      (m.name || "").toLowerCase().includes(search.toLowerCase())
     );
+  }, [members, search]);
+
+  /* ================= ROLE BADGE ================= */
+  const getRoleColor = (role) => {
+    switch (role) {
+      case "chair":
+        return "role-chair";
+      case "treasurer":
+        return "role-treasurer";
+      case "secretary":
+        return "role-secretary";
+      default:
+        return "role-member";
+    }
+  };
+
+  return (
+    <div className="members-container">
+
+      {/* HEADER */}
+      <div className="members-header">
+
+        <div className="members-title">
+          <Users size={18} />
+          Chama Members
+        </div>
+
+        <div className="members-actions">
+
+          <div className="members-search">
+            <Search size={14} />
+            <input
+              placeholder="Search member..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <button className="refresh-btn" onClick={fetchMembers}>
+            <RefreshCcw size={14} /> Refresh
+          </button>
+
+        </div>
+
+      </div>
+
+      {/* TABLE */}
+      <div className="table-wrapper">
+
+        {loading ? (
+          <p className="p-4 text-slate-500">Loading members...</p>
+        ) : (
+
+          <table className="members-table">
+
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Role</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+
+            <tbody>
+
+              {filtered.map((m) => (
+                <tr key={m.id}>
+
+                  <td className="name-cell">
+                    <Users size={14} /> {m.name}
+                  </td>
+
+                  <td>
+                    <Phone size={14} /> {m.phone || "N/A"}
+                  </td>
+
+                  <td>
+                    <span className={`role-badge ${getRoleColor(m.role)}`}>
+                      <Shield size={12} /> {m.role || "member"}
+                    </span>
+                  </td>
+
+                  <td>
+                    <span
+                      className={
+                        m.status === "active"
+                          ? "status-active"
+                          : "status-inactive"
+                      }
+                    >
+                      {m.status || "active"}
+                    </span>
+                  </td>
+
+                </tr>
+              ))}
+
+            </tbody>
+
+          </table>
+
+        )}
+
+      </div>
+
+    </div>
+  );
 };
 
 export default ChamaMembers;
