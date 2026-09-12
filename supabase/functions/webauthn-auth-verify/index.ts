@@ -11,7 +11,7 @@
 
 import { serve } from "https://deno.land/std@0.203.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verifyAuthenticationResponse } from "https://esm.sh/@simplewebauthn/server@9";
+import { verifyAuthenticationResponse } from "https://esm.sh/@simplewebauthn/server@14";
 import { decode as b64uDecode } from "https://deno.land/std@0.203.0/encoding/base64url.ts";
 
 const RP_ID = Deno.env.get("WEBAUTHN_RP_ID")!;
@@ -80,9 +80,12 @@ serve(async (req) => {
       expectedChallenge: challengeRow.challenge,
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
-      authenticator: {
-        credentialID: b64uDecode(credRow.credential_id),
-        credentialPublicKey: b64uDecode(credRow.public_key),
+      // As of @simplewebauthn/server v11+, this argument is `credential`
+      // (was `authenticator`), and `id` is the base64url string as
+      // stored — only the public key needs decoding back to bytes.
+      credential: {
+        id: credRow.credential_id,
+        publicKey: b64uDecode(credRow.public_key),
         counter: credRow.counter,
       },
     });

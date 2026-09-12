@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Store } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import "./Dashboard.css";
 
@@ -6,6 +8,7 @@ export default function Dashboard() {
   const [ledger, setLedger] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [pendingPOSCount, setPendingPOSCount] = useState(0);
 
   const ACC = useMemo(
     () => ({
@@ -28,7 +31,43 @@ export default function Dashboard() {
   // ================= LOAD =================
   useEffect(() => {
     load();
+    loadPendingPOSCount();
   }, []);
+
+  const loadPendingPOSCount = async () => {
+    // Separate, independent from the ledger load — a failure here
+    // shouldn't block the financial dashboard from rendering.
+    //
+    // UPDATED: sums BOTH pending queues — pos_tenants (business
+    // approvals) and pos_registration_requests (individual staff
+    // access requests) — so this badge matches the combined total
+    // POSAdminDashboard.jsx shows, instead of only ever reflecting
+    // tenant approvals. Either query failing is logged and skipped
+    // independently rather than zeroing out the whole badge.
+    let tenantCount = 0;
+    let requestCount = 0;
+
+    try {
+      const { data, error } = await supabase.rpc("list_pos_tenants", { p_status: "pending" });
+      if (error) throw error;
+      tenantCount = (data || []).length;
+    } catch (err) {
+      console.error("[DASHBOARD] pending POS tenant count:", err);
+    }
+
+    try {
+      const { count, error } = await supabase
+        .from("pos_registration_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+      if (error) throw error;
+      requestCount = count || 0;
+    } catch (err) {
+      console.error("[DASHBOARD] pending POS registration request count:", err);
+    }
+
+    setPendingPOSCount(tenantCount + requestCount);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -50,6 +89,7 @@ export default function Dashboard() {
   const refresh = async () => {
     setRefreshing(true);
     await load();
+    await loadPendingPOSCount();
     setRefreshing(false);
   };
 
@@ -198,6 +238,22 @@ export default function Dashboard() {
           <button className="dash-btn dash-btn-dark" onClick={printReport}>
             Print
           </button>
+
+          {/* Points at the consolidated POS admin hub now (POSAdminDashboard,
+              /admin/pos) instead of straight into POSTenants — one findable
+              landing page for both pending-tenant approvals and pending
+              staff-access requests, not just the tenant queue. */}
+          <Link to="/admin/pos" className="dash-btn dash-btn-green" style={{ position: "relative", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Store size={16} /> POS Businesses
+            {pendingPOSCount > 0 && (
+              <span style={{
+                background: "#dc2626", color: "white", borderRadius: 999,
+                fontSize: 11, fontWeight: 700, padding: "1px 7px", marginLeft: 2,
+              }}>
+                {pendingPOSCount}
+              </span>
+            )}
+          </Link>
         </div>
       </div>
 

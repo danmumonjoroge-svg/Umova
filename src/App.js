@@ -10,6 +10,7 @@ import UnifiedLogin     from "./components/Auth/UnifiedLogin";
 import RegisterPOSUser  from "./components/Auth/RegisterPOSUser";
 import SetPassword     from "./components/Auth/SetPassword";
 import PublicSite      from "./Public/PublicSite";
+import UmovaFinancialPage from "./Public/UmovaFinancialPage";
 
 import DashboardMain from "./components/Dashboard/DashboardMain";
 import DashboardHome from "./components/Dashboard/DashboardHome";
@@ -57,14 +58,27 @@ import POSRegistrationRequests from "./Pages/Admin/POSRegistrationRequests";
 
 // ─────────────────────────────────────────────
 // POS / INVENTORY (Universal Scanning Engine)
-// Self-contained under src/pos-erp/, mirroring the chama-erp-advanced
-// pattern: its own pages/hooks/services/scanning engine. It does NOT
-// get its own login — it's staff-only, so it rides the existing
-// StaffGuard/AdminLayout auth exactly like every other admin page below.
+// No longer staff-only / no longer under StaffGuard — POS is now an
+// independent tenant-based ERP with its own auth (POSAuthProvider +
+// POSAuthGate, real Supabase Auth session on a SEPARATE client so it
+// never collides with a staff member's session in the same browser —
+// see src/pos-erp/services/posSupabaseClient.js). POSApp is
+// self-contained, mirroring chama-erp-advanced: App.js just mounts it.
 // ─────────────────────────────────────────────
-import POSPage             from "./pos-erp/pages/POSPage";
-import ProductsPage        from "./pos-erp/pages/ProductsPage";
-import GoodsReceivingPage  from "./pos-erp/pages/GoodsReceivingPage";
+import POSApp from "./pos-erp/POSApp";
+
+// Platform-admin control over POS *businesses* (pos_tenants/pos_staff)
+// — approve/reject/suspend/reactivate + manually add one. Separate
+// from POSRegistrationRequests below, which is a different, older
+// mechanism (see the note in POSTenants.js).
+import POSTenants from "./Pages/Admin/POSTenants";
+
+// Consolidated POS admin hub — pending counts + links into POSTenants
+// and POSRegistrationRequests, so there's one findable landing page
+// instead of a single ad-hoc button on the SACCO Dashboard. See the
+// note at the bottom of POSTenants.js: this doesn't retire either of
+// the two mechanisms below, it just makes both visible in one place.
+import POSAdminDashboard from "./Pages/Admin/POSAdminDashboard";
 
 // STAFF_ROLES is imported from AuthContext.js — single source of truth,
 // also used by AdminLogin.js so the pre-signin role gate and the post-
@@ -141,7 +155,10 @@ function StaffGuard() {
 }
 
 // ─────────────────────────────────────────────
-// ADMIN-LEVEL GUARD (for approving POS registration requests)
+// ADMIN-LEVEL GUARD (for approving POS registration requests, POS
+// business approvals, and the POS admin hub — anything that controls
+// another staff/business's access, not just the signed-in staffer's
+// own work)
 // ─────────────────────────────────────────────
 function AdminLevelGuard() {
   const { user, loading, role } = useAuth();
@@ -176,10 +193,10 @@ function PostLoginRedirect() {
 // screen; otherwise renders the screen itself.
 // ─────────────────────────────────────────────
 function UnifiedLoginRoute() {
-  // Primary entry point — handles staff codes, member codes, and (via
-  // ChamaContext) phone numbers all from one screen. This is what
-  // PublicSite.js's "POS Login" button targets with
-  // state={{ from: "/admin/pos" }}.
+  // Primary entry point — handles staff codes and member codes from one
+  // screen. POS no longer goes through here at all: it has its own
+  // entry point at /pos (see PublicSite.js's "POS Login" button, which
+  // now navigates straight to /pos instead of here).
   const { user, loading, role } = useAuth();
   const location = useLocation();
   const from = location.state?.from || "/admin/dashboard";
@@ -240,6 +257,12 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<PublicSite />} />
+
+      {/* Umova Financial — savings/loans/investment product page. Split out
+          of "/" when Umova became a 3-product umbrella (Financial, Chama,
+          POS); "/" is now just the overview that links into each. */}
+      <Route path="/financial" element={<UmovaFinancialPage />} />
+
       <Route path="/unassigned-onboarding" element={<UnassignedOnboarding />} />
       <Route path="/set-password" element={<SetPassword />} />
 
@@ -324,17 +347,34 @@ function App() {
           <Route path="payments" element={<AdminPayments />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="stories" element={<AdminStoryDashboard />} />
+        </Route>
+      </Route>
 
-          {/* POS / Inventory (Universal Scanning Engine) — staff-only,
-              same StaffGuard/AdminLayout as everything else in this block.
-              Rides the same login as the rest of the admin area; the
-              "POS Login" button on the public site sends staff to
-              /login with state={{ from: "/admin/pos" }} so
-              UnifiedLoginRoute lands them here instead of /admin/dashboard
-              after signing in. */}
-          <Route path="pos" element={<POSPage />} />
-          <Route path="pos/products" element={<ProductsPage />} />
-          <Route path="pos/goods-receiving" element={<GoodsReceivingPage />} />
+      {/* POS is intentionally OUTSIDE StaffGuard/AdminLayout — it has
+          its own tenant-scoped auth (see POSApp.jsx). A POS cashier is
+          not a StaffGuard-recognized role at all; they never touch
+          the main users/members tables. */}
+      <Route path="/pos/*" element={<POSApp />} />
+
+      {/* Consolidated POS admin hub — pending-count overview + links
+          into POS Businesses and POS Requests below. This is the page
+          Dashboard.jsx's "POS Businesses" button now points at, instead
+          of jumping straight into POSTenants with no other POS nav
+          visible anywhere. */}
+      <Route path="/admin/pos" element={<AdminLevelGuard />}>
+        <Route element={<AdminLayout />}>
+          <Route index element={<POSAdminDashboard />} />
+        </Route>
+      </Route>
+
+      {/* Platform-admin management of POS tenants (approve/reject/
+          suspend/reactivate/create) — gated the same way as the
+          POS-requests block below, via the main app's own admin roles,
+          since this controls a business's ability to use POS at all,
+          not POS's own internals. */}
+      <Route path="/admin/pos-tenants" element={<AdminLevelGuard />}>
+        <Route element={<AdminLayout />}>
+          <Route index element={<POSTenants />} />
         </Route>
       </Route>
 

@@ -1,53 +1,23 @@
+// src/pos-erp/hooks/usePurchases.js
+//
+// REBUILT alongside purchaseService.js's rewrite. Dropped
+// usePurchaseRequests entirely — there is no lb_purchase_requests table
+// in this database, and there's no requisition step anywhere else in the
+// app (confirmed in conversation). If anything else still imports
+// { usePurchaseRequests }, it will fail at build time now — intentional,
+// so it surfaces immediately instead of hitting a service method that
+// throws at runtime.
+//
+// createQuick -> createQuickReceipt (renamed in goodsReceivedService to
+// match what it actually does — "quick" was ambiguous with "quick
+// create product").
 
 import { useState, useEffect, useCallback } from 'react';
-import { purchaseRequestService, purchaseOrderService, goodsReceivedService, supplierReturnService } from '../services/purchaseService';
+import { purchaseOrderService, goodsReceivedService, supplierReturnService } from '../services/purchaseService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 
-export function usePurchaseRequests(options = {}) {
-  const { staffId } = usePosErpAuth();
-
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const fetch = useCallback(async (params = {}) => {
-    setLoading(true);
-    try {
-      const result = await purchaseRequestService.getAll({ ...options, ...params });
-      setRequests(result.data || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [options]);
-
-  useEffect(() => { fetch(); }, [fetch]);
-
-  const create = useCallback(async (data) => {
-    const payload = { ...data, requested_by: staffId };
-    const result = await purchaseRequestService.create(payload);
-    setRequests(prev => [result, ...prev]);
-    return result;
-  }, [staffId]);
-
-  const updateStatus = useCallback(async (id, status) => {
-    const result = await purchaseRequestService.updateStatus(id, status);
-    setRequests(prev => prev.map(r => r.id === id ? result : r));
-    return result;
-  }, []);
-
-  const convertToPO = useCallback(async (id) => {
-    const result = await purchaseRequestService.convertToPO(id);
-    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'CONVERTED' } : r));
-    return result;
-  }, []);
-
-  return { requests, loading, error, fetch, create, updateStatus, convertToPO };
-}
-
 export function usePurchaseOrders(options = {}) {
-  const { staffId } = usePosErpAuth();
+  const { staffId, tenant } = usePosErpAuth();
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -55,6 +25,7 @@ export function usePurchaseOrders(options = {}) {
 
   const fetch = useCallback(async (params = {}) => {
     setLoading(true);
+    setError(null);
     try {
       const result = await purchaseOrderService.getAll({ ...options, ...params });
       setOrders(result.data || []);
@@ -68,17 +39,21 @@ export function usePurchaseOrders(options = {}) {
   useEffect(() => { fetch(); }, [fetch]);
 
   const create = useCallback(async (data) => {
-    const payload = { ...data, created_by: staffId };
-    const result = await purchaseOrderService.create(payload);
+    const result = await purchaseOrderService.create({
+      ...data,
+      tenant_id: tenant?.id,
+      business_id: tenant?.business_id ?? null,
+      created_by: staffId,
+    });
     setOrders(prev => [result, ...prev]);
     return result;
-  }, [staffId]);
+  }, [staffId, tenant]);
 
   return { orders, loading, error, fetch, create };
 }
 
 export function useGoodsReceived(options = {}) {
-  const { staffId } = usePosErpAuth();
+  const { staffId, tenant } = usePosErpAuth();
 
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -86,6 +61,7 @@ export function useGoodsReceived(options = {}) {
 
   const fetch = useCallback(async (params = {}) => {
     setLoading(true);
+    setError(null);
     try {
       const result = await goodsReceivedService.getAll({ ...options, ...params });
       setRecords(result.data || []);
@@ -99,23 +75,32 @@ export function useGoodsReceived(options = {}) {
   useEffect(() => { fetch(); }, [fetch]);
 
   const createFromPO = useCallback(async (poId, data) => {
-    const result = await goodsReceivedService.createFromPO(poId, { ...data, received_by: staffId });
+    const result = await goodsReceivedService.createFromPO(poId, {
+      ...data,
+      tenant_id: tenant?.id,
+      business_id: tenant?.business_id ?? null,
+      received_by: staffId,
+    });
     setRecords(prev => [result, ...prev]);
     return result;
-  }, [staffId]);
+  }, [staffId, tenant]);
 
-  const createQuick = useCallback(async (data) => {
-    const payload = { ...data, received_by: staffId };
-    const result = await goodsReceivedService.createQuick(payload);
+  const createQuickReceipt = useCallback(async (data) => {
+    const result = await goodsReceivedService.createQuickReceipt({
+      ...data,
+      tenant_id: tenant?.id,
+      business_id: tenant?.business_id ?? null,
+      received_by: staffId,
+    });
     setRecords(prev => [result, ...prev]);
     return result;
-  }, [staffId]);
+  }, [staffId, tenant]);
 
-  return { records, loading, error, fetch, createFromPO, createQuick };
+  return { records, loading, error, fetch, createFromPO, createQuickReceipt };
 }
 
 export function useSupplierReturns(options = {}) {
-  const { staffId } = usePosErpAuth();
+  const { staffId, tenant } = usePosErpAuth();
 
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -123,6 +108,7 @@ export function useSupplierReturns(options = {}) {
 
   const fetch = useCallback(async (params = {}) => {
     setLoading(true);
+    setError(null);
     try {
       const result = await supplierReturnService.getAll({ ...options, ...params });
       setReturns(result.data || []);
@@ -136,11 +122,15 @@ export function useSupplierReturns(options = {}) {
   useEffect(() => { fetch(); }, [fetch]);
 
   const create = useCallback(async (data) => {
-    const payload = { ...data, created_by: staffId };
-    const result = await supplierReturnService.create(payload);
+    const result = await supplierReturnService.create({
+      ...data,
+      tenant_id: tenant?.id,
+      business_id: tenant?.business_id ?? null,
+      created_by: staffId,
+    });
     setReturns(prev => [result, ...prev]);
     return result;
-  }, [staffId]);
+  }, [staffId, tenant]);
 
   return { returns, loading, error, fetch, create };
 }

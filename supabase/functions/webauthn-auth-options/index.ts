@@ -12,7 +12,7 @@
 
 import { serve } from "https://deno.land/std@0.203.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { generateAuthenticationOptions } from "https://esm.sh/@simplewebauthn/server@9";
+import { generateAuthenticationOptions } from "https://esm.sh/@simplewebauthn/server@14";
 
 const RP_ID = Deno.env.get("WEBAUTHN_RP_ID")!;
 

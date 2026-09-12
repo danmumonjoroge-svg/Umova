@@ -1,35 +1,8 @@
 import "./AdminLayout.css";
 
-import Dashboard from "./Dashboard";
-import Members from "./Members";
-import Loan from "./Loans";
-import MemberStatements from "./MemberStatements";
-import ERPDashboard from "./ERPDashboard";
-
-import LoanApplications from "./LoanApplication";
-import LoanRepayments from "./LoanRepayments";
-import LoanAnalytics from "./LoanAnalytics";
-import LoanDisbursement from "./LoanDisbursement";
-
-import ArrearsDashboard from "./ArrearsDashboard";
-import PARDashboard from "./PARDashboard";
-
-import TrialBalance from "./TrialBalance";
-import IncomeStatement from "./IncomeStatement";
-import BalanceSheet from "./BalanceSheet";
-
-import JournalEntries from "./JournalEntry";
-import JournalList from "./JournalLine";
-
-import FinancialReports from "./Reports";
-import StoryDashboard from "./StoryDashboard";
-import Settings from "./Settings";
-import Payments from "./Payments";
-
-/* NEW WHATSAPP */
-import WhatsAppCenter from "./WhatsAppCenter";
-
 import { useState, useMemo, useEffect } from "react";
+import { Link, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../../Context/AuthContext";
 
 import {
   Home,
@@ -45,130 +18,149 @@ import {
   Bell,
   Menu,
   X,
-  PieChart,
-  MessageCircle
+  Store,
+  ClipboardList,
+  Building2,
 } from "lucide-react";
+
+// ─────────────────────────────────────────────
+// FIXED: this used to be a self-contained tab-switcher — its own
+// activeTab state, its own hardcoded component imports, NO <Outlet/>.
+// App.js has always routed real nested pages under <AdminLayout/>
+// (/admin/dashboard, /admin/members, /admin/pos, etc.), but this file
+// never rendered any of them — it just always showed its own internal
+// "dashboard" tab regardless of the URL. That's why clicking into POS
+// (or honestly any admin page) looked like it "bounced back": the URL
+// changed, the route matched, but this shell ignored it completely.
+//
+// Now MENU items are real paths (relative to /admin, matching App.js
+// exactly) rendered as <Link>s, active-state comes from useLocation(),
+// and page content comes from <Outlet/> — i.e. whatever App.js actually
+// routed to, not a duplicate internal copy of it.
+//
+// APPROVER_ROLES mirrors App.js's AdminLevelGuard exactly — POS
+// Businesses/Requests are hidden from the menu entirely for roles that
+// would just get redirected back by that guard anyway, rather than
+// showing a link that appears to do nothing when clicked.
+// ─────────────────────────────────────────────
+
+const APPROVER_ROLES = ["admin", "superadmin", "manager"];
 
 const MENU = [
   {
     title: "CORE OPERATIONS",
     items: [
-      { key: "dashboard", label: "Dashboard", component: Dashboard, icon: Home },
-      { key: "erp", label: "ERP Overview", component: ERPDashboard, icon: BarChart3 },
-      { key: "members", label: "Members", component: Members, icon: Users },
-      { key: "statements", label: "Member Statements", component: MemberStatements, icon: FileText },
-      { key: "payments", label: "Payments", component: Payments, icon: DollarSign }
-    ]
+      { key: "dashboard", label: "Dashboard", to: "dashboard", icon: Home },
+      { key: "erp", label: "ERP Overview", to: "erp-dashboard", icon: BarChart3 },
+      { key: "members", label: "Members", to: "members", icon: Users },
+      { key: "statements", label: "Member Statements", to: "member-statements", icon: FileText },
+      { key: "payments", label: "Payments", to: "payments", icon: DollarSign },
+    ],
   },
-
   {
     title: "LOAN ENGINE",
     items: [
-      { key: "loan", label: "Loans", component: Loan, icon: CreditCard },
-      { key: "loan_applications", label: "Loan Applications", component: LoanApplications, icon: FileText },
-      { key: "loan_repayments", label: "Loan Repayments", component: LoanRepayments, icon: DollarSign },
-      { key: "loan_analytics", label: "Loan Analytics", component: LoanAnalytics, icon: TrendingUp },
-      { key: "loan_disbursement", label: "Loan Disbursement", component: LoanDisbursement, icon: Activity }
-    ]
+      { key: "loan", label: "Loans", to: "loans", icon: CreditCard },
+      { key: "loan_applications", label: "Loan Applications", to: "loan-application", icon: FileText },
+      { key: "loan_approval", label: "Loan Approval", to: "loan-approval", icon: Activity },
+      { key: "loan_disbursement", label: "Loan Disbursement", to: "loan-disbursement", icon: Activity },
+      { key: "loan_repayments", label: "Loan Repayments", to: "loan-repayments", icon: DollarSign },
+      { key: "loan_schedule", label: "Loan Schedule", to: "loan-schedule", icon: BookOpen },
+      { key: "loan_penalties", label: "Loan Penalties", to: "loan-penalties", icon: Activity },
+      { key: "interest_dashboard", label: "Interest Dashboard", to: "interest-dashboard", icon: TrendingUp },
+    ],
   },
-
-  {
-    title: "RISK & ARREARS",
-    items: [
-      { key: "arrears", label: "Arrears Dashboard", component: ArrearsDashboard, icon: Activity },
-      { key: "par", label: "PAR Analysis", component: PARDashboard, icon: TrendingUp },
-      { key: "story_dashboard", label: "Risk Engine", component: StoryDashboard, icon: PieChart }
-    ]
-  },
-
   {
     title: "ACCOUNTING CORE",
     items: [
-      { key: "trial_balance", label: "Trial Balance", component: TrialBalance, icon: BookOpen },
-      { key: "income_statement", label: "Income Statement", component: IncomeStatement, icon: TrendingUp },
-      { key: "balance_sheet", label: "Balance Sheet", component: BalanceSheet, icon: BarChart3 },
-      { key: "journal_entries", label: "Journal Entries", component: JournalEntries, icon: FileText },
-      { key: "journal_list", label: "Journal Line", component: JournalList, icon: BookOpen }
-    ]
+      { key: "trial_balance", label: "Trial Balance", to: "trial-balance", icon: BookOpen },
+      { key: "income_statement", label: "Income Statement", to: "income-statement", icon: TrendingUp },
+      { key: "balance_sheet", label: "Balance Sheet", to: "balance-sheet", icon: BarChart3 },
+    ],
   },
-
-  /* NEW WHATSAPP SECTION */
-
   {
-    title: "COMMUNICATION",
+    title: "POS MANAGEMENT",
+    // Hidden entirely for roles AdminLevelGuard would bounce anyway —
+    // see App.js. Filtered in filteredMenu below, not here, so the
+    // search box still works against a stable list.
+    approverOnly: true,
     items: [
-      {
-        key: "whatsapp",
-        label: "WhatsApp Center",
-        component: WhatsAppCenter,
-        icon: MessageCircle
-      }
-    ]
+      { key: "pos_dashboard", label: "POS Dashboard", to: "pos", icon: Store },
+      { key: "pos_tenants", label: "POS Businesses", to: "pos-tenants", icon: Building2 },
+      { key: "pos_requests", label: "POS Requests", to: "pos-requests", icon: ClipboardList },
+    ],
   },
-
   {
     title: "REPORTING",
     items: [
-      { key: "financial_reports", label: "Financial Reports", component: FinancialReports, icon: BarChart3 }
-    ]
+      { key: "financial_reports", label: "Financial Reports", to: "reports", icon: BarChart3 },
+      { key: "stories", label: "Risk Engine", to: "stories", icon: TrendingUp },
+    ],
   },
-
   {
     title: "SYSTEM CONTROL",
     items: [
-      { key: "settings", label: "Settings", component: Settings, icon: SettingsIcon }
-    ]
-  }
+      { key: "settings", label: "Settings", to: "settings", icon: SettingsIcon },
+    ],
+  },
 ];
 
 export default function AdminLayout() {
+  const { profile, role, logout } = useAuth();
+  const location = useLocation();
 
-  const [activeTab, setActiveTab] = useState("dashboard");
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-
-  // Mobile drawer state — separate from desktop "collapsed" state.
-  // On mobile, the sidebar is hidden off-screen by default and slides
-  // in over the content when mobileOpen is true.
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const isApprover = APPROVER_ROLES.includes(role);
+
   const filteredMenu = useMemo(() => {
+    const visible = MENU.filter((group) => !group.approverOnly || isApprover);
 
-    if (!search) return MENU;
+    if (!search) return visible;
 
-    return MENU.map(group => ({
-      ...group,
-      items: group.items.filter(item =>
-        item.label.toLowerCase().includes(search.toLowerCase())
-      )
-    })).filter(group => group.items.length > 0);
+    return visible
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) =>
+          item.label.toLowerCase().includes(search.toLowerCase())
+        ),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [search, isApprover]);
 
-  }, [search]);
-
-  let ActiveComponent = null;
-
-  MENU.forEach(group => {
-    group.items.forEach(item => {
-      if (item.key === activeTab) {
-        ActiveComponent = item.component;
-      }
-    });
-  });
-
-  // Close the mobile drawer whenever a nav item is selected, so the
-  // user immediately sees the page they tapped instead of the sidebar.
-  const handleSelectTab = (key) => {
-    setActiveTab(key);
-    setMobileOpen(false);
+  // Matches the current URL against an item's `to` — handles both
+  // "/admin/dashboard" (exact) and any deeper sub-paths under it.
+  const isActive = (to) => {
+    const full = `/admin/${to}`;
+    return location.pathname === full || location.pathname.startsWith(`${full}/`);
   };
 
-  // Prevent body scroll while the mobile drawer is open (avoids the
-  // page scrolling underneath the overlay).
+  const handleSelectTab = () => setMobileOpen(false);
+
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
+
+  const currentLabel = useMemo(() => {
+    for (const group of MENU) {
+      for (const item of group.items) {
+        if (isActive(item.to)) return item.label;
+      }
+    }
+    return "Dashboard";
+  }, [location.pathname]);
+
+  const displayName = profile?.name || "Admin";
+  const initials = displayName
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   return (
     <div className="admin-container">
@@ -180,26 +172,14 @@ export default function AdminLayout() {
       />
 
       {/* SIDEBAR */}
-
       <aside className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileOpen ? "open" : ""}`}>
 
         <div className="sidebar-top">
-
           <div className="sidebar-top-row">
-            <div
-              className="toggle-btn"
-              onClick={() => setCollapsed(!collapsed)}
-              title="Collapse sidebar"
-            >
+            <div className="toggle-btn" onClick={() => setCollapsed(!collapsed)} title="Collapse sidebar">
               <Menu size={20} />
             </div>
-
-            {/* Close button — only meaningful on mobile drawer */}
-            <div
-              className="toggle-btn mobile-only"
-              onClick={() => setMobileOpen(false)}
-              title="Close menu"
-            >
+            <div className="toggle-btn mobile-only" onClick={() => setMobileOpen(false)} title="Close menu">
               <X size={20} />
             </div>
           </div>
@@ -207,7 +187,6 @@ export default function AdminLayout() {
           {!collapsed && (
             <>
               <h2 className="brand-title">UMOVA ERP</h2>
-
               <input
                 className="search-input"
                 placeholder="Search..."
@@ -216,181 +195,81 @@ export default function AdminLayout() {
               />
             </>
           )}
-
         </div>
 
         <div className="menu-scroll">
-
-          {filteredMenu.map(group => (
-
+          {filteredMenu.map((group) => (
             <div key={group.title}>
+              {!collapsed && <div className="group-title">{group.title}</div>}
 
-              {!collapsed && (
-                <div className="group-title">
-                  {group.title}
-                </div>
-              )}
-
-              {group.items.map(item => {
-
+              {group.items.map((item) => {
                 const Icon = item.icon;
-
                 return (
-                  <div
+                  <Link
                     key={item.key}
-                    className={`menu-item ${
-                      activeTab === item.key ? "active" : ""
-                    }`}
-                    onClick={() => handleSelectTab(item.key)}
+                    to={item.to}
+                    onClick={handleSelectTab}
+                    className={`menu-item ${isActive(item.to) ? "active" : ""}`}
                   >
                     <Icon size={20} />
-
-                    {!collapsed && (
-                      <span>{item.label}</span>
-                    )}
-
-                  </div>
+                    {!collapsed && <span>{item.label}</span>}
+                  </Link>
                 );
-
               })}
-
             </div>
-
           ))}
-
         </div>
 
         <div className="profile-section">
-
-          <div className="avatar">
-            DN
-          </div>
-
+          <div className="avatar">{initials}</div>
           {!collapsed && (
             <div>
-              <div className="admin-name">
-                Admin
-              </div>
-
-              <div className="admin-role">
-                System Administrator
-              </div>
+              <div className="admin-name">{displayName}</div>
+              <div className="admin-role">{role || "Staff"}</div>
             </div>
           )}
-
         </div>
-
       </aside>
 
       {/* MAIN */}
-
       <main className="main-content">
-
         <div className="topbar">
-
           <div className="topbar-left">
-            {/* Hamburger — opens the mobile drawer. Hidden on desktop via CSS. */}
-            <button
-              className="mobile-menu-btn"
-              onClick={() => setMobileOpen(true)}
-              aria-label="Open menu"
-            >
+            <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)} aria-label="Open menu">
               <Menu size={20} />
             </button>
-
-            <h3>
-              {activeTab.replaceAll("_", " ").toUpperCase()}
-            </h3>
+            <h3>{currentLabel}</h3>
           </div>
 
           <div className="topbar-right">
-
             <div className="notification-wrapper">
-
-              <div
-                className="notification-btn"
-                onClick={() =>
-                  setShowNotifications(!showNotifications)
-                }
-              >
+              <div className="notification-btn" onClick={() => setShowNotifications(!showNotifications)}>
                 <Bell size={20} />
-
-                <span className="badge">
-                  3
-                </span>
+                <span className="badge">3</span>
               </div>
 
               {showNotifications && (
                 <div className="notification-dropdown">
-
-                  <div className="dropdown-item">
-                    📌 New Loan Application
-                  </div>
-
-                  <div className="dropdown-item">
-                    💰 Payment Received
-                  </div>
-
-                  <div className="dropdown-item">
-                    ⚠️ Loan Overdue Alert
-                  </div>
-
+                  <div className="dropdown-item">📌 New Loan Application</div>
+                  <div className="dropdown-item">💰 Payment Received</div>
+                  <div className="dropdown-item">⚠️ Loan Overdue Alert</div>
                 </div>
               )}
-
             </div>
 
-            <div className="online-status">
-              ● Online
-            </div>
-
+            <div className="online-status">● Online</div>
+            <button className="toggle-btn" onClick={logout} title="Sign out">
+              Sign out
+            </button>
           </div>
-
         </div>
 
         <div className="page-content">
-
-          {activeTab === "dashboard" && (
-
-            <div className="kpi-grid">
-
-              <div className="kpi-card">
-                <h4>Total Loans</h4>
-                <h2>KES 12.4M</h2>
-              </div>
-
-              <div className="kpi-card">
-                <h4>Members</h4>
-                <h2>1,245</h2>
-              </div>
-
-              <div className="kpi-card">
-                <h4>PAR %</h4>
-                <h2>3.2%</h2>
-              </div>
-
-              <div className="kpi-card">
-                <h4>Cash</h4>
-                <h2>KES 5.6M</h2>
-              </div>
-
-            </div>
-
-          )}
-
           <div className="content-area">
-
-            {ActiveComponent
-              ? <ActiveComponent />
-              : "Module not found"
-            }
-
+            <Outlet />
           </div>
-
         </div>
-
       </main>
-
     </div>
   );
 }

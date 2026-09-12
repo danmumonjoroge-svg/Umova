@@ -5,7 +5,7 @@
 
 import { serve } from "https://deno.land/std@0.203.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verifyRegistrationResponse } from "https://esm.sh/@simplewebauthn/server@9";
+import { verifyRegistrationResponse } from "https://esm.sh/@simplewebauthn/server@14";
 import { encode as b64uEncode } from "https://deno.land/std@0.203.0/encoding/base64url.ts";
 
 const RP_ID = Deno.env.get("WEBAUTHN_RP_ID")!;
@@ -55,22 +55,19 @@ serve(async (req) => {
     return new Response("Passkey could not be verified.", { status: 400 });
   }
 
-  const {
-    credentialID,
-    credentialPublicKey,
-    counter,
-    credentialDeviceType,
-    credentialBackedUp,
-  } = verification.registrationInfo;
+  // As of @simplewebauthn/server v11+, these live under `credential`, and
+  // `credential.id` already arrives as a base64url string (no manual
+  // encoding needed) — only the public key is still raw bytes.
+  const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
 
   await supabase.from("webauthn_credentials").insert({
     user_id: user.id,
-    credential_id: b64uEncode(credentialID),
-    public_key: b64uEncode(credentialPublicKey),
-    counter,
+    credential_id: credential.id,
+    public_key: b64uEncode(credential.publicKey),
+    counter: credential.counter,
     device_type: credentialDeviceType,
     backed_up: credentialBackedUp,
-    transports: attestationResponse.response?.transports ?? [],
+    transports: credential.transports ?? attestationResponse.response?.transports ?? [],
     nickname: nickname || "Passkey",
   });
 

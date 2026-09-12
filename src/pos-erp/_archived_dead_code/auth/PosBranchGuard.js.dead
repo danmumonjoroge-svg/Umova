@@ -1,0 +1,40 @@
+// src/pos-erp/auth/PosBranchGuard.js
+//
+// Supplies businessId/branchId to POS pages, or explains why a signed-in
+// POS account can't be scoped to a till yet.
+//
+// UPDATED: now reads `profile` from usePosAuth() (posSupabase's session)
+// instead of the main app's useAuth() — POS has its own session, so it
+// needs its own source of truth for who's signed in. Sits under
+// POSStaffGuard in the route tree, which already confirmed there's a
+// valid POS session before this ever renders.
+
+import React from "react";
+import { usePosAuth } from "./POSAuthContext";
+
+export default function PosBranchGuard({ Component, ...rest }) {
+  const { profile, loading } = usePosAuth();
+
+  if (loading) return null;
+
+  const businessId = profile?.business_id;
+  const branchId = profile?.branch_id;
+
+  if (!businessId || !branchId) {
+    return (
+      <div className="p-10 max-w-lg mx-auto text-center">
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-10">
+          <div className="text-4xl mb-4">🏢</div>
+          <h2 className="text-xl font-black text-slate-800">No branch assigned</h2>
+          <p className="text-slate-500 text-sm mt-2 leading-relaxed">
+            Your POS account isn't linked to a business/branch yet, so the
+            till can't tell which stock or cash drawer to load. Ask an
+            administrator to set your branch.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <Component businessId={businessId} branchId={branchId} {...rest} />;
+}

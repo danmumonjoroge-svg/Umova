@@ -8,16 +8,24 @@ import { usePosErpAuth } from '../auth/usePosErpAuth';
 /**
  * Goods Receiving with scanning (spec sections 14–18, 41).
  *
- * Two modes, matching the real goodsReceivedService:
+ * Two modes, matching the rebuilt goodsReceivedService:
  *   - FROM PO   -> goodsReceivedService.createFromPO(poId, {...})
- *   - QUICK     -> goodsReceivedService.createQuick({...})
- *      (received_by is stamped automatically by useGoodsReceived via
- *       usePosErpAuth — no bypass, no direct inventory writes from this page.)
+ *   - QUICK     -> goodsReceivedService.createQuickReceipt({...})
+ *      (tenant_id/business_id/received_by are stamped automatically by
+ *       useGoodsReceived via usePosErpAuth — no bypass, no direct
+ *       inventory writes from this page.)
  *
  * Scanning only ever identifies a product and builds a *line* on screen.
- * The actual inventory increase, PO received-qty rollup, PO status update,
- * and supplier invoice creation all happen inside goodsReceivedService,
- * completely unmodified — this page only calls it.
+ * The actual inventory increase, PO received-qty rollup, PO status
+ * update, and stock movement recording all happen inside
+ * goodsReceivedService — this page only calls it.
+ *
+ * FIELD NAMES — updated to match the real schema (this page previously
+ * read po.order_number / poItem.quantity_ordered / poItem.quantity_received,
+ * none of which exist; the real columns are po_number / quantity /
+ * received_quantity). Internal line state (l.quantity_received,
+ * l.batch_number) is left as local UI naming — only the payload sent to
+ * the service maps those to the real column names (quantity, batch_no).
  */
 
 const emptyLineDefaults = { batch_number: '', expiry_date: '' };
@@ -27,7 +35,7 @@ export default function GoodsReceivingPage() {
 
   const { suppliers } = useSuppliers();
   const { orders: purchaseOrders, loading: poLoading } = usePurchaseOrders({ status: undefined });
-  const { createFromPO, createQuick } = useGoodsReceived();
+  const { createFromPO, createQuickReceipt } = useGoodsReceived();
 
   const [mode, setMode] = useState('PO'); // 'PO' | 'QUICK'
   const [selectedPOId, setSelectedPOId] = useState('');
@@ -73,7 +81,7 @@ export default function GoodsReceivingPage() {
 
   const remainingOnPO = (poItem) => {
     if (!poItem) return null;
-    return (poItem.quantity_ordered || 0) - (poItem.quantity_received || 0);
+    return (poItem.quantity || 0) - (poItem.received_quantity || 0);
   };
 
   // Adds one unit (rapid mode) or opens the quantity/cost/batch prompt
@@ -186,22 +194,21 @@ export default function GoodsReceivingPage() {
       const items = lines.map(l => ({
         product_id: l.product_id,
         purchase_order_item_id: l.purchase_order_item_id,
-        unit_id: l.unit_id,
-        quantity_received: l.quantity_received,
+        quantity: l.quantity_received,
         unit_cost: l.unit_cost,
-        batch_number: l.batch_number || null,
+        batch_no: l.batch_number || null,
         expiry_date: l.expiry_date || null,
       }));
 
       if (mode === 'PO') {
         await createFromPO(selectedPOId, {
-          reference_invoice: referenceInvoice,
+          invoice_no: referenceInvoice || null,
           items,
         });
       } else {
-        await createQuick({
+        await createQuickReceipt({
           supplier_id: quickSupplierId,
-          reference_invoice: referenceInvoice,
+          invoice_no: referenceInvoice || null,
           items,
         });
       }
@@ -249,7 +256,7 @@ export default function GoodsReceivingPage() {
               <option value="">{poLoading ? 'Loading purchase orders…' : 'Select Purchase Order'}</option>
               {receivablePOs.map(po => (
                 <option key={po.id} value={po.id}>
-                  {po.order_number} — {po.supplier?.name} ({po.status})
+                  {po.po_number} — {po.supplier?.name} ({po.status})
                 </option>
               ))}
             </select>
@@ -340,8 +347,8 @@ export default function GoodsReceivingPage() {
                       {l.name}
                       {l.notOnPO && <span className="ml-2 text-xs text-yellow-600">not on PO</span>}
                     </td>
-                    {mode === 'PO' && <td>{poItem?.quantity_ordered ?? '-'}</td>}
-                    {mode === 'PO' && <td>{poItem?.quantity_received ?? 0}</td>}
+                    {mode === 'PO' && <td>{poItem?.quantity ?? '-'}</td>}
+                    {mode === 'PO' && <td>{poItem?.received_quantity ?? 0}</td>}
                     <td>
                       <input
                         type="number"
@@ -467,7 +474,7 @@ function QtyCostPrompt({ initial, poItem, onCancel, onConfirm }) {
         <h3 className="font-bold text-lg">{initial.name}</h3>
         {poItem && (
           <p className="text-xs text-gray-500">
-            Ordered: {poItem.quantity_ordered} · Previously received: {poItem.quantity_received || 0} · Remaining: {(poItem.quantity_ordered || 0) - (poItem.quantity_received || 0)}
+            Ordered: {poItem.quantity} · Previously received: {poItem.received_quantity || 0} · Remaining: {(poItem.quantity || 0) - (poItem.received_quantity || 0)}
           </p>
         )}
         <label className="text-sm text-gray-600 block">Quantity received</label>

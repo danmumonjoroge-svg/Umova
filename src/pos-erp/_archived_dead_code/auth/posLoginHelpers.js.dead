@@ -1,0 +1,58 @@
+// src/pos-erp/auth/posLoginHelpers.js
+//
+// POS's version of resolveStaffLogin (src/components/Auth/loginHelpers.js).
+// Not reused directly because that one is hardwired to the main app's
+// `supabase` client — signing in through it would create the session in
+// the wrong client/storage key. Logic is intentionally identical (same
+// status checks, same "found but wrong password doesn't fall through"
+// behavior) so POS login errors feel consistent with /login.
+
+import { posSupabase } from "../services/posSupabaseClient";
+import { STAFF_ROLES } from "../../Context/AuthContext";
+
+/**
+ * @returns {Promise<{ok: true, userRecord: object} | {ok: false, reason: string, message: string}>}
+ */
+export async function resolvePosLogin(userNo, password) {
+  const { data: userRecord, error: userError } = await posSupabase
+    .from("users")
+    .select("id, member_no, name, email, role, status, auth_user_id, business_id, branch_id")
+    .eq("member_no", userNo.trim().toUpperCase())
+    .maybeSingle();
+
+  if (userError || !userRecord) {
+    return { ok: false, reason: "NOT_FOUND", message: "Staff number not found." };
+  }
+  if (userRecord.status === "inactive") {
+    return { ok: false, reason: "INACTIVE", message: "Account is inactive." };
+  }
+  if (userRecord.status === "suspended") {
+    return { ok: false, reason: "SUSPENDED", message: "Account is suspended." };
+  }
+  if (!userRecord.email) {
+    return { ok: false, reason: "NO_EMAIL", message: "No email linked to this user." };
+  }
+
+  const { error: loginError } = await posSupabase.auth.signInWithPassword({
+    email: userRecord.email,
+    password,
+  });
+
+  if (loginError) {
+    const message = loginError.message.toLowerCase().includes("invalid login credentials")
+      ? "Invalid password."
+      : loginError.message;
+    return { ok: false, reason: "BAD_PASSWORD", message };
+  }
+
+  if (!STAFF_ROLES.includes((userRecord.role || "").toLowerCase())) {
+    await posSupabase.auth.signOut({ scope: "local" });
+    return { ok: false, reason: "NOT_STAFF", message: "This account doesn't have POS access." };
+  }
+  if (!userRecord.branch_id) {
+    await posSupabase.auth.signOut({ scope: "local" });
+    return { ok: false, reason: "NO_BRANCH", message: "No branch is assigned to this account yet. Contact an administrator." };
+  }
+
+  return { ok: true, userRecord };
+}

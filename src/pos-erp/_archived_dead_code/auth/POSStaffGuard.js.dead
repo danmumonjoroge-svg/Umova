@@ -1,0 +1,39 @@
+// src/pos-erp/auth/POSStaffGuard.js
+//
+// POS's equivalent of App.js's StaffGuard — but checks posSupabase's
+// session via usePosAuth(), not the main app's useAuth(). A person can
+// be signed into /admin and signed out of /pos (or vice versa) at the
+// same time in the same browser; this guard only ever looks at the POS
+// side of that.
+
+import React from "react";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { usePosAuth } from "./POSAuthContext";
+
+function PosLoader() {
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+      <div className="bg-white rounded-3xl shadow-xl p-10 w-[380px] text-center border border-slate-100">
+        <div className="w-16 h-16 border-4 border-emerald-800 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+        <h2 className="text-xl font-black text-slate-800 tracking-tight">POS</h2>
+        <p className="text-slate-500 text-sm mt-2 font-medium">Verifying session...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function POSStaffGuard() {
+  const { user, loading, role, isPosStaff } = usePosAuth();
+  const location = useLocation();
+
+  if (loading) return <PosLoader />;
+  if (!user) return <Navigate to="/pos-login" state={{ from: location.pathname }} replace />;
+  if (!role) return <PosLoader />;
+  if (!isPosStaff) {
+    // Signed in via posSupabase but no valid staff role/branch — send them
+    // to request access rather than a dead end.
+    return <Navigate to="/pos-register" replace />;
+  }
+
+  return <Outlet />;
+}
