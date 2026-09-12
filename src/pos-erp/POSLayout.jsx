@@ -14,8 +14,21 @@
 // brand-new property business that hasn't created its first unit yet.
 // All groups always show; collapsing (not hiding) is what keeps the
 // sidebar tidy without that problem.
+//
+// RESPONSIVE FIX: the sidebar used to be a permanent w-60 flex sibling —
+// on a ~360-400px phone that's over half the screen gone before any page
+// content renders (confirmed from screenshots: the Till's payment method
+// row and "Close Shift" button were being clipped off the right edge,
+// not actually broken — there just wasn't room left). Below the `md`
+// breakpoint the sidebar is now an off-canvas drawer (fixed, translated
+// off-screen, toggled by a hamburger button in the topbar, with a
+// backdrop and auto-close on navigation); at `md` and up it reverts to
+// the original always-visible static panel. This is the single change
+// that should fix the phone screenshots — the individual pages (Till
+// included) already had reasonable `flex-col md:flex-row` responsive
+// classes of their own, they just never had the width to use them.
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { usePosErpAuth } from "./auth/usePosErpAuth";
 import { useNotifications } from "./hooks/useNotifications";
@@ -23,7 +36,7 @@ import POSTopbar from "./POSTopbar";
 import {
   LayoutDashboard, ShoppingCart, Package, Boxes, Truck, Users, UserRound, Wallet, Receipt,
   Home, Repeat, Gauge, Scissors, CalendarClock, MessageSquare, Settings, ShieldCheck,
-  LogOut, Store, BarChart3, ChevronDown, ShoppingBag, Building2, Landmark,
+  LogOut, Store, BarChart3, ChevronDown, ShoppingBag, Building2, Landmark, FileBarChart, X,
 } from "lucide-react";
 
 // Top-level items, always visible, no grouping.
@@ -78,6 +91,7 @@ const GROUPS = [
       { to: "/pos/cash", label: "Cash", icon: Wallet },
       { to: "/pos/expenses", label: "Expenses", icon: Receipt },
       { to: "/pos/reports", label: "Reports", icon: BarChart3 },
+      { to: "/pos/financials", label: "Financial Statements", icon: FileBarChart },
     ],
   },
   {
@@ -97,6 +111,7 @@ export default function POSLayout() {
   const { staffName, role, tenant, logout } = usePosErpAuth();
   const location = useLocation();
   const { count: notificationCount } = useNotifications();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isActive = (to, end) =>
     end ? location.pathname === to : location.pathname.startsWith(to);
@@ -117,6 +132,11 @@ export default function POSLayout() {
       return next;
     });
   };
+
+  // Closes the mobile drawer whenever the route changes — otherwise
+  // tapping a link would leave the drawer covering the new page. Has no
+  // visible effect on md+ (the drawer state is ignored there via CSS).
+  useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
 
   const currentPage = ALL_ITEMS.find((item) => isActive(item.to, item.end));
   const pageTitle = currentPage?.label
@@ -142,13 +162,32 @@ export default function POSLayout() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      <aside className="w-60 bg-slate-950 text-white flex flex-col shrink-0">
+      {/* Backdrop — mobile only, only while the drawer is open. Tapping
+          it closes the drawer, same as a nav click would. */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-950 text-white flex flex-col shrink-0 print:hidden
+          transform transition-transform duration-200 ease-out
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          md:translate-x-0 md:static md:z-auto md:w-60`}
+      >
         <div className="p-5 flex items-center gap-2 border-b border-slate-800">
-          <Store size={20} className="text-amber-400" />
-          <div className="min-w-0">
+          <Store size={20} className="text-amber-400 shrink-0" />
+          <div className="min-w-0 flex-1">
             <div className="font-bold text-sm truncate">{tenant?.business_name || "POS"}</div>
             <div className="text-[11px] text-slate-400 font-mono">{tenant?.business_code}</div>
           </div>
+          {/* Close button — mobile only; md+ never shows the drawer state at all */}
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white p-1" aria-label="Close menu">
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="flex-1 py-3 overflow-y-auto">
@@ -191,8 +230,10 @@ export default function POSLayout() {
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <POSTopbar title={pageTitle} notificationCount={notificationCount} />
-        <main className="flex-1 min-w-0 overflow-y-auto">
+        <div className="print:hidden">
+          <POSTopbar title={pageTitle} notificationCount={notificationCount} onMenuClick={() => setSidebarOpen(true)} />
+        </div>
+        <main className="flex-1 min-w-0 overflow-y-auto print:overflow-visible">
           <Outlet />
         </main>
       </div>

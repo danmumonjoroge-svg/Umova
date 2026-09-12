@@ -270,10 +270,10 @@ export default function POSPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      <div className="bg-gray-800 text-white p-3 flex justify-between items-center">
+    <div className="h-full flex flex-col">
+      <div className="bg-gray-800 text-white p-3 flex flex-wrap justify-between items-center gap-2">
         <span className="font-bold">POS — Shift Open</span>
-        <button onClick={() => setShowCloseShiftModal(true)} className="bg-red-600 px-3 py-1 rounded text-sm">Close Shift</button>
+        <button onClick={() => setShowCloseShiftModal(true)} className="bg-red-600 px-3 py-1 rounded text-sm shrink-0">Close Shift</button>
       </div>
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         <div className="w-full md:w-1/2 p-4 overflow-y-auto bg-gray-50">
@@ -346,9 +346,9 @@ export default function POSPage() {
           <div className="border-t pt-4 mt-4">
             <div className="flex justify-between text-lg mb-2"><span>Subtotal</span><span className="font-bold">{subtotal.toLocaleString()}</span></div>
             <div className="flex justify-between text-xl mb-4"><span>TOTAL</span><span className="font-bold text-blue-600">{total.toLocaleString()}</span></div>
-            <div className="flex gap-2 mb-3">
+            <div className="flex flex-wrap gap-2 mb-3">
               {['CASH', 'MOBILE_MONEY', 'CARD', 'CREDIT'].map(m => (
-                <button key={m} onClick={() => setPaymentMethod(m)} className={`flex-1 py-2 rounded text-sm ${paymentMethod === m ? 'bg-emerald-800 text-white' : 'bg-gray-100'}`}>{m.replace('_', ' ')}</button>
+                <button key={m} onClick={() => setPaymentMethod(m)} className={`flex-1 min-w-[70px] py-2 rounded text-sm ${paymentMethod === m ? 'bg-emerald-800 text-white' : 'bg-gray-100'}`}>{m.replace('_', ' ')}</button>
               ))}
             </div>
             {/* Customer picker. Required for CREDIT (enforced both here and

@@ -132,7 +132,7 @@ export default function CustomerCommunicationPage() {
       {/* History */}
       <section>
         <h2 className="font-bold text-slate-800 mb-3">Message History</h2>
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <tr>

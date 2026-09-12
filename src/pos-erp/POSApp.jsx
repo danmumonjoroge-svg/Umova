@@ -25,6 +25,7 @@ import CommunicationPage from "./pages/CommunicationPage";
 import CustomerCommunicationPage from "./pages/CustomerCommunicationPage";
 import SettingsPage from "./pages/SettingsPage";
 import AuditPage from "./pages/AuditPage";
+import FinancialReportsPage from "./pages/FinancialReportsPage";
 import ReportsPage from "./pages/ReportsPage";
 import InventoryPage from "./pages/InventoryPage";
 
@@ -63,6 +64,7 @@ const PosRoutes = () => (
       <Route path="messages" element={<CustomerCommunicationPage />} />
       <Route path="settings" element={<SettingsPage />} />
       <Route path="audit" element={<AuditPage />} />
+      <Route path="financials" element={<FinancialReportsPage />} />
       <Route path="reports" element={<ReportsPage />} />
     </Route>
   </Routes>

@@ -643,3 +643,116 @@ tenant without also hiding it from a brand-new property tenant who hasn't
 created their first unit yet. All groups always render; only their
 open/closed state changes. The group containing the current page starts
 expanded on load.
+
+## 18. Deck comparison + triage, and financial statements
+
+Compared the uploaded design deck against everything built this session.
+Headline finding: the deck's core architecture (one unified
+`pos_transactions`/`pos_items` engine) is NOT what got built — this
+session built on `lb_*` per the original brief's explicit "reuse existing
+working code" instruction. The `pos_appointments`/`pos_staff_commissions`
+tables found empty in Phase 6 turned out to be this deck's scaffolded-but-
+never-implemented target schema, not random abandoned scaffolding as
+assessed at the time (that assessment was reasonable given only "empty +
+unreferenced" as evidence — the deck wasn't available then).
+
+User decision: don't reconcile toward the deck's architecture. Triaged
+the deck's gap list instead:
+
+**Agreed worth building** (not yet started): role-based permission
+enforcement (frontend + backend — currently any staff can do anything any
+role could), returns/refunds + void-with-approval (brief §40-41, never
+built), POS tenant admin approve/reject/suspend/reinstate (brief §19,
+never built — every tenant tested so far was hand-approved in the DB).
+
+**Agreed not worth building**: capability-catalog-driven sidebar (the
+collapsible-groups sidebar already solves the clutter problem without new
+schema), commission reporting (brief itself defers this), automatic
+reminder scheduling (needs unconfirmed cron infra), quotations/delivery-
+notes/UoM/multi-till/offline-mode/onboarding-templates/data-export (all
+extra scope beyond the original brief, for business types not yet in use).
+
+## 19. Financial statements — Income Statement & Balance Sheet
+
+New: `financialReportsService.js` + `FinancialReportsPage.jsx`
+(`/pos/financials`), printable via `window.print()` (added `print:hidden`/
+`print:overflow-visible` to `POSLayout.jsx` so only the statement prints,
+not the sidebar/topbar). No new tables — built entirely from data that's
+already correct:
+
+- **Income Statement** — real period report (`lb_sales`/`lb_expenses`
+  both have genuine dated rows). Revenue, COGS (from `lb_sale_items.cost_price`,
+  confirmed stamped on every sale item — not assumed), Gross Profit,
+  Expenses by category, Net Income.
+- **Balance Sheet** — deliberately **"as of today" only, no historical
+  date picker**. `lb_inventory.quantity`, `lb_customers.outstanding_balance`,
+  and `lb_suppliers.outstanding_balance` are running balances with no
+  historical snapshot anywhere in this schema; a "balance sheet as of 1
+  March" would silently show today's figures mislabeled as March's for 3
+  of 4 lines. Rather than offer a partially-honest historical view, this
+  only ever shows the current position.
+  - Cash & Bank is explicitly labeled "estimated" — computed from
+    transaction history (all non-CREDIT receipts minus all non-CREDIT
+    payments, since inception), not a reconciled bank/till balance —
+    there's no bank-account ledger anywhere in this schema (matches brief
+    §39's own "at minimum track balances and references" scope).
+  - Owner's Equity is explicitly labeled "calculated" — a balancing plug
+    (Assets − Liabilities), not an independently tracked figure. This
+    schema has no capital-contributions/drawings ledger, so it can't be
+    anything else; said so on the statement itself, not just in code.
+
+All new/touched files (`financialReportsService.js`, `FinancialReportsPage.jsx`,
+`POSApp.jsx`, `POSLayout.jsx`) plus a full-repo sweep of every `.js`/`.jsx`
+file built this entire session passed esbuild. **Not tested against a
+live app.**
+
+## 20. Responsive layout fix (real bugs, confirmed by screenshots)
+
+User tested on an actual Android phone and shared screenshots — real,
+confirmed bugs, not hypothetical:
+
+1. **Sidebar was a permanent `w-60` flex sibling, no responsive behavior
+   at all.** On a ~360-400px phone that's over half the screen gone
+   before any page content renders — this alone explains every specific
+   symptom in the screenshots (clipped "Close Shift" button, "CA[RD]"
+   payment button cut off, "Amount receive[d]" field cut off): the Till
+   page's own layout is already reasonably responsive
+   (`flex-col md:flex-row`, `w-full md:w-1/2`), it just never had the
+   width to use it. Fixed: sidebar is now an off-canvas drawer below the
+   `md` breakpoint (fixed position, translated off-screen, hamburger
+   button in `POSTopbar.jsx` to open it, backdrop + auto-close on
+   navigation), and reverts to the original always-visible static panel
+   at `md` and up. Print behavior (`print:hidden` from the earlier
+   financial-statements work) is unaffected.
+
+2. **`POSPage.jsx`'s root was `h-screen`, not `h-full`.** Nested inside
+   the topbar's flex column, `h-screen` measures against the *entire*
+   viewport and ignores the 64px topbar already above it — should have
+   been sizing against the space `<main>` actually has left. Auth
+   screens' own `h-screen` usage (`POSLogin.jsx` etc.) is correct and
+   untouched — those render before the layout/topbar mounts at all, so
+   full-viewport height is the right call there.
+
+3. **12 pages' `<table>`s had no horizontal-scroll wrapper**
+   (`AppointmentsPage`, `AuditPage`, `CashPage`, `CustomerCommunicationPage`,
+   `ExpensesPage`, `InventoryPage`, `MetersPage`, `PayablesPage`,
+   `RecurringChargesPage`, `SuppliersPage`, `UnitsPage` — found by
+   scanning every page for `<table` without `overflow-x-auto` nearby, not
+   assumed). On a narrow phone these would force the whole page to
+   scroll sideways or squeeze illegibly. Matched the wrapper pattern
+   already used correctly in `CustomersPage.jsx`/`ProductsPage.jsx`
+   (`overflow-x-auto` on the card div, not `overflow-hidden` — the two
+   conflict on the x-axis) across all of them. `FinancialReportsPage.jsx`'s
+   tables are deliberately left unwrapped — simple two-column label/value
+   statement layouts that can't overflow on any real screen width, not an
+   oversight.
+
+Also made the Till's shift-status bar and payment-method button row
+`flex-wrap` with a `min-w` floor, as a defensive measure for very narrow
+phones (~320px) even after the sidebar fix.
+
+Full-repo esbuild sweep passed again after these changes. **Still not
+tested against a live app or a real device** — the screenshots that
+prompted this were the first real device feedback this entire session,
+and worth taking seriously as a reminder that nothing here has had that
+kind of scrutiny until now.

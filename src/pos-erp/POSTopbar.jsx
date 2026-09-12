@@ -13,9 +13,9 @@
 
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell } from "lucide-react";
+import { Bell, Menu } from "lucide-react";
 
-export default function POSTopbar({ title, notificationCount = 0 }) {
+export default function POSTopbar({ title, notificationCount = 0, onMenuClick }) {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -24,11 +24,21 @@ export default function POSTopbar({ title, notificationCount = 0 }) {
   }, []);
 
   return (
-    <div className="h-16 bg-white border-b border-slate-200 border-t-2 border-t-amber-400 flex items-center justify-between px-6 shrink-0">
-      <h2 className="font-bold text-slate-800">{title}</h2>
+    <div className="h-16 bg-white border-b border-slate-200 border-t-2 border-t-amber-400 flex items-center justify-between px-4 sm:px-6 shrink-0">
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Hamburger — only rendered on phones/small tablets (md:hidden).
+            On md+ the sidebar is always visible as a static panel, so
+            there's nothing for this to toggle there. */}
+        {onMenuClick && (
+          <button onClick={onMenuClick} className="md:hidden text-slate-500 hover:text-slate-800 -ml-1 p-1" aria-label="Open menu">
+            <Menu size={22} />
+          </button>
+        )}
+        <h2 className="font-bold text-slate-800 truncate">{title}</h2>
+      </div>
 
-      <div className="flex items-center gap-5">
-        <span className="text-xs text-slate-400 hidden sm:block">
+      <div className="flex items-center gap-3 sm:gap-5 shrink-0">
+        <span className="text-xs text-slate-400 hidden lg:block">
           {now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
           {" · "}
           {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
