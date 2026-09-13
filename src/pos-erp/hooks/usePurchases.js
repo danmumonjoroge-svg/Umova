@@ -49,7 +49,13 @@ export function usePurchaseOrders(options = {}) {
     return result;
   }, [staffId, tenant]);
 
-  return { orders, loading, error, fetch, create };
+  const setStatus = useCallback(async (id, status) => {
+    const result = await purchaseOrderService.updateStatus(id, status);
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, ...result } : o));
+    return result;
+  }, []);
+
+  return { orders, loading, error, fetch, create, setStatus };
 }
 
 export function useGoodsReceived(options = {}) {

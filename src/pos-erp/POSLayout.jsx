@@ -36,7 +36,7 @@ import POSTopbar from "./POSTopbar";
 import {
   LayoutDashboard, ShoppingCart, Package, Boxes, Truck, Users, UserRound, Wallet, Receipt,
   Home, Repeat, Gauge, Scissors, CalendarClock, MessageSquare, Settings, ShieldCheck,
-  LogOut, Store, BarChart3, ChevronDown, ShoppingBag, Building2, Landmark, FileBarChart, X,
+  LogOut, Store, BarChart3, ChevronDown, ShoppingBag, Building2, Landmark, FileBarChart, X, ClipboardList,
 } from "lucide-react";
 
 // Top-level items, always visible, no grouping.
@@ -59,6 +59,7 @@ const GROUPS = [
     items: [
       { to: "/pos/products", label: "Products", icon: Package },
       { to: "/pos/inventory", label: "Inventory", icon: Boxes },
+      { to: "/pos/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
       { to: "/pos/goods-receiving", label: "Goods Receiving", icon: Truck },
       { to: "/pos/suppliers", label: "Suppliers", icon: Users },
       { to: "/pos/payables", label: "Payables", icon: Wallet },

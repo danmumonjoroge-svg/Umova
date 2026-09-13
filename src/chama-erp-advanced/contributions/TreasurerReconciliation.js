@@ -132,7 +132,12 @@ export default function TreasurerReconciliation({ chamaId: chamaIdProp }) {
                     <span>{accountsById[row.bank_account_id] || "—"}</span>
                     <span className="tr-amount">{formatKES(row.amount)}</span>
                     <span className="tr-ref">{row.transaction_ref || "—"}</span>
-                    <span className="tr-purpose">{row.contribution_type.replace("_", " ")}</span>
+                    <span className="tr-purpose">
+                      {row.contribution_type.replace("_", " ")}
+                      {row.contribution_type === "loan_repayment" && !row.loan_id && (
+                        <span className="tr-mismatch-warning" title="This will fail to post — no loan selected"> ⚠ no loan linked</span>
+                      )}
+                    </span>
                     <button className="tr-verify-btn" onClick={() => openVerifyModal(row)} disabled={busyId === row.id}>Check account</button>
                   </div>
                 ))}

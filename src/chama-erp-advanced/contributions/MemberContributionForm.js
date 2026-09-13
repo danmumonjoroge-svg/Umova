@@ -27,7 +27,7 @@ const STATUS_META = {
   REJECTED: { icon: XCircle, label: "Rejected", tone: "rejected" },
 };
 
-const emptyForm = { bank_account_id: "", amount: "", contribution_type: "savings", contributed_on: new Date().toISOString().slice(0, 10), payment_method: "MPESA", transaction_ref: "", member_notes: "" };
+const emptyForm = { bank_account_id: "", amount: "", contribution_type: "savings", contributed_on: new Date().toISOString().slice(0, 10), payment_method: "MPESA", transaction_ref: "", member_notes: "", loan_id: "" };
 
 function formatKES(v) { return `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`; }
 
@@ -37,6 +37,7 @@ export default function MemberContributionForm({ chamaId: chamaIdProp }) {
 
   const [accounts, setAccounts] = useState([]);
   const [history, setHistory] = useState([]);
+  const [myLoans, setMyLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -46,12 +47,20 @@ export default function MemberContributionForm({ chamaId: chamaIdProp }) {
   const load = useCallback(async () => {
     if (!chamaId || !member?.id) return;
     setLoading(true);
-    const [accRes, histRes] = await Promise.all([
+    const [accRes, histRes, loansRes] = await Promise.all([
       supabase.from("chama_bank_accounts").select("*").eq("chama_id", chamaId).eq("is_active", true),
       supabase.from("chama_contribution_requests").select("*").eq("chama_id", chamaId).eq("member_id", member.id).order("created_at", { ascending: false }).limit(25),
+      // FIX (AUDIT_REPORT.md, Finding P0-4): "Loan Repayment" was offered as a
+      // contribution type with no way to say WHICH loan it was for, so a
+      // repayment declared here could never actually be applied against a
+      // real chama_loans row — it silently posted as a credit with the
+      // member's debt untouched. Fetch their disbursed, still-open loans so
+      // they can be tied to one.
+      supabase.from("chama_loans").select("id, amount, balance").eq("chama_id", chamaId).eq("member_id", member.id).eq("disbursed", true).eq("status", "active"),
     ]);
     setAccounts(accRes.data || []);
     setHistory(histRes.data || []);
+    setMyLoans(loansRes.data || []);
     setLoading(false);
   }, [chamaId, member?.id]);
 
@@ -63,6 +72,7 @@ export default function MemberContributionForm({ chamaId: chamaIdProp }) {
     if (!form.bank_account_id) return setError("Select which chama account you paid into.");
     if (!form.amount || Number(form.amount) <= 0) return setError("Enter a valid amount.");
     if (form.payment_method !== "CASH" && !form.transaction_ref.trim()) return setError("Enter the transaction reference.");
+    if (form.contribution_type === "loan_repayment" && !form.loan_id) return setError("Select which loan this repayment is for.");
 
     setSubmitting(true);
     const { error: err } = await supabase.from("chama_contribution_requests").insert([{
@@ -71,6 +81,7 @@ export default function MemberContributionForm({ chamaId: chamaIdProp }) {
       bank_account_id: form.bank_account_id,
       amount: Number(form.amount),
       contribution_type: form.contribution_type,
+      loan_id: form.contribution_type === "loan_repayment" ? form.loan_id : null,
       contributed_on: form.contributed_on,
       payment_method: form.payment_method,
       transaction_ref: form.transaction_ref || null,
@@ -119,6 +130,17 @@ export default function MemberContributionForm({ chamaId: chamaIdProp }) {
               {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </label>
+
+          {form.contribution_type === "loan_repayment" && (
+            <label>
+              Which loan is this repaying?
+              <select value={form.loan_id} onChange={(e) => setForm((f) => ({ ...f, loan_id: e.target.value }))} required>
+                <option value="">Select loan</option>
+                {myLoans.map((l) => <option key={l.id} value={l.id}>{formatKES(l.balance ?? l.amount)} balance</option>)}
+              </select>
+              {myLoans.length === 0 && <small>You have no active disbursed loan on file.</small>}
+            </label>
+          )}
 
           <label>
             Date paid

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { useLocation, Navigate } from "react-router-dom";
 import { useChama } from "../ChamaContext";
+import LoginPhone from "./LoginPhone";
 import RegisterAccount from "./RegisterAccount";
 import RegisterChama from "./RegisterChama";
 import ChamaSelector from "./ChamaSelector";
@@ -24,18 +24,26 @@ import "./AuthGate.css";
 // (auto-picked if there's only one, chosen from a list otherwise), and its
 // license is valid.
 //
-// Plain login now happens on the shared /login screen (UnifiedLogin.js),
-// not here — landing on /chama while logged out redirects there. The
-// registration screens (new account / new chama) still live here, since
-// they're chama-specific; UnifiedLogin's "register" links navigate to
-// /chama with state={{screen: "register_account" | "register_chama"}} to
-// reach them directly instead of via a plain login form.
+// -----------------------------------------------------------------------------
+// FIX (see AUDIT_REPORT.md, Finding P0-2): this file previously redirected
+// authStage === "phone" to <Navigate to="/login" replace /> and relied on a
+// "shared UnifiedLogin.js" screen that is not part of this package, is not
+// referenced by App.js in the README's own wiring instructions, and does
+// not exist anywhere in the delivered zip. Every fresh login attempt hit a
+// route with nothing mounted on it. LoginPhone.js — fully built, styled,
+// and wired to loginWithPhone()/registerUser() in ChamaContext — was
+// present in the package but never actually rendered by anything.
+// This restores AuthGate to render LoginPhone directly, exactly as the
+// package's own README describes the flow ("AuthGate renders LoginPhone ->
+// ChamaSelector if 2+ chamas -> LicenseBlocked -> otherwise your
+// children"). If you have since built a real shared /login screen outside
+// this package on purpose, swap the block below back to a <Navigate>, but
+// make sure that route is actually mounted before you do.
 // -----------------------------------------------------------------------------
 
 export default function AuthGate({ children }) {
   const { authStage } = useChama();
-  const location = useLocation();
-  const [screen, setScreen] = useState(location.state?.screen || "login");
+  const [screen, setScreen] = useState("login"); // login | register_account | register_chama
 
   if (authStage === "checking") {
     return (
@@ -48,9 +56,12 @@ export default function AuthGate({ children }) {
   if (authStage === "phone") {
     if (screen === "register_account") return <RegisterAccount onBack={() => setScreen("login")} />;
     if (screen === "register_chama") return <RegisterChama onBack={() => setScreen("login")} />;
-    // Plain login (screen === "login") funnels through the shared entry
-    // point instead of rendering LoginPhone inline here.
-    return <Navigate to="/login" replace />;
+    return (
+      <LoginPhone
+        onRegisterClick={() => setScreen("register_account")}
+        onNewChamaClick={() => setScreen("register_chama")}
+      />
+    );
   }
 
   if (authStage === "select_chama") {

@@ -26,6 +26,7 @@ import CustomerCommunicationPage from "./pages/CustomerCommunicationPage";
 import SettingsPage from "./pages/SettingsPage";
 import AuditPage from "./pages/AuditPage";
 import FinancialReportsPage from "./pages/FinancialReportsPage";
+import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
 import ReportsPage from "./pages/ReportsPage";
 import InventoryPage from "./pages/InventoryPage";
 
@@ -50,6 +51,7 @@ const PosRoutes = () => (
       <Route path="products" element={<ProductsPage />} />
       <Route path="customers" element={<CustomersPage />} />
       <Route path="inventory" element={<InventoryPage />} />
+      <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
       <Route path="goods-receiving" element={<GoodsReceivingPage />} />
       <Route path="suppliers" element={<SuppliersPage />} />
       <Route path="payables" element={<PayablesPage />} />

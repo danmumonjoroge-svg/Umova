@@ -48,6 +48,7 @@ const LoanRepaymentDesk      = React.lazy(() => import("./loans/LoanRepaymentDes
 const MemberContributionForm = React.lazy(() => import("./contributions/MemberContributionForm"));
 const TreasurerReconciliation = React.lazy(() => import("./contributions/TreasurerReconciliation"));
 const ChamaBankAccounts      = React.lazy(() => import("./contributions/ChamaBankAccounts"));
+const WelfareDashboard       = React.lazy(() => import("./welfare/WelfareDashboard"));
 const WelfareCaseDesk        = React.lazy(() => import("./welfare/WelfareCaseDesk"));
 const WelfareEventPlanner    = React.lazy(() => import("./welfare/WelfareEventPlanner"));
 const WelfareInsightsReport  = React.lazy(() => import("./welfare/WelfareInsightsReport"));
@@ -76,6 +77,7 @@ const NAV = [
   {
     type: "group", key: "welfare", label: "Welfare", icon: HeartHandshake,
     items: [
+      { key: "welfare-dashboard", label: "Dashboard", icon: HeartHandshake, Component: WelfareDashboard, roles: ["welfare_officer", "secretary", "treasurer", "chairperson"] },
       { key: "welfare-cases", label: "Cases", icon: HeartHandshake, Component: WelfareCaseDesk, roles: ["welfare_officer", "secretary", "treasurer", "chairperson"] },
       { key: "welfare-events", label: "Events", icon: CalendarPlus, Component: WelfareEventPlanner, roles: ["welfare_officer", "secretary", "treasurer", "chairperson"] },
       { key: "welfare-insights", label: "Insights", icon: TrendingUp, Component: WelfareInsightsReport, roles: ["welfare_officer", "secretary", "treasurer", "chairperson"] },
@@ -217,7 +219,10 @@ export default function ChamaDashboardAdvanced() {
 
         <main className="cda-content">
           <Suspense fallback={<Loading />}>
-            {ActiveComponent && <ActiveComponent chamaId={chama?.id} />}
+            {/* onNavigate lets WelfareDashboard's alert/action cards jump straight
+                to the relevant Welfare tab. Harmless extra prop for every other
+                screen here, which simply ignores it. */}
+            {ActiveComponent && <ActiveComponent chamaId={chama?.id} onNavigate={(view) => selectLeaf(view, "welfare")} />}
           </Suspense>
         </main>
       </div>

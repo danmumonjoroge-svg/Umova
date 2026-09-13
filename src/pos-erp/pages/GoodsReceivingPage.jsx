@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePurchaseOrders, useGoodsReceived } from '../hooks/usePurchases';
 import { useSuppliers } from '../hooks/useSuppliers';
+import { useProducts } from '../hooks/useProducts';
 import { ScannerModal, useBarcodeScanner, SCAN_RESULTS } from '../index';
 import { productService } from '../services/productService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
@@ -34,6 +35,7 @@ export default function GoodsReceivingPage() {
   const { staffId } = usePosErpAuth();
 
   const { suppliers } = useSuppliers();
+  const { products } = useProducts();
   const { orders: purchaseOrders, loading: poLoading } = usePurchaseOrders({ status: undefined });
   const { createFromPO, createQuickReceipt } = useGoodsReceived();
 
@@ -42,6 +44,7 @@ export default function GoodsReceivingPage() {
   const [quickSupplierId, setQuickSupplierId] = useState('');
   const [referenceInvoice, setReferenceInvoice] = useState('');
   const [scanEntryMode, setScanEntryMode] = useState('ONE_BY_ONE'); // 'ONE_BY_ONE' | 'QUANTITY'
+  const [manualQuery, setManualQuery] = useState(''); // search-and-add without scanning — for no-barcode items or when scanning just isn't wanted
 
   // GRN lines being built on screen. Keyed by product_id.
   // { product_id, purchase_order_item_id, name, sku, quantity_received,
@@ -126,6 +129,28 @@ export default function GoodsReceivingPage() {
     notOnPO: mode === 'PO' && !poItem,
     ...emptyLineDefaults,
   });
+
+  // Manual add — search by name/SKU and add directly, no scan required.
+  // This is the only way to add an item that has no barcode at all (or
+  // one you don't have handy to scan); it works identically for barcoded
+  // products too. In PO mode this still checks whether the picked
+  // product is on the PO (poItemFor) so over-receive warnings and the
+  // Ordered/Prev.Received columns work the same as a scanned line.
+  const manualMatches = useMemo(() => {
+    const q = manualQuery.trim().toLowerCase();
+    if (!q) return [];
+    const alreadyAdded = new Set(lines.map(l => l.product_id));
+    return products
+      .filter(p => !alreadyAdded.has(p.id) && (p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q)))
+      .slice(0, 8);
+  }, [manualQuery, products, lines]);
+
+  const addManualLine = (product) => {
+    const poItem = mode === 'PO' ? poItemFor(product.id) : null;
+    setLines((prev) => [...prev, buildLine(product, poItem, 1)]);
+    if (poItem) checkOverReceive(poItem, 1);
+    setManualQuery('');
+  };
 
   const checkOverReceive = (poItem, requestedTotal) => {
     if (!poItem) { setOverReceiveWarning(''); return; }
@@ -307,6 +332,35 @@ export default function GoodsReceivingPage() {
               Quantity
             </label>
           </div>
+        </div>
+
+        {/* Manual add — no scan needed. The only way to add an item with
+            no barcode (or when scanning one isn't convenient); works the
+            same for barcoded products too. */}
+        <div className="relative mb-4">
+          <input
+            placeholder="Or type a product name / SKU to add manually (no scanning)…"
+            value={manualQuery}
+            onChange={e => setManualQuery(e.target.value)}
+            disabled={mode === 'PO' ? !selectedPOId : !quickSupplierId}
+            className="w-full border rounded px-3 py-2.5 disabled:bg-gray-50 disabled:text-gray-400"
+          />
+          {manualMatches.length > 0 && (
+            <div className="absolute z-10 left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-56 overflow-y-auto">
+              {manualMatches.map(p => {
+                const poItem = mode === 'PO' ? poItemFor(p.id) : null;
+                return (
+                  <button
+                    type="button" key={p.id} onClick={() => addManualLine(p)}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex justify-between items-center"
+                  >
+                    <span>{p.name} <span className="text-gray-400 text-xs">{p.sku}</span></span>
+                    {mode === 'PO' && !poItem && <span className="text-xs text-yellow-600">not on PO</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {overReceiveWarning && (

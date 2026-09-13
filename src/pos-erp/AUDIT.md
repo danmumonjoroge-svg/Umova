@@ -756,3 +756,37 @@ tested against a live app or a real device** — the screenshots that
 prompted this were the first real device feedback this entire session,
 and worth taking seriously as a reminder that nothing here has had that
 kind of scrutiny until now.
+
+## 21. Purchase Orders page + manual (no-scan) line entry in Goods Receiving
+
+Two real gaps, both confirmed by reading the existing code before
+building, not assumed from the user's description:
+
+1. **No Purchase Orders page existed anywhere.** `purchaseOrderService`
+   (create/getAll/getById/updateStatus) was already fully built, and
+   `GoodsReceivingPage`'s "From Purchase Order" mode already reads from
+   it — but nothing anywhere ever called `create()`, so that dropdown was
+   always empty. Built `PurchaseOrdersPage.jsx` (`/pos/purchase-orders`,
+   in the Retail group, right before Goods Receiving): supplier select +
+   product search-and-add line items + a "Mark as Sent" action (new POs
+   are created `DRAFT`, matching `purchaseOrderService.create()`'s own
+   default — only `SENT`/`PARTIALLY_RECEIVED` orders are receivable, so
+   `DRAFT` is a deliberate "not ready yet" state). Added a small `setStatus`
+   wrapper to `usePurchaseOrders` (the RPC-equivalent, `updateStatus()`,
+   already existed in the service; the hook just hadn't exposed it).
+
+2. **Goods Receiving had no way to add a line without scanning.**
+   Checked first: quantity entry already existed (a "Scan Mode: One by
+   One / Quantity" toggle, plus every line's quantity is already an
+   editable table cell) — but scanning was still required to *identify*
+   the product in the first place. Added a manual search-by-name/SKU
+   input next to the scan button (`manualQuery`/`manualMatches`/
+   `addManualLine` in `GoodsReceivingPage.jsx`) that adds a line directly
+   through the same `buildLine()`/`checkOverReceive()` path a scanned
+   line already goes through — so PO matching, over-receive warnings, and
+   the "not on PO" flag all work identically whether the line came from a
+   scan or a search. This is what actually covers "add items with no
+   barcode" — a name search doesn't need one — rather than a separate,
+   parallel no-barcode flow.
+
+Full-repo esbuild sweep passed. **Not tested against a live app.**

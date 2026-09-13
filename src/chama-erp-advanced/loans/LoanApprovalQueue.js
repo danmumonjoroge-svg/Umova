@@ -80,75 +80,39 @@ export default function LoanApprovalQueue({ chamaId: chamaIdProp }) {
   const openModal = (app, type) => { setModal({ app, type }); setComment(""); };
   const closeModal = () => { setModal(null); setComment(""); };
 
+  // FIX (see AUDIT_REPORT.md, Finding P0-3): this used to fetch the
+  // application, splice a new entry into its JS-side `approvals` array,
+  // then write the whole array back — a classic lost-update race. If two
+  // officials in different roles approved within the same round-trip, the
+  // second write's stale snapshot could silently erase the first person's
+  // approval (or, on unlucky timing, mis-fire "fully approved" without a
+  // real quorum). The read-modify-write now happens inside a single
+  // row-locked Postgres function (submit_loan_decision, sql/006) so two
+  // concurrent decisions can never clobber each other.
   const submitDecision = async (decision) => {
     const app = modal.app;
     setBusyId(app.id);
 
-    const { data: existingRaw, error: fetchErr } = await supabase
-      .from("chama_loan_applications")
-      .select("*")
-      .eq("id", app.id)
-      .single();
-
-    if (fetchErr) { setBusyId(null); setToast({ type: "error", text: fetchErr.message }); return; }
-    const existing = normalizeApplication(existingRaw);
-
-    const approvals = existing.approvals;
-    if (approvals.some((a) => a.role === myRole)) {
-      setBusyId(null); setToast({ type: "error", text: "You've already recorded a decision in this role." });
-      closeModal();
-      return;
-    }
-
-    const entry = { role: myRole, member_id: member.id, name: member.name, decision, comment: comment || null, decided_at: new Date().toISOString() };
-    const newApprovals = [...approvals, entry];
-
-    if (decision === "reject") {
-      const { error } = await supabase.from("chama_loan_applications")
-        .update({ approvals: JSON.stringify(newApprovals), status: "Rejected", rejected_at: new Date().toISOString(), remarks: comment || `Rejected by ${myRole}` })
-        .eq("id", app.id);
-      setBusyId(null);
-      if (error) setToast({ type: "error", text: error.message });
-      else { setToast({ type: "success", text: "Application rejected." }); closeModal(); load(); }
-      return;
-    }
-
-    const chain = existing.approver_roles;
-    const approvedRoles = newApprovals.filter((a) => a.decision === "approve").map((a) => a.role);
-    const fullyApproved = chain.every((r) => approvedRoles.includes(r));
-
-    const updateFields = { approvals: JSON.stringify(newApprovals), status: fullyApproved ? "Approved" : "Awaiting Approval" };
-    let newLoanId = null;
-    if (fullyApproved) {
-      newLoanId = crypto.randomUUID();
-      updateFields.loan_id = newLoanId;
-      updateFields.approved_at = new Date().toISOString();
-    }
-
-    const { error } = await supabase.from("chama_loan_applications").update(updateFields).eq("id", app.id);
-    if (error) { setBusyId(null); setToast({ type: "error", text: error.message }); return; }
-
-    if (fullyApproved) {
-      // Create the disbursable loan record. Disbursement itself (moving money
-      // out of a chama account) happens in LoanDisbursementDesk.js, treasurer-only.
-      await supabase.from("chama_loans").insert([{
-        id: newLoanId,
-        chama_id: chamaId,
-        member_id: existing.member_id,
-        member_name: existing.member_name,
-        application_id: existing.id,
-        amount: existing.requested_amount,
-        interest_rate: existing.interest_rate,
-        interest_type: existing.interest_type,
-        repayment_months: existing.repayment_months,
-        balance: existing.requested_amount,
-        disbursed: false,
-        status: "active",
-      }]);
-    }
+    const { data, error } = await supabase.rpc("submit_loan_decision", {
+      p_application_id: app.id,
+      p_member_id: member.id,
+      p_role: myRole,
+      p_decision: decision,
+      p_comment: comment || null,
+    });
 
     setBusyId(null);
-    setToast({ type: "success", text: fullyApproved ? "Fully approved — sent to disbursement." : "Your sign-off was recorded." });
+    if (error) { setToast({ type: "error", text: error.message }); return; }
+
+    const result = Array.isArray(data) ? data[0] : data;
+    setToast({
+      type: "success",
+      text: decision === "reject"
+        ? "Application rejected."
+        : result?.fully_approved
+          ? "Fully approved — sent to disbursement."
+          : "Your sign-off was recorded.",
+    });
     closeModal();
     load();
   };
