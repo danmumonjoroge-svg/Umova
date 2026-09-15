@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
+import PasskeySettings from "../Auth/PasskeySettings";
 import { 
   User, ShieldCheck, Mail, Phone, FileText, 
   Users, Camera, CheckCircle, Save, X, RefreshCw 
@@ -315,6 +316,11 @@ export default function Profile({ memberNo: propMemberNo }) {
         )}
 
       </div>
+
+      {/* Sign-in security — lets the member enrol this device for
+          fingerprint login. Without this section nothing in the app ever
+          called registerPasskey(), so no account could have a passkey. */}
+      <PasskeySettings />
     </div>
   );
 }

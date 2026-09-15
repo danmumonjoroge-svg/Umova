@@ -20,11 +20,13 @@
 // right sub-view — this file never renders ChamaSelector/LicenseBlocked
 // itself, to avoid having two places that decide which of those to show.
 //
-// Face ID / Fingerprint: webauthnHelpers.loginWithPasskey() looks up
-// whatever identifier is currently typed, and if that account has a
-// registered passkey, runs the platform authenticator prompt and signs
-// in directly — no password needed. If no passkey is registered for
-// that identifier, it just falls back silently to the password field.
+// Face ID / Fingerprint: webauthnHelpers.loginWithPasskey() signs in with
+// nothing typed at all — no member number, no password. Passkeys are
+// registered as discoverable credentials, so the authenticator itself
+// holds the user handle and the biometric check identifies the account.
+// If the identifier field happens to be filled in it's passed along as a
+// hint, which keeps older non-discoverable passkeys working; otherwise it
+// falls back silently to the password field.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from "react";
@@ -153,21 +155,30 @@ export default function UnifiedLogin() {
     setSuccess("");
 
     const trimmed = identifier.trim();
-    if (!trimmed) {
-      setError("Enter your member number or user number first, then use Face ID / Fingerprint.");
-      return;
-    }
-    if (looksLikePhoneNumber(trimmed)) {
-      setError("Face ID / Fingerprint isn't available for Chama accounts yet — use your password.");
-      return;
-    }
+
+    // Nothing needs to be typed. If the field happens to be filled in
+    // with a member/user code we pass it along, which keeps passkeys
+    // registered before discoverable credentials were required working —
+    // those can't be found without an explicit credential list. A phone
+    // number is a Chama account, which has its own separate login, so
+    // it's never a useful hint here.
+    const hint = trimmed && !looksLikePhoneNumber(trimmed) ? trimmed : undefined;
 
     setPasskeyBusy(true);
     try {
-      const result = await loginWithPasskey(trimmed);
+      const result = await loginWithPasskey(hint);
+
+      if (result.cancelled) {
+        // User dismissed the OS prompt — not an error, say nothing.
+        return;
+      }
 
       if (!result.usedPasskey) {
-        setError("No Face ID / Fingerprint is set up for this account yet. Enter your password to sign in, or add a passkey afterwards in Settings.");
+        setError(
+          hint
+            ? "No Face ID / Fingerprint is set up for this account yet. Enter your password to sign in, then add it in Settings."
+            : "No Face ID / Fingerprint is set up on this device yet. Sign in with your password once, then add it in Settings."
+        );
         return;
       }
 

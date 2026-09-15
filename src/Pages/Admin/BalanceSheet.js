@@ -27,7 +27,11 @@ export default function BalanceSheet() {
 
     const [{ data: coaData }, { data: glData }] = await Promise.all([
       supabase.from("chart_of_accounts").select("*"),
-      supabase.from("general_ledger").select("*")
+      // Only finalized rows — matches get_trial_balance's filter.
+      // Historical PENDING/pending/posted rows were backfilled to POSTED;
+      // this guards against anything non-final reaching this report going
+      // forward too.
+      supabase.from("general_ledger").select("*").in("status", ["POSTED", "APPROVED"])
     ]);
 
     setCoa(coaData || []);

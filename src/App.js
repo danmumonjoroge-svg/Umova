@@ -37,6 +37,8 @@ import LicenseManager           from "./chama-erp-advanced/platform-admin/Licens
 import AdminLayout            from "./Pages/Admin/AdminLayout";
 import AdminDashboard         from "./Pages/Admin/Dashboard";
 import AdminERPDashboard      from "./Pages/Admin/ERPDashboard";
+import AdminJournalEntry      from "./Pages/Admin/JournalEntry";
+import AdminAccountingPeriods from "./Pages/Admin/AccountingPeriods";
 import AdminMembers           from "./Pages/Admin/Members";
 import AdminMemberStatements  from "./Pages/Admin/MemberStatements";
 import AdminLoans             from "./Pages/Admin/Loans";
@@ -52,6 +54,11 @@ import AdminIncomeStatement   from "./Pages/Admin/IncomeStatement";
 import AdminBalanceSheet      from "./Pages/Admin/BalanceSheet";
 import AdminReports           from "./Pages/Admin/Reports";
 import AdminPayments          from "./Pages/Admin/Payments";
+import AdminWithdrawal        from "./Pages/Admin/Withdrawal";
+import AdminCashBankManagement from "./Pages/Admin/CashBankManagement";
+import AdminAccountsPayable    from "./Pages/Admin/AccountsPayable";
+import AdminAccountsReceivable from "./Pages/Admin/AccountsReceivable";
+import AdminFixedAssets        from "./Pages/Admin/FixedAssets";
 import AdminSettings          from "./Pages/Admin/Settings";
 import AdminStoryDashboard    from "./Pages/Admin/StoryDashboard";
 import POSRegistrationRequests from "./Pages/Admin/POSRegistrationRequests";
@@ -79,6 +86,12 @@ import POSTenants from "./Pages/Admin/POSTenants";
 // note at the bottom of POSTenants.js: this doesn't retire either of
 // the two mechanisms below, it just makes both visible in one place.
 import POSAdminDashboard from "./Pages/Admin/POSAdminDashboard";
+
+// Financial admin's oversight hub into Chama (counts + links out), the
+// direct counterpart to POSAdminDashboard above. The Chama app itself
+// (/chama) and its platform-admin (/platform-admin) were already wired
+// in above — see the imports near the top of this file.
+import ChamaAdminDashboard from "./Pages/Admin/ChamaAdminDashboard";
 
 // STAFF_ROLES is imported from AuthContext.js — single source of truth,
 // also used by AdminLogin.js so the pre-signin role gate and the post-
@@ -341,10 +354,17 @@ function App() {
           <Route path="loan-penalties" element={<AdminLoanPenalties />} />
           <Route path="interest-dashboard" element={<AdminInterestDashboard />} />
           <Route path="trial-balance" element={<AdminTrialBalance />} />
+          <Route path="journal-entry" element={<AdminJournalEntry />} />
+          <Route path="accounting-periods" element={<AdminAccountingPeriods />} />
           <Route path="income-statement" element={<AdminIncomeStatement />} />
           <Route path="balance-sheet" element={<AdminBalanceSheet />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="payments" element={<AdminPayments />} />
+          <Route path="withdrawal" element={<AdminWithdrawal />} />
+          <Route path="cash-bank" element={<AdminCashBankManagement />} />
+          <Route path="accounts-payable" element={<AdminAccountsPayable />} />
+          <Route path="accounts-receivable" element={<AdminAccountsReceivable />} />
+          <Route path="fixed-assets" element={<AdminFixedAssets />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="stories" element={<AdminStoryDashboard />} />
         </Route>
@@ -385,6 +405,16 @@ function App() {
       <Route path="/admin/pos-requests" element={<AdminLevelGuard />}>
         <Route element={<AdminLayout />}>
           <Route index element={<POSRegistrationRequests />} />
+        </Route>
+      </Route>
+
+      {/* Financial admin's Chama oversight hub — counterpart to
+          /admin/pos above. Uses this app's own admin roles. The Chama
+          app itself (/chama) and its license manager (/platform-admin)
+          are already routed earlier in this file. */}
+      <Route path="/admin/chama" element={<AdminLevelGuard />}>
+        <Route element={<AdminLayout />}>
+          <Route index element={<ChamaAdminDashboard />} />
         </Route>
       </Route>
 

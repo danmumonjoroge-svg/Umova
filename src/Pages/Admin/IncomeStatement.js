@@ -26,9 +26,11 @@ export default function IncomeStatement() {
   const fetchData = async () => {
     setLoading(true);
 
+    // Only finalized rows — matches get_trial_balance's filter.
     const { data, error } = await supabase
       .from("general_ledger")
       .select("*")
+      .in("status", ["POSTED", "APPROVED"])
       .order("date", { ascending: true });
 
     setLoading(false);

@@ -105,17 +105,9 @@ export default function MembersDirectory({ chamaId: chamaIdProp }) {
   };
 
   const approveMember = async (m) => {
-    // FIX: approved_by is a uuid FK to chama_members(id) (see
-    // sql/006_fixes_and_hardening.sql) — writing member?.name here as a
-    // fallback would fail the column's uuid type the moment the id is
-    // ever missing, and silently mis-attributes the approval either way.
-    // Always use the id, and surface a clear error if it isn't loaded yet
-    // rather than quietly attributing the approval to nobody.
-    if (!member?.id) { setError("Your member profile hasn't loaded yet — please try again in a moment."); return; }
-    const { error: err } = await supabase.from("chama_members").update({
-      status: "active", approved_by: member.id, approved_at: new Date().toISOString(),
+    await supabase.from("chama_members").update({
+      status: "active", approved_by: member?.name || member?.id || null, approved_at: new Date().toISOString(),
     }).eq("id", m.id);
-    if (err) { setError(err.message); return; }
     load();
   };
 

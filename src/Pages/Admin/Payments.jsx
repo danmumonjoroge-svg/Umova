@@ -2,13 +2,19 @@ import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
 import { generateReceiptPDF } from "../../utils/generateReceiptPDF";
 import logo from "../../asset/logo/umovalogo.png";
+import { postJournal } from "../../services/journalAPI";
+import { getSystemAccount } from "../../services/chartOfAccountsAPI";
 
-const ACCOUNTS = [
-  { code: 1007, name: "Cash" },
-  { code: 1018, name: "Savings" },
-  { code: 1011, name: "Loans" },
-  { code: 1020, name: "Interest" },
-  { code: 1012, name: "Share Capital" },
+// Loaded from chart_of_accounts (system_account_key) at mount instead of
+// hardcoded — see SYSTEM_ACCOUNT_KEYS below and the useEffect that
+// resolves them. Keeping the { code, name } shape the existing dropdown
+// already expects.
+const SYSTEM_ACCOUNT_KEYS = [
+  { key: "CASH", name: "Cash" },
+  { key: "MEMBER_SAVINGS", name: "Savings" },
+  { key: "LOAN_RECEIVABLE", name: "Loans" },
+  { key: "INTEREST_INCOME", name: "Interest" },
+  { key: "SHARE_CAPITAL", name: "Share Capital" },
 ];
 
 const num = (v) => (v === "" || v === null || isNaN(v) ? 0 : Number(v));
@@ -26,16 +32,38 @@ export default function Payments() {
   const [transactionDate, setTransactionDate] = useState("");
 
   const [allocations, setAllocations] = useState([
-    { account: 1018, amount: "" },
+    { account: "", amount: "" },
   ]);
 
   const [loading, setLoading] = useState(false);
+  const [accountIds, setAccountIds] = useState(null); // { CASH: id, MEMBER_SAVINGS: id, ... }
+  const [accountsLoading, setAccountsLoading] = useState(true);
 
   // ================= LOAD =================
   useEffect(() => {
     fetchMembers();
     fetchLedger();
+    loadSystemAccounts();
   }, []);
+
+  const loadSystemAccounts = async () => {
+    setAccountsLoading(true);
+    try {
+      const resolved = {};
+      for (const { key } of SYSTEM_ACCOUNT_KEYS) {
+        resolved[key] = await getSystemAccount(key);
+      }
+      setAccountIds(resolved);
+      // Default allocation now that we know MEMBER_SAVINGS's real id.
+      setAllocations([{ account: resolved.MEMBER_SAVINGS, amount: "" }]);
+    } catch (err) {
+      console.error("Failed to resolve system accounts", err);
+      alert(`Failed to load Chart of Accounts mapping: ${err.message || err}`);
+    } finally {
+      setAccountsLoading(false);
+    }
+  };
+
 
   const fetchMembers = async () => {
     const { data } = await supabase.from("members").select("*");
@@ -66,12 +94,12 @@ export default function Payments() {
   };
 
   const addRow = () => {
-    setAllocations([...allocations, { account: 1018, amount: "" }]);
+    setAllocations([...allocations, { account: accountIds?.MEMBER_SAVINGS || "", amount: "" }]);
   };
 
   const removeRow = (i) => {
     const copy = allocations.filter((_, idx) => idx !== i);
-    setAllocations(copy.length ? copy : [{ account: 1018, amount: "" }]);
+    setAllocations(copy.length ? copy : [{ account: accountIds?.MEMBER_SAVINGS || "", amount: "" }]);
   };
 
   const total = useMemo(
@@ -97,41 +125,36 @@ export default function Payments() {
     const errorMsg = validate();
     if (errorMsg) return alert(errorMsg);
 
+    if (!accountIds) {
+      alert("Chart of Accounts mapping hasn't loaded yet — please wait a moment and try again.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const rows = [];
-
-      rows.push({
+      // Routed through the central posting engine instead of writing
+      // general_ledger directly. This also fixes a pre-existing bug: the
+      // old code wrote the cash debit and each allocation credit as
+      // separate incomplete rows (debit_account_id set with
+      // credit_account_id null, and vice versa), which isn't a valid
+      // double-entry line anywhere else in the app. This is one balanced
+      // journal: a single debit to cash for the full amount, and one
+      // credit line per allocation.
+      await postJournal({
         member_no: memberNo,
-        name: memberName,
-        amount: total,
-        debit_account_id: 1007,
-        credit_account_id: null,
         reference: receiptCode,
-        mode,
         date: transactionDate,
-        status: "PENDING",
-        type: "payment",
+        description: `Payment received (${mode})`,
+        lines: [
+          { account_id: accountIds.CASH, debit: total, credit: 0 },
+          ...allocations.map((a) => ({
+            account_id: Number(a.account),
+            debit: 0,
+            credit: num(a.amount),
+          })),
+        ],
       });
-
-      allocations.forEach((a) => {
-        rows.push({
-          member_no: memberNo,
-          name: memberName,
-          amount: num(a.amount),
-          debit_account_id: null,
-          credit_account_id: Number(a.account),
-          reference: receiptCode,
-          mode,
-          date: transactionDate,
-          status: "PENDING",
-          type: "allocation",
-        });
-      });
-
-      const { error } = await supabase.from("general_ledger").insert(rows);
-      if (error) throw error;
 
       alert("✅ Payment posted successfully");
 
@@ -139,7 +162,7 @@ export default function Payments() {
       setMemberName("");
       setReceiptCode("");
       setTransactionDate("");
-      setAllocations([{ account: 1018, amount: "" }]);
+      setAllocations([{ account: accountIds.MEMBER_SAVINGS, amount: "" }]);
 
       fetchLedger();
     } catch (e) {
@@ -263,9 +286,10 @@ export default function Payments() {
               <select
                 value={a.account}
                 onChange={(e) => updateAllocation(i, "account", e.target.value)}
+                disabled={accountsLoading}
               >
-                {ACCOUNTS.map((x) => (
-                  <option key={x.code} value={x.code}>
+                {SYSTEM_ACCOUNT_KEYS.map((x) => (
+                  <option key={x.key} value={accountIds?.[x.key] || ""}>
                     {x.name}
                   </option>
                 ))}

@@ -3,11 +3,15 @@ import "./JournalEntry.css";
 // Adjust this import to wherever your Supabase client is initialized.
 // Expected shape: createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 import { supabase } from "../../supabaseClient";
+import { postJournal as postJournalToEngine } from "../../services/journalAPI";
 
 /**
- * This screen writes ONLY to public.general_ledger. It never creates or
- * relies on any other table for posting — the "members" table is read-only
- * here, used purely to populate the member dropdowns (member_no + name).
+ * Posts through the central journal-engine edge function
+ * (journal_entries -> journal_lines -> general_ledger), instead of writing
+ * general_ledger directly. general_ledger is still updated (via the edge
+ * function) since ~30 other screens still read balances/status from it
+ * directly, but journal_entries/journal_lines are now the traceable,
+ * validated source of truth for every entry this page creates.
  */
 
 const ACCOUNT_OPTIONS = [
@@ -144,56 +148,8 @@ const buildEmptyHeader = () => ({
   posted_at: "",
 });
 
-// Maps our in-memory journal (header + lines) onto rows for the
-// public.general_ledger table. One row per line. Only one of
-// debit_account_id / credit_account_id is ever set on a given row —
-// that's what lets a journal split across more than two accounts.
-// This is the ONLY function in this file that produces rows for insertion,
-// and general_ledger is the ONLY table ever written to.
-const buildGeneralLedgerRows = (header, lines, memberLookup) => {
-  const typeSlug = slugify(header.transaction_type);
-  const createdAt = todayDate();
 
-  return lines.map((line) => {
-    const debit = Number(line.debit_amount || 0);
-    const isDebit = debit > 0;
-    const amount = isDebit ? debit : Number(line.credit_amount || 0);
-    const member = memberLookup[line.member_no];
 
-    return {
-      date: header.posting_date,
-      receipt_no: null,
-      member_no: line.member_no || null,
-      name: member ? member.name : null,
-      type: header.transaction_type,
-      amount,
-      mode: "Journal",
-      reference: header.reference_no || null,
-      debit_account_id: isDebit ? Number(line.account_id) : null,
-      credit_account_id: isDebit ? null : Number(line.account_id),
-      transaction_type: typeSlug,
-      // general_ledger has no dedicated "purpose" column, so line narration
-      // falls back to the journal's Purpose field if the line has none.
-      description: line.narration || header.purpose || null,
-      status: "PENDING",
-      external_reference: null,
-      reference_no: header.reference_no || null,
-      created_at: createdAt,
-      domain: "journal",
-      invoice_date: null,
-      invoice_no: null,
-      vendor: null,
-      account_id: Number(line.account_id),
-      journal_no: header.journal_id,
-      line_no: line.line_no,
-      approved_by: null,
-      approved_at: null,
-      reversed: false,
-      reversal_reference: null,
-      reference_number: null,
-    };
-  });
-};
 
 const JournalEntry = () => {
   const [activeTab, setActiveTab] = useState("journal");
@@ -230,14 +186,6 @@ const JournalEntry = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // member_no -> { member_no, name } lookup, used to stamp the "name" column
-  // on general_ledger rows without storing anything beyond member_no as the
-  // foreign key.
-  const memberLookup = useMemo(() => {
-    const map = {};
-    for (const m of members) map[m.member_no] = m;
-    return map;
-  }, [members]);
 
   const fetchMembers = async () => {
     setIsLoadingMembers(true);
@@ -456,7 +404,7 @@ const JournalEntry = () => {
     alert("Draft saved successfully (local only — not yet posted to the ledger).");
   };
 
-  const postJournal = async () => {
+  const postJournalEntry = async () => {
     if (journalHeader.status !== "Draft") {
       alert("Only Draft journals can be posted.");
       return;
@@ -467,10 +415,20 @@ const JournalEntry = () => {
     setIsPosting(true);
 
     try {
-      const rows = buildGeneralLedgerRows(journalHeader, journalLines, memberLookup);
+      const lines = journalLines.map((line) => ({
+        account_id: Number(line.account_id),
+        debit: Number(line.debit_amount || 0),
+        credit: Number(line.credit_amount || 0),
+        member_no: line.member_no || null, // per-line member, e.g. inter-member transfers
+        description: line.narration || journalHeader.purpose,
+      }));
 
-      const { error } = await supabase.from("general_ledger").insert(rows);
-      if (error) throw error;
+      await postJournalToEngine({
+        reference: journalHeader.reference_no || journalHeader.journal_id,
+        description: journalHeader.purpose,
+        date: journalHeader.posting_date,
+        lines,
+      });
 
       const postedBy = localStorage.getItem("full_name") || "";
       const postedAt = new Date().toISOString();
@@ -483,7 +441,7 @@ const JournalEntry = () => {
       }));
 
       await fetchJournalHistory();
-      alert("Journal posted to the General Ledger.");
+      alert("Journal posted.");
     } catch (error) {
       console.error("Failed to post journal", error);
       alert(`Failed to post journal: ${error.message || error}`);
@@ -493,8 +451,8 @@ const JournalEntry = () => {
   };
 
   // A reversal is its own posted journal, with debit/credit swapped on every
-  // line, plus it flags the original rows via reversed / reversal_reference
-  // — never a silent local status flip. Still only touches general_ledger.
+  // line. It's linked back to the original journal_entries row via
+  // reversal_of/reversed — never a silent local status flip.
   const reverseJournal = async () => {
     if (journalHeader.status !== "Posted") {
       alert("Only Posted journals can be reversed.");
@@ -509,37 +467,60 @@ const JournalEntry = () => {
 
     try {
       const reversalId = generateJournalId();
+      const originalReference = journalHeader.reference_no || journalHeader.journal_id;
 
-      const reversalHeader = {
-        ...journalHeader,
-        journal_id: reversalId,
-        posting_date: todayDate(),
-        purpose: `Reversal of ${journalHeader.journal_id}: ${journalHeader.purpose}`,
-      };
+      // Look up the original journal_entries row so both sides can be
+      // linked by id, not just by reference text.
+      const { data: originalEntry, error: lookupError } = await supabase
+        .from("journal_entries")
+        .select("id")
+        .eq("reference", originalReference)
+        .single();
+      if (lookupError) throw lookupError;
 
       const reversalLines = journalLines.map((line) => ({
-        ...line,
-        id: crypto.randomUUID(),
-        debit_amount: line.credit_amount,
-        credit_amount: line.debit_amount,
+        account_id: Number(line.account_id),
+        debit: Number(line.credit_amount || 0),
+        credit: Number(line.debit_amount || 0),
+        member_no: line.member_no || null,
+        description: line.narration || `Reversal of ${originalReference}`,
       }));
 
-      const reversalRows = buildGeneralLedgerRows(reversalHeader, reversalLines, memberLookup);
+      // post_journal (Postgres RPC) returns { journal_entry_id, reference,
+      // total_debit, total_credit } — a known, fixed shape, unlike the
+      // edge function this used to guess at.
+      const reversalResult = await postJournalToEngine({
+        reference: reversalId,
+        description: `Reversal of ${originalReference}: ${journalHeader.purpose}`,
+        date: todayDate(),
+        lines: reversalLines,
+      });
+      const reversalEntryId = reversalResult?.journal_entry_id || null;
 
-      const { error: insertError } = await supabase
-        .from("general_ledger")
-        .insert(reversalRows);
-      if (insertError) throw insertError;
+      if (reversalEntryId) {
+        const { error: linkError } = await supabase
+          .from("journal_entries")
+          .update({ reversal_of: originalEntry.id })
+          .eq("id", reversalEntryId);
+        if (linkError) throw linkError;
+      }
 
       const { error: updateError } = await supabase
+        .from("journal_entries")
+        .update({ reversed: true })
+        .eq("id", originalEntry.id);
+      if (updateError) throw updateError;
+
+      // Keep the legacy general_ledger flags in sync too, since ~30 other
+      // screens still read status/reversed directly off general_ledger.
+      await supabase
         .from("general_ledger")
         .update({
           reversed: true,
           reversal_reference: reversalId,
           status: "REVERSED",
         })
-        .eq("journal_no", journalHeader.journal_id);
-      if (updateError) throw updateError;
+        .eq("journal_no", originalReference);
 
       setJournalHeader((prev) => ({
         ...prev,
@@ -590,37 +571,27 @@ const JournalEntry = () => {
       const accountId = TRANSFER_TYPE_ACCOUNTS[transfer_type] || TRANSFER_TYPE_ACCOUNTS.Other;
       const transferJournalId = generateJournalId();
 
-      const transferHeader = {
-        journal_id: transferJournalId,
-        posting_date: todayDate(),
-        transaction_type: "Member Transfer",
-        purpose,
-        reference_no: "",
-      };
-
-      const lines = [
-        {
-          line_no: 1,
-          account_id: accountId,
-          member_no: to_member_no,
-          debit_amount: "",
-          credit_amount: amt,
-          narration: narration || `Transfer out to ${to_member_no}`,
-        },
-        {
-          line_no: 2,
-          account_id: accountId,
-          member_no: from_member_no,
-          debit_amount: amt,
-          credit_amount: "",
-          narration: narration || `Transfer in from ${from_member_no}`,
-        },
-      ];
-
-      const rows = buildGeneralLedgerRows(transferHeader, lines, memberLookup);
-
-      const { error } = await supabase.from("general_ledger").insert(rows);
-      if (error) throw error;
+      await postJournalToEngine({
+        reference: transferJournalId,
+        description: purpose,
+        date: todayDate(),
+        lines: [
+          {
+            account_id: Number(accountId),
+            debit: 0,
+            credit: amt,
+            member_no: to_member_no,
+            description: narration || `Transfer out to ${to_member_no}`,
+          },
+          {
+            account_id: Number(accountId),
+            debit: amt,
+            credit: 0,
+            member_no: from_member_no,
+            description: narration || `Transfer in from ${from_member_no}`,
+          },
+        ],
+      });
 
       await fetchJournalHistory();
       alert(`Transfer posted to the General Ledger as ${transferJournalId}.`);
@@ -690,7 +661,7 @@ const JournalEntry = () => {
           <button
             className="btn btn-success"
             disabled={isPosting || !isEditable}
-            onClick={postJournal}
+            onClick={postJournalEntry}
           >
             {isPosting ? "Posting…" : "Post"}
           </button>

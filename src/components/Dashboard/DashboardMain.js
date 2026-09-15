@@ -4,19 +4,13 @@ import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../Context/AuthContext";
 import { supabase } from "../../supabaseClient";
+import { useMemberLedger } from "../../hooks/useMemberLedger";
 import logo from "../../asset/logo/umovalogo.png";
 import {
   LayoutDashboard, User, Wallet, LineChart, Landmark,
   FileText, LogOut, Menu, X, ShieldCheck, Activity, Bell,
   TrendingUp, TrendingDown, ChevronRight, Zap
 } from "lucide-react";
-
-const COA = {
-  SAVINGS:  1018,
-  LOANS:    1011,
-  INTEREST: 1020,
-  SHARES:   1012,
-};
 
 // ── Tiny sparkline using inline SVG ──────────────────────────────────────────
 function Sparkline({ values = [], color = "#10b981", height = 28 }) {
@@ -83,10 +77,6 @@ export default function DashboardMain() {
   }, []);
   const [collapsed, setCollapsed] = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
-  const [ledgerMetrics, setLedgerMetrics] = useState({
-    savings: 0, loans: 0, shares: 0, interest: 0,
-  });
-  const [metricsLoaded, setMetricsLoaded] = useState(false);
   // Fake sparkline history — replace with real time-series if available
   const [sparkHistory] = useState({
     savings:  [120, 145, 140, 160, 155, 175, 180, 190, 185, 200, 210, 220],
@@ -100,56 +90,38 @@ export default function DashboardMain() {
       weekday: "long", year: "numeric", month: "long", day: "numeric",
     }), []);
 
-  const computeLedgerBalances = useCallback(async (memberNo) => {
-    if (!memberNo) return;
-    try {
-      const { data, error } = await supabase
-        .from("general_ledger")
-        .select("amount, id, debit_account_id, credit_account_id")
-        .eq("member_no", memberNo);
-      if (error) throw error;
+  // Ledger balances come from the shared useMemberLedger hook rather than
+  // being recomputed here — this file previously had its own COA constant
+  // and its own debit/credit parsing, one of five independent copies of
+  // the same logic across the member dashboard. The hook also filters to
+  // posted/approved rows, which this version didn't.
+  const memberNo = profile?.member_no || profile?.memberNo;
+  const { ledger, loading: ledgerLoading, reload: reloadLedger } = useMemberLedger(memberNo);
 
-      let savings = 0, loans = 0, shares = 0, interest = 0;
-      (data || []).forEach((tx) => {
-        const amt    = Number(tx.amount || 0);
-        const debit  = Number(tx.debit_account_id);
-        const credit = Number(tx.credit_account_id);
+  const ledgerMetrics = useMemo(() => ({
+    // Math.max(0, …) preserved from the original: a member-facing screen
+    // shouldn't render a negative savings/shares figure if the underlying
+    // data is odd. The statement page shows true signed balances.
+    savings:  Math.max(0, ledger.savings.balance),
+    loans:    Math.max(0, ledger.loans.balance),
+    shares:   Math.max(0, ledger.shares.balance),
+    interest: Math.max(0, ledger.totalRepayments),
+  }), [ledger]);
 
-        if (credit === COA.SAVINGS)   savings  += amt;
-        if (debit  === COA.SAVINGS)   savings  -= amt;
-        if (debit  === COA.LOANS)     loans    += amt;
-        if (credit === COA.LOANS)     loans    -= amt;
-        if (credit === COA.SHARES)    shares   += amt;
-        if (debit  === COA.SHARES)    shares   -= amt;
-        if (credit === COA.INTEREST)  interest += amt;
-      });
-
-      setLedgerMetrics({
-        savings:  Math.max(0, savings),
-        loans:    Math.max(0, loans),
-        shares:   Math.max(0, shares),
-        interest: Math.max(0, interest),
-      });
-      setMetricsLoaded(true);
-    } catch (err) {
-      console.error("[LEDGER_CORE]", err.message);
-    }
-  }, []);
+  const metricsLoaded = !ledgerLoading;
 
   useEffect(() => {
-    const no = profile?.member_no || profile?.memberNo;
-    if (!no) return;
-    computeLedgerBalances(no);
+    if (!memberNo) return;
 
     const sub = supabase
-      .channel(`dashboard-${no}`)
+      .channel(`dashboard-${memberNo}`)
       .on("postgres_changes",
-        { event: "*", schema: "public", table: "general_ledger", filter: `member_no=eq.${no}` },
-        () => computeLedgerBalances(no)
+        { event: "*", schema: "public", table: "general_ledger", filter: `member_no=eq.${memberNo}` },
+        () => reloadLedger()
       )
       .subscribe();
     return () => supabase.removeChannel(sub);
-  }, [profile?.member_no, profile?.memberNo, computeLedgerBalances]);
+  }, [memberNo, reloadLedger]);
 
   // Notifications feed — powers the topbar bell badge and is shared with
   // routed pages via Outlet context so they don't have to re-query it.

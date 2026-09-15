@@ -1,218 +1,249 @@
-import { useEffect, useState, useMemo } from "react";
-import { supabase } from "../../supabaseClient";
+import { useState, useMemo } from "react";
+import { useOutletContext } from "react-router-dom";
+import { useAuth } from "../../Context/AuthContext";
+import { useMemberLedger } from "../../hooks/useMemberLedger";
 import { generateStatementPDF } from "../../utils/generateStatementPDF";
-import logo from "../../asset/logo/umovalogo.png";
 
-const ACC = {
-  SAVINGS: 1018,
-  LOANS: 1011,
-  SHARES: 1012,
-  INTEREST: 1020, // Added explicit interest account
-};
+/**
+ * Member statement.
+ *
+ * Previously read the member from localStorage["member"] — a key nothing
+ * in the app ever writes, so it always returned null, bailed out at the
+ * guard clause, and rendered an empty statement for every member. It now
+ * takes memberNo from the dashboard's outlet context (the same source
+ * every other member page uses) and profile from useAuth.
+ *
+ * Ledger parsing moved to useMemberLedger, shared with the other member
+ * pages rather than reimplemented here against hardcoded account ids.
+ */
 
-export default function MemberStatement() {
-  const [member, setMember] = useState(null);
-  const [ledger, setLedger] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
+const ACCOUNT_VIEWS = [
+  { key: "savings", label: "Savings", owed: false },
+  { key: "shares", label: "Shares", owed: false },
+  { key: "loans", label: "Loans", owed: true },
+];
 
-  useEffect(() => {
-    loadStatement();
-  }, []);
+const money = (n) =>
+  Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const loadStatement = async () => {
-    setLoading(true);
-    try {
-      const stored = localStorage.getItem("member");
-      const mem = stored ? JSON.parse(stored) : null;
+const formatDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
-      if (!mem?.member_no) return;
-      setMember(mem);
+export default function Statements() {
+  const { memberNo } = useOutletContext() || {};
+  const { profile } = useAuth();
+  const { ledger, rows, loading, error } = useMemberLedger(memberNo);
 
-      const { data, error } = await supabase
-        .from("general_ledger")
-        .select("*")
-        .eq("member_no", mem.member_no)
-        .order("date", { ascending: true });
+  const [view, setView] = useState("savings");
+  const [query, setQuery] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-      if (error) throw error;
-      setLedger(data || []);
-    } catch (err) {
-      console.error("Statement error:", err);
-    } finally {
-      setLoading(false);
+  const active = ledger[view];
+
+  const visibleTransactions = useMemo(() => {
+    let list = active?.transactions || [];
+
+    if (fromDate) list = list.filter((t) => t.date >= fromDate);
+    if (toDate) list = list.filter((t) => t.date <= toDate);
+
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter(
+        (t) =>
+          t.description?.toLowerCase().includes(q) ||
+          t.reference_no?.toLowerCase().includes(q) ||
+          t.reference?.toLowerCase().includes(q)
+      );
     }
-  };
+    // Newest first for reading; the running balance was computed
+    // chronologically, so each row still shows the balance as it stood
+    // after that transaction.
+    return [...list].reverse();
+  }, [active, query, fromDate, toDate]);
 
-  // ================= ADVANCED DATA PROCESSING ENGINE =================
-  // useMemo prevents zero-value flashes and unnecessary recalculations
-  const processedData = useMemo(() => {
-    const results = {
-      savings: { tx: [], balance: 0 },
-      loans: { tx: [], balance: 0 },
-      shares: { tx: [], balance: 0 },
-    };
+  const isFiltered = Boolean(query.trim() || fromDate || toDate);
 
-    let sBal = 0, lBal = 0, shBal = 0;
-
-    ledger.forEach((tx) => {
-      const amt = Number(tx.amount || 0);
-      const isSearchMatch = tx.description?.toLowerCase().includes(searchTerm.toLowerCase()) || tx.reference?.toLowerCase().includes(searchTerm.toLowerCase());
-
-      // 1. Savings Logic
-      if (tx.credit_account_id === ACC.SAVINGS || tx.debit_account_id === ACC.SAVINGS) {
-        if (tx.credit_account_id === ACC.SAVINGS) sBal += amt;
-        if (tx.debit_account_id === ACC.SAVINGS) sBal -= amt;
-        if (!searchTerm || isSearchMatch) results.savings.tx.push({ ...tx, balance: sBal });
-      }
-
-      // 2. Loans Logic (Advanced Interest Treatment)
-      if (tx.credit_account_id === ACC.LOANS || tx.debit_account_id === ACC.LOANS || tx.debit_account_id === ACC.INTEREST) {
-        if (tx.debit_account_id === ACC.LOANS) lBal += amt;
-        if (tx.credit_account_id === ACC.LOANS) lBal -= amt;
-        if (tx.debit_account_id === ACC.INTEREST) lBal += amt;
-        if (!searchTerm || isSearchMatch) results.loans.tx.push({ ...tx, balance: lBal });
-      }
-
-      // 3. Shares Logic
-      if (tx.credit_account_id === ACC.SHARES || tx.debit_account_id === ACC.SHARES) {
-        if (tx.credit_account_id === ACC.SHARES) shBal += amt;
-        if (tx.debit_account_id === ACC.SHARES) shBal -= amt;
-        if (!searchTerm || isSearchMatch) results.shares.tx.push({ ...tx, balance: shBal });
-      }
-    });
-
-    return { 
-        ...results, 
-        summary: { savings: sBal, loans: lBal, shares: shBal } 
-    };
-  }, [ledger, searchTerm]);
-
-  const format = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  if (loading) return <div className="flex justify-center p-20 text-green-700 animate-pulse">Syncing Ledger Records...</div>;
-
-  return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 bg-white shadow-lg my-6 rounded-xl border border-gray-100">
-      
-      {/* HEADER SECTION */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b-2 border-green-50 pb-6 mb-8 gap-4">
-        <div className="flex items-center gap-4">
-          <img src={logo} className="w-20 h-20 object-contain" alt="UMOVA Logo" />
-          <div>
-            <h1 className="text-2xl font-black text-gray-800 tracking-tight">UMOVA INVESTMENTS LTD</h1>
-            <p className="text-green-600 font-medium flex items-center gap-2">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-ping"></span>
-              Secure Member Audit Portal
-            </p>
-          </div>
-        </div>
-        
-        <div className="bg-green-50 p-4 rounded-lg border border-green-100 text-right">
-          <p className="text-xs text-green-700 font-bold uppercase tracking-wider">Report Generation Date</p>
-          <p className="text-sm font-mono text-gray-700">{new Date().toLocaleString('en-GB')}</p>
+  if (!memberNo && !loading) {
+    return (
+      <div className="max-w-5xl mx-auto p-8">
+        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
+          <h2 className="text-lg font-bold text-slate-800">Your statement isn't available yet</h2>
+          <p className="mt-2 text-slate-500">
+            We couldn't find a member number on your account. Contact the SACCO office to have it linked.
+          </p>
         </div>
       </div>
+    );
+  }
 
-      {/* FILTER & ACTIONS */}
-      <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
-        <input 
-          type="text" 
-          placeholder="Search transactions..." 
-          className="border border-gray-200 rounded-lg px-4 py-2 w-full md:w-64 focus:ring-2 focus:ring-green-500 outline-none"
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+  if (loading) {
+    return (
+      <div className="max-w-5xl mx-auto p-4 md:p-8 animate-pulse">
+        <div className="h-32 rounded-2xl bg-slate-100" />
+        <div className="mt-6 h-10 w-64 rounded-lg bg-slate-100" />
+        <div className="mt-6 space-y-3">
+          {[...Array(6)].map((_, i) => <div key={i} className="h-16 rounded-xl bg-slate-100" />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-5xl mx-auto p-8">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-8">
+          <h2 className="font-bold text-red-800">Your statement couldn't be loaded</h2>
+          <p className="mt-2 text-sm text-red-700">{error}</p>
+          <button onClick={() => window.location.reload()} className="mt-4 rounded-lg bg-red-700 px-5 py-2 font-semibold text-white hover:bg-red-800">
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto p-4 md:p-8">
+
+      {/* Net position — the question members actually open this page to answer. */}
+      <section className="rounded-2xl bg-slate-900 p-7 text-white">
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div>
+            <p className="text-sm text-slate-400">Your position with the SACCO today</p>
+            <p className="mt-2 text-4xl font-black tracking-tight">
+              KES {money(ledger.netPosition)}
+            </p>
+            <p className="mt-2 max-w-md text-sm text-slate-400">
+              Savings and shares, less the {ledger.loans.balance > 0 ? "KES " + money(ledger.loans.balance) + " you still owe" : "loans you owe"}.
+            </p>
+          </div>
+          <div className="text-right text-sm">
+            <p className="font-semibold">{profile?.name || "Member"}</p>
+            <p className="text-slate-400">{memberNo}</p>
+            <p className="mt-3 text-slate-500">{rows.length} posted transactions</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Account selector — doubles as the balance summary, so the three
+          figures aren't repeated in separate cards above. */}
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        {ACCOUNT_VIEWS.map((acct) => {
+          const selected = view === acct.key;
+          const balance = ledger[acct.key].balance;
+          return (
+            <button
+              key={acct.key}
+              onClick={() => setView(acct.key)}
+              aria-pressed={selected}
+              className={`rounded-xl border p-4 text-left transition-colors ${
+                selected
+                  ? "border-green-600 bg-green-50"
+                  : "border-slate-200 bg-white hover:border-slate-300"
+              }`}
+            >
+              <p className="text-sm text-slate-500">{acct.label}</p>
+              <p className={`mt-1 text-xl font-bold ${acct.owed && balance > 0 ? "text-red-700" : "text-slate-800"}`}>
+                KES {money(balance)}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                {ledger[acct.key].transactions.length} entries
+              </p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Filters */}
+      <div className="mt-6 flex flex-wrap items-end gap-3">
+        <label className="flex-1 min-w-[200px] text-sm">
+          <span className="text-slate-600">Search this statement</span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Description or reference"
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-green-500"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="text-slate-600">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+            className="mt-1 block rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-green-500" />
+        </label>
+        <label className="text-sm">
+          <span className="text-slate-600">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
+            className="mt-1 block rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-green-500" />
+        </label>
         <button
-          onClick={() => generateStatementPDF(member, ledger, processedData)}
-          className="bg-green-700 hover:bg-green-800 text-white font-bold px-6 py-2.5 rounded-lg shadow-md transition-all flex items-center gap-2"
+          onClick={() => generateStatementPDF({ ...profile, member_no: memberNo }, rows)}
+          disabled={rows.length === 0}
+          className="rounded-lg bg-green-700 px-5 py-2.5 font-semibold text-white transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          <span>📥</span> Export Official PDF
+          Download statement
         </button>
       </div>
 
-      {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div className="bg-white border-l-4 border-green-500 p-5 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-          <p className="text-gray-500 text-sm font-bold uppercase">Net Savings</p>
-          <p className="text-2xl font-black text-gray-800">KES {format(processedData.summary.savings)}</p>
+      {/* Ledger with running balance — the passbook view. */}
+      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-600">
+                <th className="px-4 py-3 font-semibold">Date</th>
+                <th className="px-4 py-3 font-semibold">Description</th>
+                <th className="px-4 py-3 font-semibold">Reference</th>
+                <th className="px-4 py-3 text-right font-semibold">Amount</th>
+                <th className="px-4 py-3 text-right font-semibold">Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleTransactions.map((tx) => (
+                <tr key={tx.cod} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(tx.date)}</td>
+                  <td className="px-4 py-3 text-slate-800">{tx.description || "Transaction"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-400">{tx.reference_no || tx.reference || "—"}</td>
+                  <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${tx.direction === "in" ? "text-green-700" : "text-slate-700"}`}>
+                    {tx.direction === "in" ? "+" : "−"} {money(tx.amount)}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-slate-800">{money(tx.runningBalance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div className="bg-white border-l-4 border-red-500 p-5 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-          <p className="text-gray-500 text-sm font-bold uppercase">Loan Liability</p>
-          <p className="text-2xl font-black text-gray-800">KES {format(processedData.summary.loans)}</p>
-        </div>
-        <div className="bg-white border-l-4 border-blue-500 p-5 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-          <p className="text-gray-500 text-sm font-bold uppercase">Share Capital</p>
-          <p className="text-2xl font-black text-gray-800">KES {format(processedData.summary.shares)}</p>
-        </div>
+
+        {visibleTransactions.length === 0 && (
+          <div className="p-10 text-center">
+            {isFiltered ? (
+              <>
+                <p className="font-semibold text-slate-700">No entries match these filters</p>
+                <button
+                  onClick={() => { setQuery(""); setFromDate(""); setToDate(""); }}
+                  className="mt-3 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Clear filters
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-slate-700">
+                  No {view} activity yet
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {view === "loans"
+                    ? "You don't have any loan activity on record."
+                    : `Your ${view} transactions will appear here once the SACCO posts them.`}
+                </p>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ACCOUNT TABLES SECTION */}
-      <div className="space-y-12">
-        {/* SAVINGS TABLE */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-3 h-8 bg-green-600 rounded-full"></div>
-            <h3 className="text-xl font-bold text-gray-800">Savings Account Statement (1018)</h3>
-          </div>
-          <div className="overflow-x-auto rounded-xl border border-gray-100">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 uppercase text-xs">
-                <tr>
-                  <th className="px-6 py-4 text-left">Date</th>
-                  <th className="px-6 py-4 text-left">Description</th>
-                  <th className="px-6 py-4 text-right">Debit</th>
-                  <th className="px-6 py-4 text-right">Credit</th>
-                  <th className="px-6 py-4 text-right">Running Balance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {processedData.savings.tx.map((s, i) => (
-                  <tr key={i} className="hover:bg-green-50/30 transition-colors">
-                    <td className="px-6 py-4">{new Date(s.date).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 text-gray-500">{s.description || 'Deposit'}</td>
-                    <td className="px-6 py-4 text-right text-red-500">{s.debit_account_id === ACC.SAVINGS ? format(s.amount) : "-"}</td>
-                    <td className="px-6 py-4 text-right text-green-600">{s.credit_account_id === ACC.SAVINGS ? format(s.amount) : "-"}</td>
-                    <td className="px-6 py-4 text-right font-bold text-gray-800">KES {format(s.balance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* LOANS TABLE */}
-        <section>
-           <div className="flex items-center gap-2 mb-4">
-            <div className="w-3 h-8 bg-red-600 rounded-full"></div>
-            <h3 className="text-xl font-bold text-gray-800">Loan & Interest Ledger (1011)</h3>
-          </div>
-          <div className="overflow-x-auto rounded-xl border border-gray-100">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 uppercase text-xs">
-                <tr>
-                  <th className="px-6 py-4 text-left">Date</th>
-                  <th className="px-6 py-4 text-left">Operation Type</th>
-                  <th className="px-6 py-4 text-right">Transaction Amt</th>
-                  <th className="px-6 py-4 text-right">Outstanding Balance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {processedData.loans.tx.map((l, i) => (
-                  <tr key={i} className="hover:bg-red-50/30 transition-colors">
-                    <td className="px-6 py-4">{new Date(l.date).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 uppercase font-medium text-xs">
-                        {l.debit_account_id === ACC.INTEREST ? 'Interest Accrued' : 
-                         l.debit_account_id === ACC.LOANS ? 'Disbursement' : 'Repayment'}
-                    </td>
-                    <td className="px-6 py-4 text-right">{format(l.amount)}</td>
-                    <td className="px-6 py-4 text-right font-bold text-red-700">KES {format(l.balance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+      <p className="mt-4 text-xs text-slate-400">
+        Shows posted transactions only. Balances update once the SACCO office posts a transaction.
+      </p>
     </div>
   );
 }

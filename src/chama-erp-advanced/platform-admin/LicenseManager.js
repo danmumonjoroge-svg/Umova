@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
 import {
   Building2, PlusCircle, Loader2, X, ShieldCheck, ShieldAlert, Clock,
-  Wallet, TrendingUp, Gift, CreditCard, History, ShieldOff,
+  Wallet, TrendingUp, Gift, CreditCard, History,
 } from "lucide-react";
 import "./LicenseManager.css";
 
@@ -135,26 +135,6 @@ export default function LicenseManager() {
     load();
   };
 
-  // FIX (AUDIT_REPORT.md, Finding P1-1): effectiveStatus() and the login
-  // gate both already understand a "suspended" license state, but nothing
-  // in this screen — or anywhere else — ever set it. A platform admin who
-  // needed to pull a chama offline immediately (fraud, dispute, abuse) had
-  // no button for it and had to wait for the prepaid period to lapse.
-  // set_chama_suspended() (sql/006_fixes_and_hardening.sql) is a real,
-  // explicit on/off switch, separate from the free-plan toggle and from
-  // ordinary expiry.
-  const toggleSuspend = async (c) => {
-    const nowSuspended = c.license_status === "suspended";
-    if (!nowSuspended) {
-      const reason = window.prompt(`Suspend ${c.name}? Optional reason (shown in the audit trail):`, "");
-      if (reason === null) return; // cancelled
-      await supabase.rpc("set_chama_suspended", { p_chama_id: c.id, p_suspended: true, p_reason: reason || null });
-    } else {
-      await supabase.rpc("set_chama_suspended", { p_chama_id: c.id, p_suspended: false });
-    }
-    load();
-  };
-
   const openHistory = (c) => setHistoryFor(c);
   const historyRows = historyFor ? payments.filter((p) => p.chama_id === historyFor.id) : [];
 
@@ -222,10 +202,6 @@ export default function LicenseManager() {
                   <button className="plm-history-btn" onClick={() => openHistory(c)}><History size={12} /></button>
                   <button className={`plm-free-btn ${c.license_plan === "free" ? "active" : ""}`} onClick={() => toggleFree(c)}>
                     <Gift size={12} /> {c.license_plan === "free" ? "Free" : "Make free"}
-                  </button>
-                  <button className={`plm-suspend-btn ${c.license_status === "suspended" ? "active" : ""}`} onClick={() => toggleSuspend(c)}>
-                    {c.license_status === "suspended" ? <ShieldCheck size={12} /> : <ShieldOff size={12} />}
-                    {c.license_status === "suspended" ? "Un-suspend" : "Suspend"}
                   </button>
                 </div>
               </div>

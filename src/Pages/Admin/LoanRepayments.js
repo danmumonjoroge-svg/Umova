@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
 import { postJournal } from "../../services/journalAPI";
+import { getSystemAccount } from "../../services/chartOfAccountsAPI";
 
 // ================= ACCOUNTS =================
-const ACC = {
-  CASH: 1007,
-  LOAN: 1011,
-  INTEREST: 1020,
-};
+// Resolved from chart_of_accounts (system_account_key) inside the
+// component instead of hardcoded — see loadAccounts().
 
 // ================= FORMAT =================
 const format = (v) =>
@@ -29,11 +27,27 @@ export default function LoanRepayments() {
   const [interestPayment, setInterestPayment] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [acc, setAcc] = useState(null); // { CASH, LOAN, INTEREST }
 
   // ================= LOAD MEMBERS =================
   useEffect(() => {
     loadMembers();
+    loadAccounts();
   }, []);
+
+  const loadAccounts = async () => {
+    try {
+      const [CASH, LOAN, INTEREST] = await Promise.all([
+        getSystemAccount("CASH"),
+        getSystemAccount("LOAN_RECEIVABLE"),
+        getSystemAccount("INTEREST_INCOME"),
+      ]);
+      setAcc({ CASH, LOAN, INTEREST });
+    } catch (err) {
+      console.error("Failed to resolve system accounts", err);
+      alert(`Failed to load Chart of Accounts mapping: ${err.message || err}`);
+    }
+  };
 
   const loadMembers = async () => {
     const { data } = await supabase
@@ -64,6 +78,11 @@ export default function LoanRepayments() {
       .select("*")
       .eq("member_no", memberNo);
 
+    const [loanAcct, interestAcct] = await Promise.all([
+      getSystemAccount("LOAN_RECEIVABLE"),
+      getSystemAccount("INTEREST_INCOME"),
+    ]);
+
     let principal = 0;
     let interest = 0;
 
@@ -71,17 +90,17 @@ export default function LoanRepayments() {
       const amt = Number(t.amount || 0);
 
       // LOAN PRINCIPAL
-      if (Number(t.debit_account_id) === ACC.LOAN)
+      if (Number(t.debit_account_id) === loanAcct)
         principal += amt;
 
-      if (Number(t.credit_account_id) === ACC.LOAN)
+      if (Number(t.credit_account_id) === loanAcct)
         principal -= amt;
 
       // INTEREST
-      if (Number(t.debit_account_id) === ACC.INTEREST)
+      if (Number(t.debit_account_id) === interestAcct)
         interest += amt;
 
-      if (Number(t.credit_account_id) === ACC.INTEREST)
+      if (Number(t.credit_account_id) === interestAcct)
         interest -= amt;
     });
 
@@ -152,12 +171,17 @@ export default function LoanRepayments() {
       return;
     }
 
+    if (!acc) {
+      alert("Chart of Accounts mapping hasn't loaded yet — please wait a moment and try again.");
+      return;
+    }
+
     try {
       setLoading(true);
 
       const lines = [
         {
-          account_id: ACC.CASH,
+          account_id: acc.CASH,
           debit: totalPayment,
           credit: 0,
         },
@@ -165,7 +189,7 @@ export default function LoanRepayments() {
 
       if (principalAmt > 0) {
         lines.push({
-          account_id: ACC.LOAN,
+          account_id: acc.LOAN,
           debit: 0,
           credit: principalAmt,
         });
@@ -173,16 +197,17 @@ export default function LoanRepayments() {
 
       if (interestAmt > 0) {
         lines.push({
-          account_id: ACC.INTEREST,
+          account_id: acc.INTEREST,
           debit: 0,
           credit: interestAmt,
         });
       }
 
       await postJournal({
-        member_id: member.member_no,
+        member_no: member.member_no,
         reference: `RPY-${Date.now()}`,
         description: "Loan repayment",
+        source_module: "loan_repayment",
         lines,
       });
 

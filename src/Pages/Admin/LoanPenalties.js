@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { postJournal } from "../../services/journalAPI";
+import { getSystemAccount } from "../../services/chartOfAccountsAPI";
 
 export default function LoanPenalties() {
 
@@ -18,18 +19,26 @@ export default function LoanPenalties() {
 
       const penalty = Number(amount);
 
+      // NOTE: crediting INTEREST_INCOME here matches the pre-existing
+      // behaviour of this page — but your Chart of Accounts has no
+      // dedicated "Penalty Income" account (Section 6 of the master
+      // instruction expects a PENALTY_INCOME system account; it doesn't
+      // exist in the data reviewed). Penalties are currently classified
+      // as interest income, which may not be what you actually want for
+      // reporting purposes — worth a real decision, not something to
+      // silently reclassify here.
+      const penaltyReceivableAcct = await getSystemAccount("LOAN_PENALTY_RECEIVABLE");
+      const interestIncomeAcct = await getSystemAccount("INTEREST_INCOME");
+
       await postJournal({
-        member_id: memberId,
+        member_no: memberId,
         reference: `PEN-${Date.now()}`,
         description: "Loan penalty",
-
+        source_module: "loan_penalty",
         lines: [
-          // Penalty receivable
-          { account_id: 1102, debit: penalty, credit: 0 },
-
-          // Income
-          { account_id: 1020, debit: 0, credit: penalty }
-        ]
+          { account_id: penaltyReceivableAcct, debit: penalty, credit: 0 },
+          { account_id: interestIncomeAcct, debit: 0, credit: penalty },
+        ],
       });
 
       alert("Penalty posted successfully");

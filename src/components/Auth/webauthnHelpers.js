@@ -55,17 +55,45 @@ export async function registerPasskey(nickname) {
 }
 
 /**
- * Full passkey sign-in for the identifier already typed into
- * UnifiedLogin (a "UI-XXXX" staff or member code). Returns
- * { usedPasskey: false } if that identifier has no passkey registered,
- * so the caller can fall back to the password field instead of erroring.
+ * Passkey sign-in.
+ *
+ * Call with NO argument for usernameless sign-in — nothing typed, no
+ * member number, no password. The browser offers whichever passkeys it
+ * holds for this site, the fingerprint/face check identifies the user,
+ * and the server works out who they are from the credential itself.
+ *
+ * An identifier may still be passed for passkeys registered before
+ * discoverable credentials were required; those can't be found without
+ * an explicit credential list. When passed, the server treats it as a
+ * constraint to check, not as the thing that selects the account.
+ *
+ * Returns { usedPasskey: false } if there's nothing to sign in with, so
+ * the caller can fall back to the password field instead of erroring.
  */
 export async function loginWithPasskey(identifier) {
-  const { available, options } = await callFunction("webauthn-auth-options", { identifier });
+  const { available, options } = await callFunction(
+    "webauthn-auth-options",
+    identifier ? { identifier } : {}
+  );
   if (!available) return { usedPasskey: false };
 
-  const assertionResponse = await startAuthentication({ optionsJSON: options });
-  const { email, token } = await callFunction("webauthn-auth-verify", { identifier, assertionResponse });
+  let assertionResponse;
+  try {
+    assertionResponse = await startAuthentication({ optionsJSON: options });
+  } catch (err) {
+    // The user dismissing the OS prompt, or having no passkey on this
+    // device, both surface as NotAllowedError. That's a normal thing to
+    // do, not a failure worth showing as an error.
+    if (err?.name === "NotAllowedError" || err?.name === "AbortError") {
+      return { usedPasskey: false, cancelled: true };
+    }
+    throw err;
+  }
+
+  const { email, token } = await callFunction("webauthn-auth-verify", {
+    ...(identifier ? { identifier } : {}),
+    assertionResponse,
+  });
 
   const { error } = await supabase.auth.verifyOtp({ email, token, type: "magiclink" });
   if (error) throw error;

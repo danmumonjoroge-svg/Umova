@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
+import { postJournal } from "../../services/journalAPI";
+import { getSystemAccount } from "../../services/chartOfAccountsAPI";
 import "./LoanDisbursement.css";
 
 export default function LoanDisbursement() {
@@ -81,54 +83,51 @@ export default function LoanDisbursement() {
 
       if (loanError) throw loanError;
 
-      // ================= 2. GENERAL LEDGER — PRINCIPAL DISBURSEMENT =================
+      // ================= 2. POST TO ACCOUNTING — PRINCIPAL DISBURSEMENT =================
+      // Routed through the central posting engine (journal_entries ->
+      // journal_lines -> general_ledger) instead of writing general_ledger
+      // directly, so this disbursement is traceable back to a journal entry
+      // and validated for debit=credit before it's allowed to post.
       const glReference = `LN-${Date.now()}`;
 
-      const { error: glError } = await supabase
-        .from("general_ledger")
-        .insert([{
-          member_no: selectedLoan.member_no,
-          date: disbursementDate,
-          reference_no: glReference,
+      const loanReceivableAcct = await getSystemAccount("LOAN_RECEIVABLE");
+      const cashAcct = await getSystemAccount("CASH");
 
-          description: "Loan Disbursement",
+      await postJournal({
+        member_no: selectedLoan.member_no,
+        reference: glReference,
+        date: disbursementDate,
+        description: `Loan Disbursement (Ext. Ref: ${reference})`,
+        lines: [
+          { account_id: loanReceivableAcct, debit: amount, credit: 0 },
+          { account_id: cashAcct, debit: 0, credit: amount },
+        ],
+      });
 
-          debit_account_id: 1011,
-          credit_account_id: 1007,
-
-          amount,
-
-          external_reference: reference,
-          status: "posted"
-        }]);
-
-      if (glError) throw glError;
-
-      // ================= 3. GENERAL LEDGER — INTEREST CHARGE =================
+      // ================= 3. POST TO ACCOUNTING — INTEREST CHARGE =================
       // Only post if the application carries a total_interest figure.
+      // NOTE: this debits Interest Income and credits General Income, which
+      // is the same treatment the pre-existing code used before this was
+      // migrated to system-account lookups — worth a real accounting
+      // review, since the more usual entry would debit a receivable and
+      // credit Interest Income, not the reverse. Left unchanged here since
+      // that's a business-logic decision, not a hardcoding cleanup.
       if (totalInterest > 0) {
 
         const intReference = `LN-INT-${Date.now()}`;
+        const interestIncomeAcct = await getSystemAccount("INTEREST_INCOME");
+        const generalIncomeAcct = await getSystemAccount("GENERAL_INCOME");
 
-        const { error: intError } = await supabase
-          .from("general_ledger")
-          .insert([{
-            member_no: selectedLoan.member_no,
-            date: disbursementDate,
-            reference_no: intReference,
-
-            description: "Interest on Loan Charged",
-
-            debit_account_id: 1020,
-            credit_account_id: 1005,
-
-            amount: totalInterest,
-
-            external_reference: reference,
-            status: "posted"
-          }]);
-
-        if (intError) throw intError;
+        await postJournal({
+          member_no: selectedLoan.member_no,
+          reference: intReference,
+          date: disbursementDate,
+          description: "Interest on Loan Charged",
+          lines: [
+            { account_id: interestIncomeAcct, debit: totalInterest, credit: 0 },
+            { account_id: generalIncomeAcct, debit: 0, credit: totalInterest },
+          ],
+        });
       }
 
       // ================= 4. UPDATE APPLICATION STATUS =================

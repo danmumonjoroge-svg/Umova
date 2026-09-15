@@ -21,6 +21,8 @@ import {
   Store,
   ClipboardList,
   Building2,
+  Lock,
+  Package,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -55,6 +57,11 @@ const MENU = [
       { key: "members", label: "Members", to: "members", icon: Users },
       { key: "statements", label: "Member Statements", to: "member-statements", icon: FileText },
       { key: "payments", label: "Payments", to: "payments", icon: DollarSign },
+      { key: "withdrawal", label: "Withdrawal", to: "withdrawal", icon: CreditCard },
+      { key: "cash_bank", label: "Cash & Bank Management", to: "cash-bank", icon: Building2 },
+      { key: "accounts_payable", label: "Accounts Payable", to: "accounts-payable", icon: ClipboardList },
+      { key: "accounts_receivable", label: "Accounts Receivable", to: "accounts-receivable", icon: FileText },
+      { key: "fixed_assets", label: "Fixed Assets", to: "fixed-assets", icon: Package },
     ],
   },
   {
@@ -74,6 +81,8 @@ const MENU = [
     title: "ACCOUNTING CORE",
     items: [
       { key: "trial_balance", label: "Trial Balance", to: "trial-balance", icon: BookOpen },
+      { key: "journal_entry", label: "Journal Entry", to: "journal-entry", icon: FileText },
+      { key: "accounting_periods", label: "Accounting Periods", to: "accounting-periods", icon: Lock },
       { key: "income_statement", label: "Income Statement", to: "income-statement", icon: TrendingUp },
       { key: "balance_sheet", label: "Balance Sheet", to: "balance-sheet", icon: BarChart3 },
     ],
@@ -88,6 +97,16 @@ const MENU = [
       { key: "pos_dashboard", label: "POS Dashboard", to: "pos", icon: Store },
       { key: "pos_tenants", label: "POS Businesses", to: "pos-tenants", icon: Building2 },
       { key: "pos_requests", label: "POS Requests", to: "pos-requests", icon: ClipboardList },
+    ],
+  },
+  {
+    title: "CHAMA MANAGEMENT",
+    // Same approverOnly gating as POS MANAGEMENT — /admin/chama sits
+    // behind AdminLevelGuard in App.js, so anyone who'd be bounced
+    // there shouldn't see the entry either.
+    approverOnly: true,
+    items: [
+      { key: "chama_dashboard", label: "Chama Dashboard", to: "chama", icon: Users },
     ],
   },
   {

@@ -21,9 +21,11 @@ export default function Reports() {
   }, []);
 
   const load = async () => {
+    // Only finalized rows — matches get_trial_balance's filter.
     const { data, error } = await supabase
       .from("general_ledger")
-      .select("*"); 
+      .select("*")
+      .in("status", ["POSTED", "APPROVED"]);
 
     if (error) {
       console.error(error);

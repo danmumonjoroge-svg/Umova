@@ -9,6 +9,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { useAuth } from "../../Context/AuthContext";
 import { supabase } from "../../supabaseClient";
+import { useMemberLedger } from "../../hooks/useMemberLedger";
 import {
   Wallet, Landmark, TrendingUp, Gem, User,
   ArrowDownLeft, ArrowUpRight, History, Bell, Settings,
@@ -18,12 +19,9 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 // ACCOUNT MAPPING CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-const ACCOUNTS = {
-  SAVINGS:  1018,
-  LOANS:    1011,
-  SHARES:   1012,
-  INTEREST: 1020,
-};
+// Ledger data (balances, totals, recent activity) comes from the shared
+// useMemberLedger hook, which resolves account ids from chart_of_accounts
+// rather than hardcoding them.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN DASHBOARD COMPONENT
@@ -50,14 +48,11 @@ export default function DashboardHome() {
   const [roleLoading, setRoleLoading]     = useState(true);
 
   // Data metrics states
-  const [quickStats, setQuickStats]       = useState({
-    totalDeposits: 0, totalWithdrawals: 0,
-    totalShares: 0, totalLoanRepayments: 0,
-  });
+  // quickStats and recentTransactions are now derived from useMemberLedger
+  // (see below) rather than held in state.
   const [systemStats, setSystemStats]     = useState({
     members: 0, loans: 0, transactions: 0, notifications: 0,
   });
-  const [recentTransactions, setRecentTransactions] = useState([]);
   const [announcements, setAnnouncements]           = useState([]);
   const [healthScore, setHealthScore]               = useState(0);
   const [profileCompletion, setProfileCompletion]   = useState(0);
@@ -168,39 +163,30 @@ export default function DashboardHome() {
   }, [profile]);
 
   // ─────────────────────────────────────────────────────────────────────────
-  // DATALOADERS & LEDGER PARSING
+  // DATALOADERS
   // ─────────────────────────────────────────────────────────────────────────
-  const loadTransactions = useCallback(async (mno) => {
-    if (!mno) return;
-    const { data, error } = await supabase
-      .from("general_ledger")
-      .select("*")
-      .eq("member_no", mno)
-      .order("created_at", { ascending: false })
-      .limit(12);
+  // Ledger fetching and parsing now come from the shared useMemberLedger
+  // hook — this component previously did its own query and its own
+  // debit/credit parsing, one of five copies of that logic. The hook also
+  // fixes the original bug here: .limit(12) was applied before the totals
+  // were summed, so "Total Deposits" only ever counted a member's twelve
+  // most recent transactions instead of their full history.
+  const { ledger: memberLedger } = useMemberLedger(memberNo);
 
-    if (error) { console.error("[HOME] transactions:", error.message); return; }
+  const recentTransactions = useMemo(
+    // Newest first for display; the hook returns chronological order.
+    () => [...(memberLedger.savings.transactions || []), ...(memberLedger.loans.transactions || [])]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 12),
+    [memberLedger]
+  );
 
-    const ledger = data || [];
-    let deposits = 0, withdrawals = 0, loanRepayments = 0;
-
-    ledger.forEach(tx => {
-      const amt    = Number(tx.amount || 0);
-      const debit  = Number(tx.debit_account_id);
-      const credit = Number(tx.credit_account_id);
-      if (credit === ACCOUNTS.SAVINGS) deposits       += amt;
-      if (debit  === ACCOUNTS.SAVINGS) withdrawals    += amt;
-      if (credit === ACCOUNTS.LOANS)   loanRepayments += amt;
-    });
-
-    setRecentTransactions(ledger);
-    setQuickStats({
-      totalDeposits:       deposits,
-      totalWithdrawals:    withdrawals,
-      totalShares:         ledgerMetrics?.shares || 0,
-      totalLoanRepayments: loanRepayments,
-    });
-  }, [ledgerMetrics?.shares]);
+  const quickStats = useMemo(() => ({
+    totalDeposits:       memberLedger.totalDeposits,
+    totalWithdrawals:    memberLedger.totalWithdrawals,
+    totalShares:         memberLedger.shares.balance,
+    totalLoanRepayments: memberLedger.totalRepayments,
+  }), [memberLedger]);
 
   const loadSystemStats = useCallback(async () => {
     if (!isPrivileged) return;
@@ -227,17 +213,15 @@ export default function DashboardHome() {
     ]);
   }, []);
 
-  // Orchestrator initialization
+  // Orchestrator initialization — ledger data is handled by
+  // useMemberLedger, so this only covers the non-ledger feeds.
   useEffect(() => {
     if (!profile || roleLoading) return;
 
     const init = async () => {
       setLoading(true);
       try {
-        await Promise.all([
-          loadTransactions(profile.member_no),
-          loadSystemStats(),
-        ]);
+        await loadSystemStats();
         loadAnnouncements();
       } catch (err) {
         console.error("[HOME] initialization failure:", err);
@@ -247,7 +231,7 @@ export default function DashboardHome() {
     };
 
     init();
-  }, [profile, roleLoading, loadTransactions, loadSystemStats, loadAnnouncements]);
+  }, [profile, roleLoading, loadSystemStats, loadAnnouncements]);
 
   const { savings = 0, loans = 0, shares = 0, interest = 0 } = ledgerMetrics || {};
 
@@ -658,7 +642,9 @@ const SummaryCard = ({ title, value, icon, onClick }) => (
 );
 
 const TxRow = ({ tx }) => {
-  const isCredit = tx.credit_account_id === ACCOUNTS.SAVINGS;
+  // direction is supplied by useMemberLedger, so this no longer needs to
+  // know any account ids.
+  const isCredit = tx.direction === "in";
   return (
     <div className="bg-slate-50 rounded-[20px] p-4 flex items-center justify-between hover:bg-slate-100 transition-colors">
       <div className="flex items-center gap-3.5">

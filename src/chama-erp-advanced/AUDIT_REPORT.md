@@ -263,7 +263,68 @@ Additionally, from this broader pass:
 
 ---
 
-## Files changed in this pass
+## Follow-up pass — connecting Events to Cases and to case membership
+
+Requested after the first fix pass: event planning (`WelfareEventPlanner.js`)
+should be properly connected to the welfare case it's for, and to who's
+actually involved in that case, so duty assignment (e.g. "logistics" for
+XX's wedding) can be handed to the right member (YY) directly.
+
+**What was already there:** the schema was actually ready for this —
+`welfare_events.case_id` and the `welfare_case_participants` table both
+existed from `sql/001`. The gap was entirely in the UI layer not using them
+correctly.
+
+### P0-6 (new): the "Linked case" dropdown on event creation was broken
+`WelfareEventPlanner.js` queried `welfare_cases` for `target_amount` and
+`raised_amount` — neither column exists (`expected_amount` is the real
+column, and "raised" has to be summed from `welfare_contributions`, it was
+never a stored column). This query failed with a Postgres error on every
+load, so linking a new event to a case never actually worked in practice,
+even though the field was right there in the form.
+
+**Fix:** the query now selects `expected_amount`/`beneficiary_name` and a
+second query sums approved contributions per case to compute the raised
+total client-side — same shape (`target_amount`/`raised_amount`) the
+dropdown label already expected, so no other change was needed there.
+
+### What was added
+
+- **Duty assignment is now membership-aware.** When an event is linked to a
+  case, the task-assignee and budget-line-responsible dropdowns in
+  `WelfareEventPlanner.js` now show an "On this case" group (from
+  `welfare_case_participants`) above "Other members" — so assigning
+  logistics to a specific member for a specific case's event surfaces the
+  people already flagged as involved, first. Anyone can still be picked;
+  this doesn't restrict, it just orders sensibly.
+- **The link is now visible in both directions:**
+  - Event cards, list rows, and the detail modal show a "For: [beneficiary]"
+    badge when linked to a case, with a one-click "View linked case" jump.
+  - `WelfareCaseDesk.js`'s case detail now has a "Planned events for this
+    case" panel listing every linked event (title, status, date, budget)
+    with a jump straight into that event, plus a **"Plan an event"** button
+    that opens the Events tab with the case already pre-selected in the
+    creation form.
+- **Real cross-screen navigation.** `ChamaDashboardAdvanced.js`'s
+  `onNavigate` previously discarded whatever target detail a screen tried to
+  pass it (it only ever switched tabs). It now carries a `{ view, filter }`
+  payload through a short-lived `navTarget` piece of state, consumed once by
+  the destination screen (`initialFilter` prop) and cleared immediately
+  after — so "View linked case" and "Plan an event" actually land on the
+  specific case/event instead of just the tab.
+
+### Files touched in this follow-up
+
+| File | Change |
+|---|---|
+| `welfare/WelfareEventPlanner.js` | Fixed the broken case query; added case badges on cards/list/detail; membership-aware assignee dropdowns; `initialFilter`/`onNavigate` support for deep-linking in from a case. |
+| `welfare/WelfareEventPlanner.css` | Styling for the new case-link badges/button. |
+| `welfare/WelfareCaseDesk.js` | Added the "Planned events for this case" panel + "Plan an event" button; `initialFilter`/`onNavigate` support for deep-linking in from an event. |
+| `welfare/WelfareCaseDesk.css` | Styling for the new events panel. |
+| `ChamaDashboardAdvanced.js` | `onNavigate` now actually carries a filter payload (`navTarget` state) instead of discarding it; passes `initialFilter` to every screen. |
+
+---
+
 
 | File | Change |
 |---|---|
