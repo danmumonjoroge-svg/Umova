@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
+import PasskeySettings from "../../components/Auth/PasskeySettings";
 
 const SECTIONS = {
   system: "System Configuration",
@@ -247,6 +248,17 @@ export default function Settings() {
       {items.map((item) => (
         <Field key={item.key} item={item} />
       ))}
+      {/* Passkey enrollment is per-staff-member, not an org-wide field
+          like the ones above, so it's rendered directly here rather than
+          through the generic SCHEMA/Field system. Staff were previously
+          logging in through the same Face ID / Fingerprint system as
+          members but had nowhere at all to set one up — PasskeySettings
+          only existed on the member Profile page. */}
+      {view === "security" && (
+        <div className="mt-6">
+          <PasskeySettings />
+        </div>
+      )}
     </Section>
   );
 }
