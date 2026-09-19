@@ -41,7 +41,7 @@ export default function InventoryPage() {
     <div className="p-8 max-w-6xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Boxes size={22} className="text-emerald-600" /> Inventory
+          <Boxes size={22} className="text-emerald-600" /> My Stock
         </h1>
         <p className="text-slate-500 text-sm">Stock levels across your warehouse.</p>
       </div>

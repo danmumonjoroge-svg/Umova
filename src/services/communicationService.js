@@ -52,20 +52,6 @@ const DEFAULT_TEMPLATES = [
   { message_type: 'APPOINTMENT_REMINDER', channel: 'WHATSAPP', body: 'Hi {{customer_name}}, this is a reminder about your appointment at {{business_name}} at {{appointment_time}}. See you then!' },
 ];
 
-// Phase 10 — supplier-facing defaults (§15's second list). {{supplier_name}}
-// instead of {{customer_name}}; renderTemplate() doesn't care which
-// variable names a template uses, so no rendering-code change was needed.
-const DEFAULT_SUPPLIER_TEMPLATES = [
-  { message_type: 'SUPPLIER_ORDER', channel: 'WHATSAPP', body: 'Hi {{supplier_name}}, we would like to place an order. Details: {{order_details}}. Please confirm availability. — {{business_name}}' },
-  { message_type: 'SUPPLIER_PAYMENT_SENT', channel: 'WHATSAPP', body: 'Hi {{supplier_name}}, we have sent a payment of KES {{amount}}. Reference: {{reference}}. Thank you. — {{business_name}}' },
-  // No {{due_date}} — same reason as the customer PAYMENT_DUE template:
-  // lb_purchase_orders/lb_goods_received_notes have no due-date column,
-  // so nothing here can supply one honestly (§7's "do not fake ageing").
-  { message_type: 'SUPPLIER_PAYMENT_DUE', channel: 'WHATSAPP', body: 'Hi {{supplier_name}}, our current balance with you is KES {{balance}}. We will settle this shortly. — {{business_name}}' },
-  { message_type: 'SUPPLIER_STATEMENT', channel: 'WHATSAPP', body: 'Hi {{supplier_name}}, our current outstanding balance with you is KES {{balance}}. Let us know if this does not match your records.' },
-  { message_type: 'SUPPLIER_DELIVERY_REMINDER', channel: 'WHATSAPP', body: 'Hi {{supplier_name}}, checking in on the delivery for our recent order. Please let us know the expected date. Thank you. — {{business_name}}' },
-];
-
 function renderTemplate(body, variables) {
   return (body || '').replace(/\{\{(\w+)\}\}/g, (match, key) => (variables[key] != null ? String(variables[key]) : match));
 }
@@ -93,8 +79,7 @@ export const templateService = {
   async ensureDefaults({ tenantId, businessId, createdBy }) {
     const existing = await this.getAll({ businessId });
     const have = new Set(existing.map(t => `${t.message_type}|${t.channel}`));
-    const wanted = [...DEFAULT_TEMPLATES, ...DEFAULT_SUPPLIER_TEMPLATES];
-    const missing = wanted.filter(t => !have.has(`${t.message_type}|${t.channel}`));
+    const missing = DEFAULT_TEMPLATES.filter(t => !have.has(`${t.message_type}|${t.channel}`));
     if (missing.length === 0) return existing;
 
     const rows = missing.map(t => ({ ...t, tenant_id: tenantId, business_id: businessId ?? null, created_by: createdBy ?? null }));
@@ -115,87 +100,53 @@ export const templateService = {
   },
 };
 
-// Both selects below join whichever recipient the row actually has —
-// exactly one, enforced by lb_communication_log_one_recipient_chk — so
-// history rows for customers and suppliers can share one table and one
-// query shape without ambiguity.
-const LOG_SELECT = '*, customer:lb_customers(id, name, phone, email), supplier:lb_suppliers(id, name, phone, email)';
-
-/**
- * Shared insert for both communicationLogService.send() (customers) and
- * .sendToSupplier() (suppliers) — the ONLY write path onto
- * lb_communication_log either way. Never sends anything; always QUEUED.
- */
-async function insertLog({ tenantId, businessId, customerId, supplierId, nameVar, recipientRow, template, variables, referenceType, referenceId, createdBy }) {
-  if (!template) throw new Error('communicationService: a template is required.');
-  if (!recipientRow) throw new Error('communicationService: a recipient is required.');
-
-  const mergedVariables = { [nameVar]: recipientRow.name, ...variables };
-  const rendered = renderTemplate(template.body, mergedVariables);
-  const recipientContact = template.channel === 'EMAIL' ? recipientRow.email : recipientRow.phone;
-
-  const { data, error } = await supabase
-    .from('lb_communication_log')
-    .insert({
-      tenant_id: tenantId,
-      business_id: businessId ?? null,
-      customer_id: customerId ?? null,
-      supplier_id: supplierId ?? null,
-      template_id: template.id,
-      channel: template.channel,
-      message_type: template.message_type,
-      recipient: recipientContact || null,
-      rendered_message: rendered,
-      status: 'QUEUED',
-      reference_type: referenceType || null,
-      reference_id: referenceId || null,
-      created_by: createdBy ?? null,
-    })
-    .select(LOG_SELECT)
-    .single();
-  if (error) throw error;
-  return data;
-}
-
 export const communicationLogService = {
-  async getHistory({ businessId, customerId, supplierId, limit = 100 } = {}) {
+  async getHistory({ businessId, customerId, limit = 100 } = {}) {
     let q = supabase
       .from('lb_communication_log')
-      .select(LOG_SELECT)
+      .select('*, customer:lb_customers(id, name, phone, email)')
       .order('created_at', { ascending: false })
       .limit(limit);
     if (businessId) q = q.eq('business_id', businessId);
     if (customerId) q = q.eq('customer_id', customerId);
-    if (supplierId) q = q.eq('supplier_id', supplierId);
     const { data, error } = await q;
     if (error) throw error;
     return data || [];
   },
 
   /**
-   * Renders `template` against `variables` and queues it for a customer.
+   * Renders `template` against `variables` and queues it — the ONLY
+   * write path onto lb_communication_log. Never sends anything.
    * @returns {Promise<object>} the new lb_communication_log row (status: 'QUEUED')
    */
   async send({ tenantId, businessId, customer, template, variables, referenceType, referenceId, createdBy }) {
-    return insertLog({
-      tenantId, businessId, customerId: customer?.id, nameVar: 'customer_name', recipientRow: customer,
-      template, variables, referenceType, referenceId, createdBy,
-    });
-  },
+    if (!template) throw new Error('communicationLogService.send: a template is required.');
+    if (!customer) throw new Error('communicationLogService.send: a customer is required.');
 
-  /**
-   * Phase 10 — the supplier equivalent of send(). Same table, same
-   * QUEUED-only rule, template must be a SUPPLIER_* message type.
-   * @returns {Promise<object>} the new lb_communication_log row (status: 'QUEUED')
-   */
-  async sendToSupplier({ tenantId, businessId, supplier, template, variables, referenceType, referenceId, createdBy }) {
-    if (template && !String(template.message_type).startsWith('SUPPLIER_')) {
-      throw new Error('communicationLogService.sendToSupplier: template must be a supplier message type.');
-    }
-    return insertLog({
-      tenantId, businessId, supplierId: supplier?.id, nameVar: 'supplier_name', recipientRow: supplier,
-      template, variables, referenceType, referenceId, createdBy,
-    });
+    const mergedVariables = { customer_name: customer.name, ...variables };
+    const rendered = renderTemplate(template.body, mergedVariables);
+    const recipient = template.channel === 'EMAIL' ? customer.email : customer.phone;
+
+    const { data, error } = await supabase
+      .from('lb_communication_log')
+      .insert({
+        tenant_id: tenantId,
+        business_id: businessId ?? null,
+        customer_id: customer.id,
+        template_id: template.id,
+        channel: template.channel,
+        message_type: template.message_type,
+        recipient: recipient || null,
+        rendered_message: rendered,
+        status: 'QUEUED',
+        reference_type: referenceType || null,
+        reference_id: referenceId || null,
+        created_by: createdBy ?? null,
+      })
+      .select('*, customer:lb_customers(id, name, phone, email)')
+      .single();
+    if (error) throw error;
+    return data;
   },
 };
 
@@ -270,31 +221,6 @@ export const whatsappService = {
     });
 
     return { log: row, url: buildWhatsAppUrl(customer.phone, row.rendered_message) };
-  },
-
-  /**
-   * Phase 10 — the supplier equivalent of prepare(). Same three states
-   * (QUEUED/OPENED/SENT), same phone-number refusal rule: a wa.me link
-   * built from a number that doesn't parse is worse than no link.
-   */
-  async prepareForSupplier({ tenantId, businessId, supplier, template, variables, referenceType, referenceId, createdBy }) {
-    if (!template) throw new Error('whatsappService.prepareForSupplier: a template is required.');
-    if (!supplier) throw new Error('whatsappService.prepareForSupplier: a supplier is required.');
-    if (template.channel !== 'WHATSAPP') throw new Error('whatsappService.prepareForSupplier: template must be a WHATSAPP template.');
-
-    const normalized = normalizePhoneForWhatsApp(supplier.phone);
-    if (!normalized) {
-      throw new Error(
-        `${supplier.name} has no usable WhatsApp number (${supplier.phone || 'none on file'}). ` +
-        'Add a Kenyan mobile number like 0712345678 on the supplier first.'
-      );
-    }
-
-    const row = await communicationLogService.sendToSupplier({
-      tenantId, businessId, supplier, template, variables, referenceType, referenceId, createdBy,
-    });
-
-    return { log: row, url: buildWhatsAppUrl(supplier.phone, row.rendered_message) };
   },
 
   /**

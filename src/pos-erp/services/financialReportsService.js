@@ -44,6 +44,7 @@
 //     as such rather than presented as something independently verified.
 
 import { posSupabase as supabase } from './posSupabaseClient';
+import { assetService } from './assetService';
 
 const NON_CASH_METHODS = new Set(['CREDIT']);
 
@@ -181,13 +182,23 @@ export const financialReportsService = {
     if (supError) throw supError;
     const accountsPayable = (supRows || []).reduce((sum, r) => sum + Number(r.outstanding_balance), 0);
 
-    const totalAssets = cashAndBank + inventoryValue + accountsReceivable;
+    // --- Fixed assets at net book value (Phase 9) ---
+    // Cost less accumulated depreciation, for assets still owned
+    // (DISPOSED/WRITTEN_OFF are excluded by assetService.getSummary).
+    // Unlike Cash & Bank, this one is NOT an estimate: both figures are
+    // stored, and accumulated_depreciation is only ever written by
+    // post_asset_depreciation(). A business with no equipment recorded
+    // gets zero, which is correct rather than missing.
+    const assetSummary = await assetService.getSummary({ businessId });
+    const fixedAssets = assetSummary.netBookValue;
+
+    const totalAssets = cashAndBank + inventoryValue + accountsReceivable + fixedAssets;
     const totalLiabilities = accountsPayable;
     const ownersEquity = totalAssets - totalLiabilities; // plug — see header note
 
     return {
       asOf: new Date().toISOString().slice(0, 10),
-      assets: { cashAndBank, inventoryValue, accountsReceivable, total: totalAssets },
+      assets: { cashAndBank, inventoryValue, accountsReceivable, fixedAssets, total: totalAssets },
       liabilities: { accountsPayable, total: totalLiabilities },
       equity: { ownersEquity, total: ownersEquity },
     };

@@ -14,6 +14,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bell, Menu } from "lucide-react";
+import ConnectionStatus from "./offline/ConnectionStatus";
 
 export default function POSTopbar({ title, notificationCount = 0, onMenuClick }) {
   const [now, setNow] = useState(new Date());
@@ -38,6 +39,9 @@ export default function POSTopbar({ title, notificationCount = 0, onMenuClick })
       </div>
 
       <div className="flex items-center gap-3 sm:gap-5 shrink-0">
+        {/* Stage 1B (brief section 26) -- lives in the topbar so it's
+            visible on every screen, not just the till. */}
+        <ConnectionStatus />
         <span className="text-xs text-slate-400 hidden lg:block">
           {now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
           {" · "}

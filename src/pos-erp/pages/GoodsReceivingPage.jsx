@@ -253,7 +253,7 @@ export default function GoodsReceivingPage() {
 
   return (
     <div className="p-4 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Goods Receiving</h1>
+      <h1 className="text-2xl font-bold mb-4">Receive Stock</h1>
 
       <div className="bg-white rounded shadow p-4 mb-4">
         <div className="flex gap-2 mb-4">

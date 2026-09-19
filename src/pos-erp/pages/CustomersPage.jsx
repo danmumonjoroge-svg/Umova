@@ -11,12 +11,21 @@
 // CREDIT is deliberately excluded from the payment-method choices here —
 // it's a sale payment method, not something you'd record as how a
 // standalone payment was paid.
+//
+// Phase 8 adds §7's "Remind John" — a one-press WhatsApp payment
+// reminder for anyone with a balance. It reuses the WhatsApp machinery
+// in communicationService.js rather than building a second message path,
+// and it inherits that machinery's honesty rules: the reminder is
+// logged Prepared → Opened in WhatsApp → Sent by you, never "Delivered",
+// because the owner is the one who presses Send inside WhatsApp.
 
 import React, { useState } from 'react';
 import { useCustomers } from '../hooks/useCustomers';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { paymentService } from '../services/paymentService';
 import { receivablesService } from '../services/receivablesService';
+import { useTemplates, useCommunicationLog } from '../hooks/useCommunication';
+import { normalizePhoneForWhatsApp } from '../services/communicationService';
 
 const CUSTOMER_TYPES = ['WALK_IN', 'REGISTERED', 'BUSINESS', 'CREDIT'];
 const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK', 'VOUCHER', 'OTHER'];
@@ -43,6 +52,54 @@ export default function CustomersPage() {
   const [paymentForm, setPaymentForm] = useState(EMPTY_PAYMENT);
   const [paymentError, setPaymentError] = useState('');
   const [payingBusy, setPayingBusy] = useState(false);
+
+  // §7 — "Remind John". Reuses the shared WhatsApp path; no second
+  // message-sending implementation lives on this page.
+  const { templates } = useTemplates();
+  const { prepareWhatsApp, markOpened, markSent, markNotSent } = useCommunicationLog();
+  const [remindError, setRemindError] = useState('');
+  const [remindingId, setRemindingId] = useState(null);
+  const [awaitingConfirm, setAwaitingConfirm] = useState(null); // { logId, customerName }
+
+  const reminderTemplate = templates.find(t => t.channel === 'WHATSAPP' && t.message_type === 'PAYMENT_DUE');
+
+  const handleRemind = async (customer) => {
+    setRemindError('');
+    if (!reminderTemplate) {
+      setRemindError('The WhatsApp reminder wording has not loaded yet. Give it a moment, or check Messages if it keeps failing.');
+      return;
+    }
+    setRemindingId(customer.id);
+    try {
+      const { log, url } = await prepareWhatsApp({
+        customer,
+        template: reminderTemplate,
+        variables: { balance: fmt(customer.outstanding_balance), amount: fmt(customer.outstanding_balance) },
+      });
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (win) {
+        await markOpened(log.id);
+        setAwaitingConfirm({ logId: log.id, customerName: customer.name });
+      } else {
+        setRemindError('Your browser blocked the WhatsApp window. The reminder is saved under Messages — open it from there.');
+      }
+    } catch (err) {
+      setRemindError(err.message);
+    } finally {
+      setRemindingId(null);
+    }
+  };
+
+  const confirmReminderSent = async (didSend) => {
+    if (!awaitingConfirm) return;
+    try {
+      await (didSend ? markSent(awaitingConfirm.logId) : markNotSent(awaitingConfirm.logId));
+    } catch (err) {
+      setRemindError(err.message);
+    } finally {
+      setAwaitingConfirm(null);
+    }
+  };
 
   const [statementCustomer, setStatementCustomer] = useState(null);
   const [statementRows, setStatementRows] = useState([]);
@@ -156,6 +213,21 @@ export default function CustomersPage() {
         </div>
       </div>
 
+      {remindError && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{remindError}</div>
+      )}
+
+      {/* We know WhatsApp opened. We do not know the owner pressed Send. */}
+      {awaitingConfirm && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <span className="text-sm text-amber-900 font-semibold">
+            Did you press Send in WhatsApp for {awaitingConfirm.customerName}?
+          </span>
+          <button type="button" onClick={() => confirmReminderSent(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-800 text-white hover:bg-emerald-900">Yes, I sent it</button>
+          <button type="button" onClick={() => confirmReminderSent(false)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Not yet</button>
+        </div>
+      )}
+
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white p-4 rounded-2xl shadow mb-6 grid grid-cols-1 md:grid-cols-3 gap-3 border border-slate-100">
           {formError && <div className="md:col-span-3 bg-red-50 text-red-700 text-sm rounded px-3 py-2">{formError}</div>}
@@ -210,6 +282,20 @@ export default function CustomersPage() {
                     <button onClick={() => openEditForm(c)} className="text-emerald-700 text-sm hover:underline">Edit</button>
                     <button onClick={() => openPaymentModal(c)} className="text-amber-700 text-sm hover:underline">Record Payment</button>
                     <button onClick={() => openStatement(c)} className="text-slate-600 text-sm hover:underline">Statement</button>
+                    {/* Only offered when there is actually something to
+                        chase, and only when the number can be turned
+                        into a real wa.me link — a reminder sent to an
+                        unparseable number opens a chat with a stranger. */}
+                    {Number(c.outstanding_balance) > 0 && (
+                      <button
+                        onClick={() => handleRemind(c)}
+                        disabled={remindingId === c.id || !normalizePhoneForWhatsApp(c.phone)}
+                        title={normalizePhoneForWhatsApp(c.phone) ? 'Send a WhatsApp reminder' : 'No usable WhatsApp number on this customer'}
+                        className="text-emerald-700 text-sm hover:underline disabled:text-slate-300 disabled:no-underline disabled:cursor-not-allowed"
+                      >
+                        {remindingId === c.id ? 'Opening…' : 'Remind'}
+                      </button>
+                    )}
                     <button
                       onClick={() => (c.is_active ? deactivate(c.id) : reactivate(c.id))}
                       className="text-sm text-slate-500 hover:text-red-600"

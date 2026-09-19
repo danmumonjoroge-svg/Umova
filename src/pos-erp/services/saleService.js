@@ -31,6 +31,7 @@
 
 import { posSupabase as supabase } from './posSupabaseClient';
 import { applyStockMovement, getDefaultWarehouseId } from './purchaseService';
+import { auditService } from './auditService';
 
 async function generateSaleNumber() {
   // Same count-based caveat as PO/GRN/return numbering — collision-safe
@@ -70,7 +71,7 @@ export const saleService = {
    *   items: [{ product_id, quantity, unit_price, cost_price?, discount_amount?,
    *             discount_percent?, tax_amount?, selling_mode?, weight_value?, notes? }],
    *   payments: [{ payment_method, amount, change_amount?, reference_no? }],
-   *   notes?
+   *   notes?, client_reference? // phase11: offline-sync idempotency key
    * }
    * shift_id is required — without it, cashierService.closeShift()'s
    * expected_cash calculation can never find this sale, and the till
@@ -112,6 +113,21 @@ export const saleService = {
     const taxTotal = sale.items.reduce((sum, i) => sum + (i.tax_amount || 0), 0);
     const totalAmount = subtotal - discountTotal + taxTotal;
 
+    // Offline-first idempotency (phase11): if this sale carries a
+    // client_reference (set when it was created offline and is now
+    // syncing), a retried sync must not create a second row. Checked
+    // before insert rather than relying only on the unique index, so a
+    // retry returns the ALREADY-SYNCED sale cleanly instead of a raw
+    // constraint-violation error the sync engine would have to parse.
+    if (sale.client_reference) {
+      const { data: existing } = await supabase
+        .from('lb_sales')
+        .select('id')
+        .eq('client_reference', sale.client_reference)
+        .maybeSingle();
+      if (existing) return this.getById(existing.id);
+    }
+
     const { data: headerData, error: hErr } = await supabase
       .from('lb_sales')
       .insert({
@@ -129,6 +145,7 @@ export const saleService = {
         total_amount: totalAmount,
         notes: sale.notes || null,
         completed_at: new Date().toISOString(),
+        client_reference: sale.client_reference || null,
       })
       .select()
       .single();
@@ -210,6 +227,33 @@ export const saleService = {
     });
     if (rErr) throw rErr;
 
+    // Audit trail (brief §17/§60's "Sale → ... → Audit" chain). Caught
+    // locally rather than left to propagate: by this point the sale,
+    // items, payments, stock movement, and receipt are all already
+    // committed — if the audit write alone failed and this threw, the
+    // cashier would see "Failed to complete sale" for a sale that had
+    // already gone through, risking a duplicate on retry. An audit gap
+    // is a real problem to notice and fix, but it must not look like a
+    // failed sale to the person at the till.
+    try {
+      await auditService.log({
+        tenantId: sale.tenant_id,
+        actorId: sale.cashier_id,
+        action: 'SALE_COMPLETED',
+        entityType: 'lb_sales',
+        entityId: headerData.id,
+        metadata: {
+          sale_number: headerData.sale_number,
+          total_amount: totalAmount,
+          discount_total: discountTotal,
+          payment_methods: (sale.payments || []).map((p) => p.payment_method),
+          customer_id: sale.customer_id ?? null,
+        },
+      });
+    } catch (auditErr) {
+      console.error('[saleService.create] audit log failed (sale itself succeeded):', auditErr);
+    }
+
     return this.getById(headerData.id);
   },
 
@@ -255,6 +299,22 @@ export const saleService = {
         notes: reason,
         createdBy: voidedBy,
       });
+    }
+
+    // Same reasoning as create() above — the void itself already
+    // succeeded (status updated, stock reversed) by the time this runs,
+    // so a failed audit write is logged, not surfaced as a failed void.
+    try {
+      await auditService.log({
+        tenantId: sale.tenant_id,
+        actorId: voidedBy,
+        action: 'SALE_VOIDED',
+        entityType: 'lb_sales',
+        entityId: id,
+        metadata: { reason: reason ?? null },
+      });
+    } catch (auditErr) {
+      console.error('[saleService.voidSale] audit log failed (void itself succeeded):', auditErr);
     }
 
     return data;

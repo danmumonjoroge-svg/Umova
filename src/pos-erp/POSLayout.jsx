@@ -37,12 +37,20 @@ import {
   LayoutDashboard, ShoppingCart, Package, Boxes, Truck, Users, UserRound, Wallet, Receipt,
   Home, Repeat, Gauge, Scissors, CalendarClock, MessageSquare, Settings, ShieldCheck,
   LogOut, Store, BarChart3, ChevronDown, ShoppingBag, Building2, Landmark, FileBarChart, X, ClipboardList,
+  HardHat,
+  Smartphone,
 } from "lucide-react";
 
-// Top-level items, always visible, no grouping.
+// Owner-facing labels (brief §1): plain wording instead of accounting/
+// inventory jargon. Routes/components are untouched — this is a label
+// pass only, nothing here changes what a page does or how it's built.
+// Two items intentionally keep their existing label: "Customers" and
+// "Suppliers" are already plain words, and CustomersPage already has its
+// own "People who owe me" filter/toggle built in (Phase 2) — no separate
+// nav item exists for that, so it isn't relabeled here.
 const TOP_LEVEL = [
-  { to: "/pos/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/pos", label: "Till", icon: ShoppingCart, end: true },
+  { to: "/pos/dashboard", label: "Home", icon: LayoutDashboard },
+  { to: "/pos", label: "Sell", icon: ShoppingCart, end: true },
 ];
 
 const AFTER_GROUPS = [
@@ -57,12 +65,12 @@ const GROUPS = [
     label: "Retail",
     icon: ShoppingBag,
     items: [
-      { to: "/pos/products", label: "Products", icon: Package },
-      { to: "/pos/inventory", label: "Inventory", icon: Boxes },
+      { to: "/pos/products", label: "My Items", icon: Package },
+      { to: "/pos/inventory", label: "My Stock", icon: Boxes },
       { to: "/pos/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
-      { to: "/pos/goods-receiving", label: "Goods Receiving", icon: Truck },
+      { to: "/pos/goods-receiving", label: "Receive Stock", icon: Truck },
       { to: "/pos/suppliers", label: "Suppliers", icon: Users },
-      { to: "/pos/payables", label: "Payables", icon: Wallet },
+      { to: "/pos/payables", label: "People I Owe", icon: Wallet },
     ],
   },
   {
@@ -86,13 +94,15 @@ const GROUPS = [
   },
   {
     key: "accounts",
-    label: "Accounts",
+    label: "My Accounts",
     icon: Landmark,
     items: [
-      { to: "/pos/cash", label: "Cash", icon: Wallet },
-      { to: "/pos/expenses", label: "Expenses", icon: Receipt },
-      { to: "/pos/reports", label: "Reports", icon: BarChart3 },
-      { to: "/pos/financials", label: "Financial Statements", icon: FileBarChart },
+      { to: "/pos/cash", label: "My Money", icon: Wallet },
+      { to: "/pos/expenses", label: "My Spending", icon: Receipt },
+      { to: "/pos/equipment", label: "My Equipment", icon: HardHat },
+      { to: "/pos/mpesa", label: "M-Pesa", icon: Smartphone },
+      { to: "/pos/reports", label: "My Reports", icon: BarChart3 },
+      { to: "/pos/financials", label: "Financial Statements (Advanced)", icon: FileBarChart },
     ],
   },
   {
@@ -162,7 +172,7 @@ export default function POSLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="h-screen overflow-hidden bg-slate-50 flex print:h-auto print:overflow-visible">
       {/* Backdrop — mobile only, only while the drawer is open. Tapping
           it closes the drawer, same as a nav click would. */}
       {sidebarOpen && (

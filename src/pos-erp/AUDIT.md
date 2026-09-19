@@ -790,3 +790,764 @@ building, not assumed from the user's description:
    parallel no-barcode flow.
 
 Full-repo esbuild sweep passed. **Not tested against a live app.**
+
+## 22. WhatsApp without an API (brief §16)
+
+Picked this up because the other open selling-flow gap (returns) is still
+blocked on `lb_refunds`' column list, and because §16 was the last
+explicitly-required feature in Stage 1A with literally nothing behind it:
+grepping the whole project for `wa.me`/`whatsapp` turned up only comments
+saying WhatsApp wasn't connected, plus a dashboard quick-link whose
+subtitle already promised "Send a WhatsApp message" and led to a page
+that could only queue a row and stop.
+
+**The honesty problem this had to solve first.** §16 wants three states
+kept apart from "automatically delivered", but `lb_comm_status` only had
+QUEUED/SENT/DELIVERED/FAILED. Reusing SENT for "we opened wa.me" would
+have been exactly the §43 failure the brief names by example — the owner
+would see "Sent" for a message still sitting unsent in their WhatsApp
+draft box. So `schema/phase8_whatsapp.sql` adds one enum value, `OPENED`,
+and one column, `opened_at`, and the mapping is:
+
+| State | §16 wording | What Umova actually knows |
+|---|---|---|
+| `QUEUED` | Prepared | Message rendered. WhatsApp never opened. |
+| `OPENED` | Opened in WhatsApp | `window.open()` on the wa.me link returned a window. That's all. |
+| `SENT` | Sent by you | The owner answered "yes" when asked if they pressed Send. |
+
+`DELIVERED` is never set on a WHATSAPP row by any code path. The status
+chip reads **"Sent by you"**, not "Sent", specifically so the history
+can't be misread as a delivery receipt. There is also a "Not yet" answer
+that puts the row back to Prepared — an owner who opened WhatsApp and
+changed their mind shouldn't leave a false record behind.
+
+**Migration must be run in two parts.** Postgres won't let a new enum
+value be *used* in the transaction that adds it, so `ALTER TYPE … ADD
+VALUE 'OPENED'` has to commit before anything references it. The file is
+split and labelled accordingly. This is migration #6, after
+`phase7_communication.sql`.
+
+**Phone normalisation refuses rather than guesses.**
+`normalizePhoneForWhatsApp()` handles the four shapes Kenyan numbers
+actually get typed as (`0712345678`, `712345678`, `254712345678`,
+`+254 712 345 678`) and returns `null` for anything else. A wa.me link
+built from a wrong number opens a chat with a stranger and nothing here
+could detect it, so an unusable number blocks the button with a named
+reason instead of producing a link. Checked before the owner presses
+anything, not after.
+
+**Reused, not duplicated** (§2): this went into
+`services/communicationService.js` alongside the existing
+`templateService`/`communicationLogService`, not a new
+`whatsappService.js` file. `whatsappService.prepare()` calls the existing
+`communicationLogService.send()` for the actual log write — it does not
+reimplement template rendering or the insert.
+
+**One existing-behaviour fix this forced.** `templateService.ensureDefaults()`
+was all-or-nothing — it bailed out if the business had *any* template.
+Every business seeded in Phase 7 has 7 SMS rows, so it would never have
+received the new WhatsApp set. Now it gap-fills by
+`(message_type, channel)`: missing pairs get inserted, existing rows
+(including wording the owner has edited themselves) are left alone.
+
+Files changed: `schema/phase8_whatsapp.sql` (new),
+`services/communicationService.js`, `hooks/useCommunication.js`,
+`pages/CustomerCommunicationPage.jsx` (also relabelled to "Messages"
+per §15/§1 — the sidebar already said Messages; the page header said
+"Customer Communication").
+
+**Deliberately not built this pass**: supplier WhatsApp messaging (§15's
+second list). `lb_communication_log` has `customer_id` but no
+`supplier_id`, and the `lb_comm_message_type` enum has no supplier types
+— that's a second migration plus a recipient-polymorphism decision, and
+bundling it here would have made one change into two half-changes (§44).
+Same reason the per-row "Remind John" / "Remind ABC Suppliers" buttons on
+`CustomersPage`/`PayablesPage` aren't wired yet: the service supports it
+now, the entry points are a separate small pass.
+
+**Verification**: full-repo esbuild sweep of every non-archived `.js`/`.jsx`
+passed. No `npm run build`, no live DB, no real device — the network is
+unavailable in this environment, so the migration has not been run and
+nothing here has been clicked through.
+
+## 23. "Remind John" — §7's reminder button on Customers
+
+Small pass, finishing §7's example screen: an owner looking at *People
+Who Owe Me* should be able to chase a debt without retyping anything.
+`pages/CustomersPage.jsx` now has a **Remind** action next to Edit /
+Record Payment / Statement.
+
+**Reused, not re-implemented** (§2): the button calls the same
+`prepareWhatsApp` / `markOpened` / `markSent` hook path Messages uses.
+There is no second message-sending code path on this page — the reminder
+lands in the same `lb_communication_log`, shows up in Messages' history,
+and carries the same Prepared → Opened in WhatsApp → Sent by you states.
+The confirm strip ("Did you press Send in WhatsApp for John?") appears
+here too, because opening WhatsApp still isn't evidence the owner sent
+anything.
+
+**Two guards, both to avoid a confidently-wrong message:**
+- The button only appears when `outstanding_balance > 0`. Nothing to
+  chase, no button.
+- It's disabled (with a hover reason) when the customer's phone can't be
+  normalised to a real Kenyan mobile. A wa.me link from a bad number
+  opens a chat with a stranger and nothing here could tell.
+
+**One template change this forced.** The WhatsApp `PAYMENT_DUE` default
+originally read "…KES {{amount}} is due on {{due_date}}…". That's the
+template this button fires, and there is still no per-invoice due date
+anywhere in this schema — the same gap already recorded against Payables
+(§10) and the Home screen (§17 work). Sending a customer a date Umova
+invented is exactly the §7 "do not fake ageing" failure, so the WhatsApp
+variant now reads "…a reminder that your balance with {{business_name}}
+is KES {{balance}}. Kindly settle when you can." — true with only the
+data that actually exists. The SMS `PAYMENT_DUE` template is untouched;
+it's already seeded for live businesses, and it isn't wired to any
+automatic trigger that would supply a fabricated date.
+
+Files changed: `pages/CustomersPage.jsx`,
+`services/communicationService.js`.
+
+**Minor known cost**: `CustomersPage` now mounts `useCommunicationLog()`,
+which fetches the full message history on load even though the page only
+writes to it. One extra query per visit. Worth revisiting if the log
+grows, but not worth a narrower hook variant today.
+
+Full-repo esbuild sweep passed. Still no live DB, no `npm run build`, no
+click-through — the network is unavailable here.
+
+## 24. Phase 9 — My Equipment / fixed assets (§10)
+
+The largest remaining Stage 1A hole: confirmed by grep that nothing
+asset-related existed anywhere — no table, no service, no page. The only
+hits for "asset" were `financialReportsService`'s balance-sheet variable
+names and a Web Audio comment.
+
+### The accounting decision, made explicitly rather than fudged
+
+§12 asks for asset purchase to post "Asset register → Cash/Bank/M-Pesa OR
+payable". **This schema has no general ledger.** There is no journal
+table, and `financialReportsService` builds both statements by
+aggregating `lb_sales` / `lb_expenses` / `lb_inventory` / running
+balances directly. There is nowhere correct to post the credit side.
+
+So the split is:
+
+- **Purchase does NOT post.** Adding a fridge records the fridge. It does
+  not reduce My Money or raise People I Owe. Auto-posting it to
+  `lb_expenses` would have been *worse* than not posting — an asset is
+  not an expense, and it would have cratered that month's profit by the
+  fridge's full cost. The page says this in plain words in a notice above
+  the table, and again in the disposal dialog, because an owner who
+  assumes otherwise would double-count.
+- **Depreciation DOES post, for real.** It genuinely is a period expense,
+  `lb_expenses` is genuinely where this system's profit calculation reads
+  expenses from, and posting there is the only way My Profit tells the
+  truth about a business that owns a freezer. `post_asset_depreciation()`
+  writes the `lb_expenses` row (through the existing `record_expense()`
+  RPC — not a second insert path), the entry, and the running
+  accumulated total in one atomic call.
+
+### Duplicate protection
+
+`lb_asset_depreciation_entries` has `UNIQUE (asset_id, period_end)`.
+Pressing "Record wear" twice in the same month gets "already recorded for
+this period", not a double charge against profit. The RPC also refuses to
+push an asset below its salvage value, so a long-lived item can't quietly
+go to negative book value and break the balance sheet.
+
+### §10's actual requirement: "normal users should not need to understand depreciation"
+
+The word *depreciation* appears once on the page, in the greyed
+accountant-wording line under the header (§14's two-layer split).
+Everywhere the owner works it reads "wear and tear" and "worth now"; the
+method dropdown reads "Same amount every year" / "A percentage of what
+it's worth now" / "Don't reduce its value". The owner never types a
+depreciation figure — they press one button and the amount is derived
+from what they already entered.
+
+**And when it can't be derived, it says so.** `monthlyDepreciation()`
+returns `null` — not 0, not a guess — when the method is NONE, when
+straight-line has no useful life, or when reducing-balance has no rate.
+The button is then replaced by the missing thing ("Set how many years it
+will last"). §13: don't silently invent values when the information isn't
+there. A zero here would look like an answer and never be questioned.
+
+### Balance sheet
+
+`financialReportsService.getBalanceSheet()` gained a **Fixed Assets (net
+of depreciation)** line, and `FinancialReportsPage` renders it. Unlike
+Cash & Bank, this one is *not* labelled "estimated": both figures are
+stored, and `accumulated_depreciation` is only ever written by the RPC.
+Disposed and written-off items are excluded — still in the register for
+history, but no longer owned.
+
+Files: `schema/phase9_assets.sql` (new), `services/assetService.js` (new),
+`hooks/useAssets.js` (new), `pages/AssetsPage.jsx` (new),
+`POSApp.jsx` (route `/pos/equipment`), `POSLayout.jsx` (nav, under My
+Accounts), `services/financialReportsService.js`,
+`pages/FinancialReportsPage.jsx`.
+
+### Two things to verify before running the migration
+
+1. **The `Depreciation` expense category insert** uses the column list
+   `expensesService.js` reads plus `tenant_id` (`name`, `is_system`,
+   `is_active`, `sort_order`). The full schema of `lb_expense_categories`
+   hasn't been dumped this session. If it has other NOT NULL columns the
+   INSERT fails loudly — which is intended, not something to guess past.
+2. **`record_expense()` is called positionally** inside
+   `post_asset_depreciation()`, in the order `expensesService.js` passes
+   its named parameters. If the live function's parameter order differs,
+   confirm it first — a positional mismatch here would post to the wrong
+   column.
+
+Both are flagged inline in the SQL file too.
+
+**Deliberately not built**: maintenance reminders (§10 says "where
+appropriate" — that belongs in the central notification engine, not as a
+fourth one-off reminder implementation), and any asset-purchase cash
+posting, for the ledger reason above.
+
+Migration order is now: phase1 → phase4 → phase5 → phase6 → phase7 →
+phase8 (two parts) → phase9.
+
+Full-repo esbuild sweep passed. No live DB, no `npm run build`, no
+click-through — network unavailable in this environment.
+
+## 25. Phase 10 — Supplier messaging (§15, second list)
+
+Closes §15's other half. Customers got WELCOME/PAYMENT_RECEIVED/etc. in
+Phases 7-8; suppliers had nothing — grep confirmed zero references to a
+supplier-facing message anywhere.
+
+**Schema choice, made rather than deferred**: five new
+`lb_comm_message_type` values (`SUPPLIER_ORDER`, `SUPPLIER_PAYMENT_SENT`,
+`SUPPLIER_PAYMENT_DUE`, `SUPPLIER_STATEMENT`,
+`SUPPLIER_DELIVERY_REMINDER`) rather than reusing the customer ones or
+widening the templates table. Reusing `PAYMENT_DUE` for both customers and
+suppliers would put two different templates in competition for the same
+`(business_id, message_type, channel)` unique key — one of them would
+have to lose. New enum values cost nothing beyond the enum itself and
+read through every existing code path unchanged.
+
+`lb_communication_log` gained a nullable `supplier_id` alongside the
+existing nullable `customer_id`, with a **CHECK constraint** —
+`(customer_id IS NOT NULL) <> (supplier_id IS NOT NULL)` — enforcing
+exactly one recipient at the database, not left as an assumption in two
+services to get right independently. Existing rows (customer set,
+supplier null) satisfy it without a backfill.
+
+**Reused, not duplicated** (§2): `communicationLogService.send()` and the
+new `.sendToSupplier()` both funnel through one shared `insertLog()`
+helper — the insert logic exists once, not twice. Same pattern in
+`whatsappService`: `.prepareForSupplier()` mirrors `.prepare()`'s phone-
+validation and three-state (Prepared/Opened/Sent-by-you) logic rather
+than reimplementing it. `templateService.ensureDefaults()` now seeds both
+the customer and supplier default sets in the same gap-filling pass
+introduced in Phase 8 — a business visiting Messages for the first time
+after this update gets all of it in one seed, not two.
+
+**Entry point**: a **Remind** button on `PayablesPage.jsx`, mirroring
+§7's "Remind John" on Customers exactly — same disabled-with-reason state
+for an unparseable phone number, same confirm strip asking whether the
+owner actually pressed Send. Its `SUPPLIER_PAYMENT_DUE` default wording
+has no due-date placeholder, for the same reason `PayablesPage`'s own
+header comment already gives: neither `lb_purchase_orders` nor
+`lb_goods_received_notes` has a due-date column, so nothing here can
+state one honestly (§7).
+
+`pages/CustomerCommunicationPage.jsx`'s history table is shared
+infrastructure — a Payables-sent reminder shows up there too, since it's
+the same `lb_communication_log` — so its customer-name cell now falls
+back to the supplier name for those rows.
+
+Files: `schema/phase10_supplier_messaging.sql` (new),
+`services/communicationService.js`, `hooks/useCommunication.js`,
+`pages/PayablesPage.jsx`, `pages/CustomerCommunicationPage.jsx`.
+
+**Deliberately not built this pass**: a general-purpose "compose a
+message to any supplier" screen (the Messages page's compose form is
+still customer-only) and `SUPPLIER_ORDER`/`SUPPLIER_DELIVERY_REMINDER`
+entry points — those belong on `SuppliersPage`/`PurchaseOrdersPage` and
+are their own small wiring pass, same reasoning as the "custom message"
+gap noted after Phase 8.
+
+Migration order: phase1 → 4 → 5 → 6 → 7 → 8 (two parts) → 9 → 10 (two
+parts — same enum-then-column split as phase8).
+
+Full-repo esbuild sweep passed. No live DB, no `npm run build`, no
+click-through — network unavailable in this environment.
+
+## 26. Stage 1B — Offline-first (brief section 20-32)
+
+**Stage-order note, stated plainly:** the brief's own rules say Stage 2
+should not start before Stage 1A and 1B are "complete and tested." This
+phase and Phase 27 (M-Pesa) below were built on explicit instruction to
+proceed regardless. Stage 1A is close to complete (see the running log
+above); Stage 1B, built this pass, covers Sales and Stock end-to-end —
+the brief's own "at minimum" priority — but not every domain section 22
+lists. Nothing here has been tested against a live device, browser, or
+database. That's the honest state, not a claim of completion.
+
+### Technology chosen: Dexie
+
+Confirmed by grep that this project had zero existing offline storage —
+no IndexedDB, no localStorage-based queue, nothing to extend. Dexie
+(over raw IndexedDB) because there's no existing low-level IndexedDB
+code to preserve, and raw IndexedDB's callback API would mean writing a
+promise wrapper from scratch — which is what Dexie already is, plus real
+transactions and indexable queries (both explicitly required by section
+21). Needs `npm install dexie` — see DEPLOYMENT_NOTES.md; this project's
+zip has no package.json to add it to directly.
+
+### What's actually wired end-to-end
+
+**Sales.** `offline/offlineSaleService.js` wraps `saleService.create()`
+— never duplicates its logic. Online: calls it directly (identical
+behaviour to before this change). Offline, or if the "online" reading
+was stale and the request fails with a network error: generates a
+`LOCAL-SALE-<date>-<seq>` id (`offline/idGenerator.js`, counter stored in
+Dexie so a page refresh mid-shift can't repeat an id — section 32 Test
+6), writes the sale to the `outbox` table, and returns a synthetic sale
+object with `status: 'LOCAL_PENDING'` — never `'COMPLETED'` (section 43).
+POSPage's checkout alert distinguishes the two in the exact words shown
+to the cashier.
+
+**Stock.** `saleService.create()` gained a `client_reference` idempotency
+check (schema/phase11_offline_sync.sql adds the column + a partial
+unique index on `lb_sales`) — a retried sync for the same offline sale
+returns the already-synced row instead of inserting a duplicate. This is
+the actual mechanism behind section 29's "same sale submitted twice"
+requirement, not just a UI promise. `offline/offlineCache.js` keeps a
+read-through product/price cache, refreshed on every successful online
+fetch (`cacheProducts()`, called from a `useEffect` in POSPage keyed on
+`products`), and `decrementCachedStock()` optimistically adjusts it after
+an offline sale so search doesn't show stock that was just sold in the
+same offline session. Explicitly documented as a UX convenience, not a
+second source of truth — the real check still happens server-side on
+sync.
+
+**Search while offline.** POSPage now falls back to the Dexie cache when
+the live product list is empty and the device is offline (the section 32
+Test 6 case: closed and reopened while offline, so the normal fetch
+never populated anything). If nothing was ever cached (fresh install,
+never been online), search correctly comes back empty — an honest
+result, not a bug.
+
+**Sync engine.** `offline/syncEngine.js` drains the outbox in creation
+order. Three outcomes, not two: a network failure leaves the row PENDING
+for automatic retry (section 25 — never lose data); a genuine
+server-side rejection (bad data, RLS) is marked FAILED with the error
+attached, surfaced as "needs attention," and NOT retried forever —
+section 29's own principle applied to the sync engine itself, not just
+to multi-device conflicts; a duplicate (idempotency check finds an
+existing row) is treated as success, which is the entire point of
+`client_reference`.
+
+**Connection status.** `offline/ConnectionStatus.jsx`, mounted in
+`POSTopbar.jsx` (visible on every screen, not just the till), uses the
+brief's exact wording — 🟢 Online / 🟠 Offline — Everything is saved /
+🔄 Updating / 🟢 Updated — plus the pending-count and last-updated lines,
+both optional per section 26. `navigator.onLine` alone isn't trusted; a
+HEAD probe against Supabase's own REST root confirms real reachability,
+because a device can report "online" while actually routed nowhere
+(captive portal, dead upstream).
+
+### What's deliberately NOT done this pass
+
+Customers, Suppliers, Expenses, and Appointments offline creation
+(section 22's other four areas) are not wired. The architecture is
+generic — `outbox` has a `kind` column specifically so a second domain
+means one more `case` in `syncEngine.js`, not a rewrite — but only
+`kind: 'sale'` is implemented. Local reports (today's sales/expenses/cash
+position/customer & supplier balances/estimated profit, section 22) are
+not built; the existing online reports still work when connected, but
+nothing computes them from the local cache yet. Multi-device conflict
+detection (section 28/29 — two devices editing the same stock offline)
+is not built; this is a single-primary-device implementation, which the
+brief explicitly allows as an initial step ("the initial implementation
+may use a primary offline device model if necessary") but it should be
+named as a limitation, not assumed solved. PWA/service-worker packaging
+(section 31) is not touched.
+
+### Testing
+
+None of section 32's eleven tests have been run against a live browser —
+there is no deployed build in this environment. The syntax sweep
+(esbuild, every non-archived `.js`/`.jsx`) passes.
+
+Files: `schema/phase11_offline_sync.sql` (new),
+`services/saleService.js` (client_reference idempotency),
+`offline/db.js`, `offline/idGenerator.js`, `offline/useNetStatus.js`,
+`offline/offlineCache.js`, `offline/offlineSaleService.js`,
+`offline/syncEngine.js`, `offline/ConnectionStatus.jsx` (all new),
+`POSTopbar.jsx`, `pages/POSPage.jsx`.
+
+## 27. Stage 2 — M-Pesa STK Push (brief section 33-41)
+
+Same stage-order caveat as above, repeated because it matters more here:
+this is real, fairly complete code, but it has never made a single
+request to Safaricom. There is no Daraja sandbox credential and no
+deployed Supabase project in this environment.
+
+### Architecture
+
+Exactly the chain section 33 draws: React → `mpesaService.js` →
+`supabase.functions.invoke('mpesa-stk-push')` → Daraja OAuth + STK Push
+→ customer's phone → Safaricom's callback → `mpesa-callback` Edge
+Function → `confirm_mpesa_payment()` (Postgres, SECURITY DEFINER) →
+sale/stock/payment created. The React app never sees a consumer key,
+consumer secret, or passkey — those are Edge Function environment
+secrets (`supabase secrets set ...`), never a database row a
+tenant-scoped client could read.
+
+**Central service, not scattered calls** (section 35): `mpesaService.js`
+is the only file POS code touches; POSPage calls
+`useMpesaPayment().send(...)`, never Daraja or the Edge Function URL
+directly.
+
+**A sale is never created before payment is confirmed.**
+`lb_mpesa_transactions` starts `PENDING` with a `cart_snapshot` (what the
+STK request is FOR) but no `sale_id`. Only `confirm_mpesa_payment()`,
+called from the callback with Safaricom's own `ResultCode`, creates the
+`lb_sales`/`lb_sale_items`/`lb_payments`/stock-movement rows — the same
+tables and the same shapes a normal till sale writes to, not a parallel
+mechanism. This is the concrete difference between "requested" and
+"paid" the brief keeps insisting on (section 37, section 43): there is
+no sale row to mislabel, because none exists until the confirmation
+itself creates it.
+
+**Idempotent by construction.** `checkout_request_id` is UNIQUE.
+`confirm_mpesa_payment()` checks the transaction's current status before
+doing anything and returns the existing result unchanged if it's already
+settled — a repeated Safaricom callback (their documentation says this
+happens) is a no-op, not a duplicate sale. The Edge Function itself
+always returns HTTP 200 to Safaricom, even on its own internal errors,
+specifically so a transient failure on our end becomes a retry
+Safaricom will attempt again, rather than a permanent failure Safaricom
+gives up on.
+
+**Payment statuses match section 37 exactly:** PENDING, PAID, FAILED,
+CANCELLED, TIMED_OUT, NEEDS_ATTENTION (the last is a manual "give up on
+this" the owner can apply from the M-Pesa page — never used unprompted).
+`expire_stale_mpesa_requests()` moves a request with no callback after N
+minutes to TIMED_OUT, so nothing sits as "Pending" forever with no
+resolution.
+
+**UI:** `pages/MpesaPage.jsx` — Received/Confirmed/Pending/Needs
+attention totals, then Matched/Unmatched/Pending/Failed lists, matching
+the brief's own example layout. "Matched" is genuinely matched (the
+row's own `sale_id`, set only by the confirmation function) — nothing on
+this page does amount-based matching, so there is no code path that
+could accidentally satisfy section 39's "never match transactions solely
+because amounts are identical" by getting lucky. `pages/POSPage.jsx`
+gained a "Send M-Pesa Request" flow: selecting MOBILE_MONEY (non-split
+only this pass) and pressing the button opens a status modal — Sending →
+Waiting for the customer → Paid/Failed — driven by Supabase Realtime on
+the transaction row, with a manual "check again" fallback. The MOBILE_
+MONEY payment button itself is disabled while offline, with the brief's
+own wording as the tooltip ("No internet connection. M-Pesa request will
+be available when you're back online.") — section 23, enforced in the
+UI, not just documented.
+
+### Explicitly not done / not verified
+
+- **No live test whatsoever.** Every number, field name, and status code
+  above is written against Safaricom's published Daraja v2 documentation
+  and this project's existing table conventions, not verified against
+  either a live Daraja sandbox or this project's actual live database.
+- **Single Daraja app for the whole deployment**, not per-tenant
+  credentials. `lb_mpesa_config` stores a per-business shortcode, but the
+  consumer key/secret/passkey are one set of Edge Function secrets.
+  Real per-tenant Daraja apps would need a secrets-per-business lookup
+  instead — flagged as a real architecture change, not guessed at.
+  See `mpesa-stk-push/index.ts`'s header comment.
+- **No settings UI** for turning M-Pesa on per business — `mpesaService.
+  saveConfig()` exists; nothing calls it yet. DEPLOYMENT_NOTES.md shows
+  the direct-SQL way to turn it on for testing.
+  DEPLOYMENT_NOTES.md shows the manual-SQL way to turn it on for testing.
+- **Split-payment M-Pesa** (M-Pesa as one line in a mixed CASH+M-Pesa
+  sale) is not built — the STK flow only replaces the single-payment
+  MOBILE_MONEY path, for the same reason split CASH change-handling was
+  left out earlier: a partial STK payment inside a larger mixed sale
+  raises the same "what happens on overpayment/underpayment across
+  methods" ambiguity, now with an external, asynchronous confirmation on
+  top.
+- **Column-name assumptions in `confirm_mpesa_payment()`**
+  (`lb_warehouses.is_default`, `lb_inventory.quantity`,
+  `lb_inventory_movements`'s column list, `generate_sale_number()`'s
+  exact name) match what the rest of this codebase already uses, but
+  have not been checked against a live schema dump this session. Flagged
+  inline in `phase12_mpesa.sql` and in DEPLOYMENT_NOTES.md.
+- Callback signature verification (Safaricom doesn't sign callbacks in a
+  way that can be checked without additional infrastructure) — mitigated
+  by an unlisted callback URL and by only trusting a
+  `checkout_request_id` this system itself issued, documented as a
+  known, standard limitation in the Edge Function's own header comment.
+
+Files: `schema/phase12_mpesa.sql`,
+`supabase/functions/mpesa-stk-push/index.ts`,
+`supabase/functions/mpesa-callback/index.ts`,
+`services/mpesaService.js`, `hooks/useMpesaPayment.js`,
+`pages/MpesaPage.jsx`, `POSApp.jsx`, `POSLayout.jsx`,
+`pages/POSPage.jsx`, `DEPLOYMENT_NOTES.md`.
+
+---
+
+# FINAL REPORT — Stage 1A (brief section 45)
+
+**Files inspected:** the entire existing project tree at session start —
+all pages, services, hooks, schema files, auth, and WhatsAppCenter.js —
+per the brief's own rule 1, before any change was made.
+
+**Files changed (Stage 1A, across this whole engagement):**
+`POSDashboard.jsx`, `POSLayout.jsx`, `POSPage.jsx`, `saleService.js`,
+`PayablesPage.jsx`, `ExpensesPage.jsx`, `CashPage.jsx`,
+`InventoryPage.jsx`, `ProductsPage.jsx`, `GoodsReceivingPage.jsx`,
+`CustomersPage.jsx`, `communicationService.js`, `useCommunication.js`,
+`CustomerCommunicationPage.jsx`, `financialReportsService.js`,
+`FinancialReportsPage.jsx`.
+
+**Files created (Stage 1A):** `schema/phase8_whatsapp.sql`,
+`schema/phase9_assets.sql`, `schema/phase10_supplier_messaging.sql`,
+`services/assetService.js`, `hooks/useAssets.js`, `pages/AssetsPage.jsx`.
+
+**Database tables changed/added:** `lb_sales` (discount_amount already
+present, `client_reference` added later in Stage 1B),
+`lb_communication_log` (`opened_at`, `supplier_id`),
+`lb_communication_templates` (14 new default rows across WhatsApp +
+supplier types), `lb_fixed_assets` (new), `lb_asset_depreciation_entries`
+(new).
+
+**SQL functions/triggers changed:** `post_asset_depreciation()` (new).
+None of the pre-existing functions (`record_expense`,
+`process_credit_sale_payment`, etc.) were modified — only called.
+
+**Existing functionality reused:** `financialReportsService`'s income
+statement/balance sheet functions (Home screen), `record_expense()`
+(depreciation posting), `communicationLogService.send()`'s insert path
+(WhatsApp and supplier messaging both funnel through it),
+`auditService.log()` (sale completion audit).
+
+**New functionality added:** owner-facing relabeling across the sidebar
+and page headers; Home screen rebuild; per-line sale discounts; mixed/
+split payment; sale audit logging; WhatsApp messaging via wa.me for both
+customers and suppliers with three honestly-distinct states; "Remind"
+buttons on Customers and Payables; the full My Equipment / fixed-asset
+register with owner-friendly depreciation.
+
+**Accounting flows implemented:** depreciation → `lb_expenses` → Income
+Statement; fixed assets → Balance Sheet at net book value. Asset
+purchase deliberately does NOT post (no general ledger exists to post
+the other side to — see Phase 9's entry above for the full reasoning).
+
+**Inventory flows implemented:** none new this stage beyond what
+already existed — stock logic itself was already centralized through
+`applyStockMovement()` before this engagement began.
+
+**Notification system implemented:** not touched this stage — the
+existing dashboard "what needs my attention" panel was built earlier;
+no new central notification engine was added.
+
+**Communications implemented:** WhatsApp (customers + suppliers), with
+Prepared/Opened in WhatsApp/Sent by you tracked as distinct, honest
+states, never conflated with delivery.
+
+**WhatsApp implementation:** `wa.me` links only, exactly as section 16
+requires — no WhatsApp Business API anywhere in this codebase.
+
+**Testing completed:** full-repository esbuild syntax sweep after every
+change (zero failures at each checkpoint). No live database, no
+`npm run build`, no browser click-through, no device test — this
+environment has no network access and no deployed instance of this
+project.
+
+**Known limitations:** returns/refunds are still blocked — `lb_refunds`
+is referenced by the daily-closing RPC but its `CREATE TABLE` isn't in
+this archive, so its columns were never confirmed. No due-date column
+exists anywhere in this schema for customer or supplier balances, so all
+"due in N days" language from the brief's own examples was deliberately
+left out rather than faked. Supplier-facing "compose any message"
+and the `SUPPLIER_ORDER`/`SUPPLIER_DELIVERY_REMINDER` entry points on
+Suppliers/Purchase Orders pages are not wired (the templates and service
+support them; no button calls them yet).
+
+**Build result:** not run — no build tooling available in this
+environment (no `package.json` in the provided archive, no network to
+install one). Syntax-only verification via esbuild.
+
+---
+
+# FINAL REPORT — Stage 1B (brief section 46)
+
+**Offline technology selected:** Dexie (IndexedDB wrapper). Reasoning in
+the Phase 26 entry above.
+
+**Local database/storage structure:** one Dexie database
+(`umova_offline`), four tables — `outbox` (the sync queue),
+`products_cache`, `customers_cache` (schema present, not yet populated
+by any writer — see limitations), `meta` (key/value, used for the local
+ID counter).
+
+**Files created:** `offline/db.js`, `offline/idGenerator.js`,
+`offline/useNetStatus.js`, `offline/offlineCache.js`,
+`offline/offlineSaleService.js`, `offline/syncEngine.js`,
+`offline/ConnectionStatus.jsx`.
+
+**Files changed:** `services/saleService.js` (client_reference
+idempotency check), `schema/phase11_offline_sync.sql` (new),
+`POSTopbar.jsx` (status indicator mounted), `pages/POSPage.jsx`
+(checkout routes through `createOfflineAwareSale`; search falls back to
+cache when offline).
+
+**Sync engine:** `offline/syncEngine.js` — drains `outbox` oldest-first,
+dispatches on a `kind` field (only `'sale'` implemented), stops on the
+first network failure per pass rather than burning through the whole
+queue against the same dead connection.
+
+**Sync queue:** the Dexie `outbox` table itself — `status`:
+PENDING/SYNCING/SYNCED/FAILED, indexed by `clientReference` for lookup.
+
+**Offline transactions supported:** sales only (cash, card, credit, and
+mixed/split — `offlineSaleService` queues the same payload shape
+`saleService.create()` already accepts, so split-payment sales queue
+correctly too). Customers, suppliers, expenses, and appointments offline
+creation are NOT implemented this pass.
+
+**Conflict handling:** none implemented — single-primary-device model,
+which the brief explicitly permits as an initial step. Two devices
+modifying the same stock offline is not detected or handled.
+
+**Duplicate protection:** `lb_sales.client_reference`, unique-indexed,
+checked before insert in `saleService.create()`. A retried sync of the
+same offline sale returns the already-synced row rather than duplicating
+it (verified by code inspection; not exercised against a live database).
+
+**Connection detection:** `navigator.onLine` plus an active HEAD probe
+against Supabase's REST root (`offline/useNetStatus.js`), re-checked on
+browser online/offline events and every 30 seconds.
+
+**Retry mechanism:** automatic — a network-failure row stays PENDING and
+is retried on the next `runSync()` call (triggered by `ConnectionStatus`
+on reconnect and every 20 seconds while online). A server-rejected row is
+marked FAILED and requires the owner (or a future "retry" UI action —
+`retryFailed()` exists in `syncEngine.js`, not yet wired to a button) to
+resubmit.
+
+**Security considerations:** tenant isolation is unaffected — every
+queued sale still carries `tenant_id`/`business_id` and goes through the
+same RLS-scoped `saleService.create()` on sync; nothing is written with
+elevated privilege from the offline path. No credentials or session
+tokens are stored in the offline cache tables. Logout behavior for
+cached data (what should happen to `products_cache` when a different
+staff member logs in on the same device) was NOT addressed this pass —
+flagged explicitly as unresolved, per section 30's own instruction to
+"determine carefully" rather than assume.
+
+**PWA/mobile considerations:** not addressed. No service worker, no app
+manifest change, no Capacitor-specific testing — section 31 is entirely
+open.
+
+**Offline tests:** none of section 32's eleven scenarios has been run.
+No browser, no device, no deployed build exists in this environment.
+
+**Online synchronization tests:** none run, same reason.
+
+**Build result:** not run (see Stage 1A's report — no build tooling
+available here).
+
+---
+
+# FINAL REPORT — Stage 2 (brief section 47)
+
+**M-Pesa architecture:** React → Edge Function (secrets) → Daraja →
+customer phone → Safaricom callback → Edge Function → Postgres RPC →
+sale/stock/payment. Full detail in the Phase 27 entry above.
+
+**Backend/server functions:** two Supabase Edge Functions —
+`mpesa-stk-push` (initiates the request) and `mpesa-callback` (receives
+Safaricom's confirmation). Both Deno/TypeScript, both written but never
+deployed or invoked.
+
+**Database changes:** `lb_mpesa_config` (new), `lb_mpesa_transactions`
+(new), `lb_mpesa_status` enum (new), `confirm_mpesa_payment()` (new,
+SECURITY DEFINER), `expire_stale_mpesa_requests()` (new).
+
+**Environment variables:** `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET`,
+`MPESA_PASSKEY`, `MPESA_ENV`, `MPESA_CALLBACK_URL` — all Edge Function
+secrets, documented in `DEPLOYMENT_NOTES.md`. None are set in this
+environment; none of this code has run.
+
+**Daraja configuration:** not performed — no Safaricom developer account
+credentials were available in this session. `DEPLOYMENT_NOTES.md`
+explains what's needed and links to Safaricom's developer portal.
+
+**STK Push implementation:** complete, in `mpesa-stk-push/index.ts` —
+OAuth token fetch, password/timestamp generation, the actual STK Push
+request. Untested against Daraja.
+
+**Callback implementation:** complete, in `mpesa-callback/index.ts` —
+parses Safaricom's stkCallback shape, always returns HTTP 200 (per
+Safaricom's own retry-avoidance convention), delegates all business
+logic to `confirm_mpesa_payment()`. Untested against a real callback.
+
+**Idempotency implementation:** `checkout_request_id` UNIQUE constraint
++ an explicit status check inside `confirm_mpesa_payment()` before any
+write — a repeated callback for an already-settled transaction is a
+verified no-op by code inspection.
+
+**Payment matching:** by design, not by heuristic — a sale only exists
+once `confirm_mpesa_payment()` creates it, referencing the transaction
+that triggered it. There is no amount-based matching logic anywhere in
+this system, which is what makes section 39's "never match transactions
+solely because amounts are identical" true by construction rather than
+by discipline.
+
+**Reconciliation:** `pages/MpesaPage.jsx` — Received/Confirmed/Pending/
+Needs attention totals; Matched/Unmatched/Pending/Failed lists.
+
+**Accounting integration:** a confirmed M-Pesa payment creates a real
+`lb_sales` row through the same tables (`lb_sale_items`, `lb_payments`,
+`lb_inventory`/`lb_inventory_movements`) a till sale uses — so it flows
+into the existing Income Statement/Balance Sheet/reports with no special
+casing needed there.
+
+**Notifications:** NOT implemented — section 38 lists "create
+notification" as part of the callback's job; this pass did not wire a
+notification row into `confirm_mpesa_payment()`, since no central
+notification-write path was confirmed to reuse (the brief's own section
+17-19 central notification engine was not part of this session's
+scope). Flagged as an open gap, not silently dropped.
+
+**WhatsApp integration:** NOT implemented — section 40's "Send Receipt
+on WhatsApp" after a confirmed M-Pesa payment isn't wired on MpesaPage
+or the STK modal. The underlying WhatsApp machinery (Phase 8) already
+exists and could send a RECEIPT-type message once a sale exists; adding
+the button is the remaining work.
+
+**Security:** Daraja credentials live only in Edge Function secrets,
+never in a database row or the browser bundle. RLS remains in force for
+every table except the one `confirm_mpesa_payment()` write, which
+requires the service-role key specifically because Safaricom's callback
+carries no POS session. Callback authenticity relies on an unlisted URL
+and a checkout_request_id this system itself issued, not on a verified
+signature — a known, stated limitation, not an oversight.
+
+**Test results:** none. No Daraja sandbox credentials, no deployed
+Supabase project, no live database in this environment. This is
+untested code, offered as a complete and internally consistent starting
+point, not as production-verified.
+
+**Build result:** not run (no build tooling in this environment).
+
+**Remaining production requirements before this can go live:** a real
+Daraja app (sandbox first, then production) and its credentials; both
+Edge Functions actually deployed; the schema migrations run against the
+live database with the flagged column-name assumptions verified first;
+end-to-end testing with a real STK prompt on a real phone; a settings UI
+for `lb_mpesa_config` (currently SQL-only); the notification and
+WhatsApp-receipt integrations named above; and, per the brief's own
+stage gate, Stage 1B genuinely finished and tested first — not just the
+Sales/Stock slice built this session.
+
+Do not treat this as production-ready. It has not been proven to work.

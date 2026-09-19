@@ -1,7 +1,7 @@
 // src/pos-erp/hooks/useCommunication.js
 
 import { useState, useEffect, useCallback } from 'react';
-import { templateService, communicationLogService } from '../services/communicationService';
+import { templateService, communicationLogService, whatsappService } from '../services/communicationService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 
 export function useTemplates() {
@@ -36,6 +36,16 @@ export function useTemplates() {
   return { templates, loading, error, fetch, update };
 }
 
+// Phase 10 — supplier-facing counterpart of useTemplates(). Same
+// ensureDefaults() call (it seeds both customer and supplier defaults
+// together), filtered down to the SUPPLIER_* ones so a supplier-facing
+// screen doesn't have to filter the full list itself every render.
+export function useSupplierTemplates() {
+  const { templates, loading, error, fetch, update } = useTemplates();
+  const supplierTemplates = templates.filter(t => String(t.message_type).startsWith('SUPPLIER_'));
+  return { templates: supplierTemplates, loading, error, fetch, update };
+}
+
 export function useCommunicationLog(customerId) {
   const { staffId, tenant } = usePosErpAuth();
   const [history, setHistory] = useState([]);
@@ -66,5 +76,39 @@ export function useCommunicationLog(customerId) {
     return result;
   }, [staffId, tenant]);
 
-  return { history, loading, error, fetch, send };
+  // Phase 8 (§16) — prepare a WhatsApp message and get back the wa.me
+  // URL to open. Prepared only; the owner still has to press Send inside
+  // WhatsApp, which is what markSent() below records.
+  const prepareWhatsApp = useCallback(async ({ customer, template, variables, referenceType, referenceId }) => {
+    const result = await whatsappService.prepare({
+      tenantId: tenant?.id, businessId: tenant?.business_id, customer, template, variables,
+      referenceType, referenceId, createdBy: staffId,
+    });
+    setHistory(prev => [result.log, ...prev]);
+    return result;
+  }, [staffId, tenant]);
+
+  const replaceInHistory = useCallback((row) => {
+    setHistory(prev => prev.map(h => (h.id === row.id ? row : h)));
+    return row;
+  }, []);
+
+  const markOpened = useCallback(async (logId) => replaceInHistory(await whatsappService.markOpened(logId)), [replaceInHistory]);
+  const markSent = useCallback(async (logId) => replaceInHistory(await whatsappService.markSentByOwner(logId)), [replaceInHistory]);
+  const markNotSent = useCallback(async (logId) => replaceInHistory(await whatsappService.markNotSent(logId)), [replaceInHistory]);
+
+  // Phase 10 — supplier equivalent of prepareWhatsApp(). Same open/opened
+  // bookkeeping; reuses markOpened/markSent/markNotSent above since those
+  // only ever operate on a log row id, not on which recipient table it
+  // points at.
+  const prepareWhatsAppForSupplier = useCallback(async ({ supplier, template, variables, referenceType, referenceId }) => {
+    const result = await whatsappService.prepareForSupplier({
+      tenantId: tenant?.id, businessId: tenant?.business_id, supplier, template, variables,
+      referenceType, referenceId, createdBy: staffId,
+    });
+    setHistory(prev => [result.log, ...prev]);
+    return result;
+  }, [staffId, tenant]);
+
+  return { history, loading, error, fetch, send, prepareWhatsApp, prepareWhatsAppForSupplier, markOpened, markSent, markNotSent };
 }

@@ -126,6 +126,7 @@ export default function FinancialReportsPage() {
                 <StatementRow label="Cash &amp; Bank (estimated)" value={balance.assets.cashAndBank} indent />
                 <StatementRow label="Inventory Value" value={balance.assets.inventoryValue} indent />
                 <StatementRow label="Accounts Receivable" value={balance.assets.accountsReceivable} indent />
+                <StatementRow label="Fixed Assets (net of depreciation)" value={balance.assets.fixedAssets} indent />
                 <StatementRow label="Total Assets" value={balance.assets.total} bold divider />
               </tbody>
             </table>

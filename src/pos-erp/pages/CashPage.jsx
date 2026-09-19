@@ -99,7 +99,7 @@ export default function CashPage() {
     <div className="p-8 max-w-5xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Wallet size={22} className="text-amber-600" /> Cash
+          <Wallet size={22} className="text-amber-600" /> My Money
         </h1>
         <p className="text-slate-500 text-sm">Cash in/out against the active shift, and end-of-day closing.</p>
       </div>

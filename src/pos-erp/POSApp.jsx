@@ -13,6 +13,8 @@ import ProductsPage from "./pages/ProductsPage";
 import CustomersPage from "./pages/CustomersPage";
 import PayablesPage from "./pages/PayablesPage";
 import ExpensesPage from "./pages/ExpensesPage";
+import AssetsPage from "./pages/AssetsPage";
+import MpesaPage from "./pages/MpesaPage";
 import CashPage from "./pages/CashPage";
 import UnitsPage from "./pages/UnitsPage";
 import RecurringChargesPage from "./pages/RecurringChargesPage";
@@ -56,6 +58,8 @@ const PosRoutes = () => (
       <Route path="suppliers" element={<SuppliersPage />} />
       <Route path="payables" element={<PayablesPage />} />
       <Route path="expenses" element={<ExpensesPage />} />
+      <Route path="equipment" element={<AssetsPage />} />
+      <Route path="mpesa" element={<MpesaPage />} />
       <Route path="cash" element={<CashPage />} />
       <Route path="units" element={<UnitsPage />} />
       <Route path="charges" element={<RecurringChargesPage />} />

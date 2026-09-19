@@ -59,7 +59,7 @@ export default function ExpensesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Receipt size={22} className="text-amber-600" /> Expenses
+            <Receipt size={22} className="text-amber-600" /> My Spending
           </h1>
           <p className="text-slate-500 text-sm">Rent, wages, transport, and everything else that leaves the till.</p>
         </div>
