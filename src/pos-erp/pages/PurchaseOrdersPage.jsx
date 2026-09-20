@@ -1,16 +1,20 @@
 // src/pos-erp/pages/PurchaseOrdersPage.jsx
 //
-// This was the actual gap: purchaseOrderService.create()/getAll()/
-// updateStatus() were already fully built, and GoodsReceivingPage's
-// "From Purchase Order" mode already reads from them — but nothing
-// anywhere ever created one, so that dropdown was always empty. This
-// page is what creates them.
+// purchaseOrderService.create()/getAll()/updateStatus() were already
+// fully built, and GoodsReceivingPage's "From Purchase Order" mode
+// already reads from them — but nothing anywhere ever created one, so
+// that dropdown was always empty. This page is what creates them.
 //
-// New POs are created DRAFT (matches purchaseOrderService.create()'s
-// own default) and need an explicit "Mark as Sent" — only SENT/
-// PARTIALLY_RECEIVED orders show up as receivable in GoodsReceivingPage,
-// so a PO sitting in DRAFT is a deliberate "not ready yet" state, not a
-// bug.
+// FIX: "Mark as Sent" used to set status to 'SENT', which doesn't exist
+// in lb_po_status — confirmed via purchaseService.js's own receiving
+// rollup (`anyReceived ? 'PARTIALLY_RECEIVED' : 'APPROVED'`), which only
+// makes sense if APPROVED is the pre-receiving ready state, not SENT.
+// The real workflow is an approval chain, not a "sent to supplier" step:
+// DRAFT -> PENDING_APPROVAL -> APPROVED -> (receiving) -> PARTIALLY_RECEIVED
+// -> RECEIVED. GoodsReceivingPage's receivablePOs filter is the other
+// half of this same fix (separate file) — it was filtering for
+// ['SENT', 'PARTIALLY_RECEIVED'], so a PO could never legally reach a
+// status that made it show up there at all.
 
 import React, { useState } from 'react';
 import { ClipboardList, Loader2, Plus, X, Trash2 } from 'lucide-react';
@@ -20,7 +24,8 @@ import { useProducts } from '../hooks/useProducts';
 
 const STATUS_COLORS = {
   DRAFT: 'bg-slate-100 text-slate-500',
-  SENT: 'bg-amber-50 text-amber-700',
+  PENDING_APPROVAL: 'bg-amber-50 text-amber-700',
+  APPROVED: 'bg-blue-50 text-blue-700',
   PARTIALLY_RECEIVED: 'bg-blue-50 text-blue-700',
   RECEIVED: 'bg-emerald-50 text-emerald-700',
   CANCELLED: 'bg-red-50 text-red-700',
@@ -93,7 +98,7 @@ export default function PurchaseOrdersPage() {
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <ClipboardList size={22} className="text-amber-600" /> Purchase Orders
           </h1>
-          <p className="text-slate-500 text-sm">Create an order, send it, then receive against it in Goods Receiving.</p>
+          <p className="text-slate-500 text-sm">Create an order, get it approved, then receive against it in Goods Receiving.</p>
         </div>
         <button
           onClick={() => (showForm ? setShowForm(false) : setShowForm(true))}
@@ -193,9 +198,15 @@ export default function PurchaseOrdersPage() {
                 <td className="px-5 py-3 text-center">
                   <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${STATUS_COLORS[po.status] || 'bg-slate-100'}`}>{po.status?.replace('_', ' ')}</span>
                 </td>
-                <td className="px-5 py-3 text-right">
+                <td className="px-5 py-3 text-right whitespace-nowrap">
                   {po.status === 'DRAFT' && (
-                    <button onClick={() => setStatus(po.id, 'SENT')} className="text-amber-700 text-xs font-semibold hover:underline">Mark as Sent</button>
+                    <button onClick={() => setStatus(po.id, 'PENDING_APPROVAL')} className="text-amber-700 text-xs font-semibold hover:underline mr-3">Submit for Approval</button>
+                  )}
+                  {po.status === 'PENDING_APPROVAL' && (
+                    <button onClick={() => setStatus(po.id, 'APPROVED')} className="text-blue-700 text-xs font-semibold hover:underline mr-3">Approve</button>
+                  )}
+                  {['DRAFT', 'PENDING_APPROVAL', 'APPROVED'].includes(po.status) && (
+                    <button onClick={() => setStatus(po.id, 'CANCELLED')} className="text-red-600 text-xs font-semibold hover:underline">Cancel</button>
                   )}
                 </td>
               </tr>

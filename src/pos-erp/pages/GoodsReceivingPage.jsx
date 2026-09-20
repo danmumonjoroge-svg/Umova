@@ -65,7 +65,12 @@ export default function GoodsReceivingPage() {
   );
 
   const receivablePOs = useMemo(
-    () => purchaseOrders.filter(po => ['SENT', 'PARTIALLY_RECEIVED'].includes(po.status)),
+    // FIX: was ['SENT', 'PARTIALLY_RECEIVED'] — SENT isn't a real
+    // lb_po_status value (see PurchaseOrdersPage.jsx's header note), so
+    // a PO could never legally reach a status this filter would match,
+    // and this dropdown was always empty. APPROVED is the real
+    // pre-receiving ready state.
+    () => purchaseOrders.filter(po => ['APPROVED', 'PARTIALLY_RECEIVED'].includes(po.status)),
     [purchaseOrders]
   );
 

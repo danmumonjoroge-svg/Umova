@@ -21,15 +21,18 @@ import { useProducts } from '../hooks/useProducts';
 import { ScannerModal, useBarcodeScanner } from '../index';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { checkBarcodeAvailable } from '../services/productResolverService';
+import { productService } from '../services/productService';
+import { Image as ImageIcon } from 'lucide-react';
 
 const EMPTY_FORM = {
   name: '', sku: '', barcode: '', selling_price: '', cost_price: '',
   category_id: '', unit_id: '', selling_mode: 'PER_UNIT',
   track_inventory: true, allow_negative_stock: false, reorder_level: '0',
+  image_url: '',
 };
 
 export default function ProductsPage() {
-  const { staffId } = usePosErpAuth();
+  const { staffId, tenant } = usePosErpAuth();
   const { products, loading, error, create, update, deactivate, reactivate } = useProducts();
   const [showForm, setShowForm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -37,6 +40,7 @@ export default function ProductsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // On the product form, scanning a barcode that ISN'T registered yet is the
   // normal/expected outcome — it just fills the field. If it happens to
@@ -72,6 +76,7 @@ export default function ProductsPage() {
       track_inventory: product.track_inventory ?? true,
       allow_negative_stock: product.allow_negative_stock ?? false,
       reorder_level: String(product.reorder_level ?? 0),
+      image_url: product.image_url || '',
     });
     setFormError('');
     setShowForm(true);
@@ -117,6 +122,24 @@ export default function ProductsPage() {
     }
   };
 
+  const handleImageChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !editingProduct) return;
+    if (!file.type.startsWith('image/')) { setFormError('Photo must be an image file.'); return; }
+    if (file.size > 2 * 1024 * 1024) { setFormError('Photo must be under 2MB.'); return; }
+    setFormError('');
+    setUploadingImage(true);
+    try {
+      const url = await productService.uploadImage(tenant?.business_id, editingProduct.id, file);
+      setForm(f => ({ ...f, image_url: url }));
+    } catch (err) {
+      setFormError(err.message || 'Failed to upload photo.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-6">
@@ -128,6 +151,26 @@ export default function ProductsPage() {
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white p-4 rounded shadow mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           {formError && <div className="md:col-span-3 bg-red-50 text-red-700 text-sm rounded px-3 py-2">{formError}</div>}
+
+          {/* Photo upload only works once the product has an id (the
+              storage path is keyed by product id) — new products save a
+              photo-less row first, then get a photo added in Edit. */}
+          <div className="md:col-span-3 flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+              {form.image_url
+                ? <img src={form.image_url} alt="" className="w-full h-full object-cover" />
+                : <ImageIcon size={22} className="text-gray-300" />}
+            </div>
+            {editingProduct ? (
+              <label className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer">
+                {uploadingImage ? 'Uploading…' : form.image_url ? 'Change photo' : 'Add photo'}
+                <input type="file" accept="image/*" onChange={handleImageChange} disabled={uploadingImage} className="hidden" />
+              </label>
+            ) : (
+              <span className="text-xs text-gray-400">Save the product first, then edit it to add a photo.</span>
+            )}
+          </div>
+
           <input required placeholder="Product Name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="border rounded px-3 py-2" />
           <input placeholder="SKU" value={form.sku} onChange={e => setForm({...form, sku: e.target.value})} className="border rounded px-3 py-2" />
           <div className="flex flex-col gap-1">
@@ -186,10 +229,15 @@ export default function ProductsPage() {
       ) : (
         <div className="bg-white rounded shadow overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50"><tr><th className="px-4 py-2">Name</th><th>SKU</th><th>Barcode</th><th>Price</th><th>Mode</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead className="bg-gray-50"><tr><th className="px-4 py-2"></th><th>Name</th><th>SKU</th><th>Barcode</th><th>Price</th><th>Mode</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               {products.map(p => (
                 <tr key={p.id} className="border-t">
+                  <td className="px-4 py-2">
+                    <div className="w-8 h-8 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
+                      {p.image_url ? <img src={p.image_url} alt="" className="w-full h-full object-cover" /> : <ImageIcon size={14} className="text-gray-300" />}
+                    </div>
+                  </td>
                   <td className="px-4 py-2">{p.name}</td><td>{p.sku || '-'}</td>
                   <td>{p.barcode ? <span title="Registered">✓ {p.barcode}</span> : <span className="text-yellow-600" title="No barcode">⚠ none</span>}</td>
                   <td>{p.selling_price?.toLocaleString()}</td><td>{p.selling_mode}</td>
@@ -209,7 +257,7 @@ export default function ProductsPage() {
                   </td>
                 </tr>
               ))}
-              {products.length === 0 && <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">No products</td></tr>}
+              {products.length === 0 && <tr><td colSpan={8} className="px-4 py-6 text-center text-gray-500">No products</td></tr>}
             </tbody>
           </table>
         </div>

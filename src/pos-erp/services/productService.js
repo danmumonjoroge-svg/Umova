@@ -80,4 +80,31 @@ export const productService = {
   async reactivate(id) {
     return this.update(id, { is_active: 'active' });
   },
+
+  /**
+   * Uploads a product/service photo to the public `product-images`
+   * bucket (phase15) and returns its public URL. Same pattern as
+   * settingsService.uploadLogo(): fixed filename per product
+   * (upsert:true, one photo per product, replaced in place) and a
+   * cache-busting ?v= query param on the returned URL so a browser/CDN
+   * cache doesn't keep showing the old photo after a change. Does NOT
+   * save it onto the product itself — the caller (ProductsPage.jsx)
+   * stages it into the edit form like any other field and saves it via
+   * the normal update() call, so it can still be cancelled before Save.
+   */
+  async uploadImage(businessId, productId, file) {
+    if (!businessId) throw new Error('productService.uploadImage: businessId is required.');
+    if (!productId) throw new Error('productService.uploadImage: productId is required — save the product once before adding a photo.');
+    if (!file) throw new Error('productService.uploadImage: file is required.');
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${businessId}/${productId}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(path, file, { contentType: file.type, upsert: true });
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+    return `${data.publicUrl}?v=${Date.now()}`;
+  },
 };

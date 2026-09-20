@@ -45,10 +45,12 @@ export const settingsService = {
         address: updates.address || null,
         currency: updates.currency,
         time_zone: updates.time_zone,
-        // Phase 15: only written when actually provided -- callers that
-        // don't touch the logo (most profile-field saves) must not
-        // accidentally null it out.
-        ...(updates.logo_url !== undefined ? { logo_url: updates.logo_url } : {}),
+        // logo_url is written here but never *chosen* here — it only
+        // ever holds a URL that uploadLogo() below just got back from
+        // Supabase Storage, never anything a form field could set
+        // directly, so there's no way to point a business at an
+        // arbitrary external image URL through this path.
+        logo_url: updates.logo_url,
         updated_at: new Date().toISOString(),
       })
       .eq('id', businessId)
@@ -59,37 +61,34 @@ export const settingsService = {
   },
 
   /**
-   * Phase 15 -- uploads a logo image to the `business-logos` Storage
-   * bucket and saves its public URL onto lb_businesses.logo_url in one
-   * call. Always uploads to `<businessId>/logo.<ext>` (upsert: true) --
-   * one logo per business, so re-uploading replaces the old file rather
-   * than leaving it orphaned in Storage forever.
+   * Uploads a new business logo to the public `business-logos` bucket
+   * (phase14) and returns its public URL — does NOT save it onto
+   * lb_businesses itself; call updateBusinessProfile with the returned
+   * url (or let useSettings.uploadLogo below do both in one step).
    *
-   * Client-side only validation here (type/size) -- the real
-   * enforcement is Storage's own bucket policies (phase15_business_logo.sql),
-   * which only let a business write into its OWN folder.
+   * Fixed filename (logo.<ext>) with upsert:true — one logo per
+   * business, replaced in place rather than accumulating timestamped
+   * files. Bucket name and this path shape (businessId/logo.<ext>,
+   * one folder level) match the phase14 v2 migration and what was
+   * actually observed live in the browser network trace, not this
+   * function's first version.
    */
   async uploadLogo(businessId, file) {
-    if (!file) throw new Error('settingsService.uploadLogo: a file is required.');
-    if (!file.type?.startsWith('image/')) throw new Error('Please choose an image file (PNG, JPG, etc).');
-    if (file.size > 2 * 1024 * 1024) throw new Error('That image is too large — please use one under 2MB.');
-
+    if (!businessId) throw new Error('settingsService.uploadLogo: businessId is required.');
+    if (!file) throw new Error('settingsService.uploadLogo: file is required.');
     const ext = (file.name.split('.').pop() || 'png').toLowerCase();
     const path = `${businessId}/logo.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from('business-logos')
-      .upload(path, file, { upsert: true, contentType: file.type });
+      .upload(path, file, { contentType: file.type, upsert: true });
     if (uploadError) throw uploadError;
 
-    const { data: pub } = supabase.storage.from('business-logos').getPublicUrl(path);
-    // Cache-bust: overwriting the same path keeps the same URL, which
-    // means a browser that already cached the OLD logo image would keep
-    // showing it after a re-upload without this. Harmless query param —
-    // Storage ignores it, browsers don't.
-    const bustUrl = `${pub.publicUrl}?v=${Date.now()}`;
-
-    return this.updateBusinessProfile(businessId, { logo_url: bustUrl });
+    const { data } = supabase.storage.from('business-logos').getPublicUrl(path);
+    // Cache-bust: same path every time (upsert), so append a version
+    // query param or a stale browser/CDN cache would keep showing the
+    // old logo after a change.
+    return `${data.publicUrl}?v=${Date.now()}`;
   },
 
   async getPosSettings(businessId) {
