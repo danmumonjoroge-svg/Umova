@@ -31,16 +31,21 @@ function fmt(n) {
 }
 
 export default function PurchaseOrdersPage() {
-  const { orders, loading, error, create, setStatus } = usePurchaseOrders();
+  const { orders, loading, error, fetch, create, setStatus } = usePurchaseOrders();
   const { suppliers } = useSuppliers();
   const { products } = useProducts();
 
   const [showForm, setShowForm] = useState(false);
   const [supplierId, setSupplierId] = useState('');
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
+  const [poNotes, setPoNotes] = useState('');
   const [items, setItems] = useState([]); // { product_id, name, quantity, unit_cost }
   const [productQuery, setProductQuery] = useState('');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [expandedId, setExpandedId] = useState(null);
+  const [cancellingId, setCancellingId] = useState(null);
 
   const matches = productQuery.trim()
     ? products.filter(p =>
@@ -63,7 +68,10 @@ export default function PurchaseOrdersPage() {
 
   const total = items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unit_cost), 0);
 
-  const resetForm = () => { setSupplierId(''); setItems([]); setProductQuery(''); setFormError(''); };
+  const resetForm = () => {
+    setSupplierId(''); setItems([]); setProductQuery(''); setFormError('');
+    setExpectedDeliveryDate(''); setPoNotes('');
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -75,6 +83,8 @@ export default function PurchaseOrdersPage() {
     try {
       await create({
         supplier_id: supplierId,
+        expected_delivery_date: expectedDeliveryDate || null,
+        notes: poNotes || null,
         items: items.map(i => ({ product_id: i.product_id, quantity: Number(i.quantity), unit_cost: Number(i.unit_cost) })),
       });
       setShowForm(false);
@@ -84,6 +94,30 @@ export default function PurchaseOrdersPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const cancelOrder = async (po) => {
+    if (!window.confirm(`Cancel ${po.po_number}? This can't be undone.`)) return;
+    setCancellingId(po.id);
+    try {
+      await setStatus(po.id, 'CANCELLED');
+    } catch (err) {
+      alert(err.message || 'Failed to cancel purchase order.');
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const isOverdue = (po) =>
+    po.expected_delivery_date &&
+    !['RECEIVED', 'CANCELLED'].includes(po.status) &&
+    new Date(po.expected_delivery_date) < new Date(new Date().toDateString());
+
+  const STATUS_TABS = ['ALL', 'DRAFT', 'SENT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED'];
+  const changeStatusFilter = (tab) => {
+    setStatusFilter(tab);
+    setExpandedId(null);
+    fetch({ status: tab === 'ALL' ? undefined : tab });
   };
 
   return (
@@ -110,6 +144,27 @@ export default function PurchaseOrdersPage() {
             <option value="">Select supplier *</option>
             {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Expected delivery date (optional)</label>
+              <input
+                type="date"
+                value={expectedDeliveryDate}
+                onChange={e => setExpectedDeliveryDate(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Notes (optional)</label>
+              <input
+                placeholder="e.g. call before delivery"
+                value={poNotes}
+                onChange={e => setPoNotes(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2"
+              />
+            </div>
+          </div>
 
           <div className="relative">
             <input
@@ -166,34 +221,84 @@ export default function PurchaseOrdersPage() {
         </form>
       )}
 
+      <div className="flex flex-wrap gap-2 mb-4">
+        {STATUS_TABS.map(tab => (
+          <button
+            key={tab}
+            onClick={() => changeStatusFilter(tab)}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-full ${statusFilter === tab ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            {tab === 'ALL' ? 'All' : tab.replace('_', ' ')}
+          </button>
+        ))}
+      </div>
+
       <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
             <tr>
               <th className="text-left px-5 py-3">PO Number</th><th className="text-left px-5 py-3">Supplier</th>
-              <th className="text-left px-5 py-3">Date</th><th className="text-right px-5 py-3">Total</th>
+              <th className="text-left px-5 py-3">Date</th><th className="text-left px-5 py-3">Expected</th>
+              <th className="text-right px-5 py-3">Total</th>
               <th className="text-center px-5 py-3">Status</th><th />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {loading && <tr><td colSpan={6} className="text-center py-10 text-slate-400"><Loader2 size={18} className="animate-spin inline mr-2" /> Loading…</td></tr>}
-            {error && <tr><td colSpan={6} className="text-center py-6 text-red-600">{error}</td></tr>}
-            {!loading && orders.length === 0 && <tr><td colSpan={6} className="text-center py-10 text-slate-400">No purchase orders yet.</td></tr>}
+            {loading && <tr><td colSpan={7} className="text-center py-10 text-slate-400"><Loader2 size={18} className="animate-spin inline mr-2" /> Loading…</td></tr>}
+            {error && <tr><td colSpan={7} className="text-center py-6 text-red-600">{error}</td></tr>}
+            {!loading && orders.length === 0 && <tr><td colSpan={7} className="text-center py-10 text-slate-400">No purchase orders yet.</td></tr>}
             {orders.map(po => (
-              <tr key={po.id}>
-                <td className="px-5 py-3 font-mono text-xs text-slate-600">{po.po_number}</td>
-                <td className="px-5 py-3 text-slate-700">{po.supplier?.name}</td>
-                <td className="px-5 py-3 text-slate-500">{po.order_date}</td>
-                <td className="px-5 py-3 text-right">{fmt(po.total_amount)}</td>
-                <td className="px-5 py-3 text-center">
-                  <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${STATUS_COLORS[po.status] || 'bg-slate-100'}`}>{po.status?.replace('_', ' ')}</span>
-                </td>
-                <td className="px-5 py-3 text-right">
-                  {po.status === 'DRAFT' && (
-                    <button onClick={() => setStatus(po.id, 'SENT')} className="text-amber-700 text-xs font-semibold hover:underline">Mark as Sent</button>
-                  )}
-                </td>
-              </tr>
+              <React.Fragment key={po.id}>
+                <tr className="hover:bg-slate-50 cursor-pointer" onClick={() => setExpandedId(expandedId === po.id ? null : po.id)}>
+                  <td className="px-5 py-3 font-mono text-xs text-slate-600">{po.po_number}</td>
+                  <td className="px-5 py-3 text-slate-700">{po.supplier?.name}</td>
+                  <td className="px-5 py-3 text-slate-500">{po.order_date}</td>
+                  <td className={`px-5 py-3 ${isOverdue(po) ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+                    {po.expected_delivery_date || '—'}{isOverdue(po) ? ' (overdue)' : ''}
+                  </td>
+                  <td className="px-5 py-3 text-right">{fmt(po.total_amount)}</td>
+                  <td className="px-5 py-3 text-center">
+                    <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${STATUS_COLORS[po.status] || 'bg-slate-100'}`}>{po.status?.replace('_', ' ')}</span>
+                  </td>
+                  <td className="px-5 py-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                    {po.status === 'DRAFT' && (
+                      <button onClick={() => setStatus(po.id, 'SENT')} className="text-amber-700 text-xs font-semibold hover:underline mr-3">Mark as Sent</button>
+                    )}
+                    {['DRAFT', 'SENT'].includes(po.status) && (
+                      <button
+                        onClick={() => cancelOrder(po)}
+                        disabled={cancellingId === po.id}
+                        className="text-red-600 text-xs font-semibold hover:underline disabled:opacity-50"
+                      >
+                        {cancellingId === po.id ? 'Cancelling…' : 'Cancel'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+                {expandedId === po.id && (
+                  <tr>
+                    <td colSpan={7} className="bg-slate-50 px-5 py-4">
+                      {po.notes && <div className="text-xs text-slate-500 mb-2">Note: {po.notes}</div>}
+                      <table className="w-full text-xs">
+                        <thead className="text-slate-400 uppercase">
+                          <tr><th className="text-left py-1">Product</th><th className="text-right py-1">Ordered</th><th className="text-right py-1">Received</th><th className="text-right py-1">Unit Cost</th><th className="text-right py-1">Total</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {(po.items || []).map(i => (
+                            <tr key={i.id}>
+                              <td className="py-1.5">{i.product?.name || i.product_id}</td>
+                              <td className="py-1.5 text-right">{i.quantity}</td>
+                              <td className="py-1.5 text-right">{i.received_quantity || 0}</td>
+                              <td className="py-1.5 text-right">{fmt(i.unit_cost)}</td>
+                              <td className="py-1.5 text-right">{fmt(i.total_cost)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>

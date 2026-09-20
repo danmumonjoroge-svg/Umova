@@ -19,14 +19,28 @@ export const mpesaService = {
     return data;
   },
 
-  /** Owner-facing setup: shortcode + on/off only. The real secrets are Edge Function env vars, never written from here. */
-  async saveConfig({ tenantId, businessId, shortcode, environment = 'sandbox', isActive }) {
+  /**
+   * Phase 13 -- the ONLY way to set up M-Pesa for a business, including
+   * the Daraja consumer key/secret/passkey. Goes through the
+   * mpesa-save-config Edge Function, never a direct table write --
+   * lb_mpesa_secrets has no RLS policy at all (see
+   * schema/phase13_mpesa_client_credentials.sql), so a direct client
+   * insert/update on it would simply fail; this is the real path.
+   *
+   * consumerKey/consumerSecret/passkey are all OPTIONAL per call -- pass
+   * only the ones the owner actually typed. Leaving one blank does not
+   * clear whatever's already on file (the Edge Function merges, never
+   * overwrites with blank). Never returns the secrets themselves, only
+   * confirmation flags -- see the return value.
+   * @returns {Promise<{ok: true, has_consumer_key: boolean, has_consumer_secret: boolean, has_passkey: boolean}>}
+   */
+  async saveConfig({ tenantId, businessId, shortcode, environment = 'sandbox', isActive, consumerKey, consumerSecret, passkey }) {
     if (!shortcode) throw new Error('mpesaService.saveConfig: a shortcode (till/paybill number) is required.');
-    const { data, error } = await supabase
-      .from('lb_mpesa_config')
-      .upsert({ tenant_id: tenantId, business_id: businessId, shortcode, environment, is_active: !!isActive, updated_at: new Date().toISOString() }, { onConflict: 'business_id' })
-      .select().single();
+    const { data, error } = await supabase.functions.invoke('mpesa-save-config', {
+      body: { tenantId, businessId, shortcode, environment, isActive: !!isActive, consumerKey, consumerSecret, passkey },
+    });
     if (error) throw error;
+    if (data?.error) throw new Error(data.error);
     return data;
   },
 

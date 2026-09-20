@@ -7,20 +7,17 @@
 // consumer key/secret/passkey.
 //
 // SECRETS (set with `supabase secrets set`, never committed):
-//   MPESA_CONSUMER_KEY
-//   MPESA_CONSUMER_SECRET
-//   MPESA_PASSKEY
-//   MPESA_ENV                 "sandbox" | "production"
 //   MPESA_CALLBACK_URL        this project's mpesa-callback function URL
+//   (that's the only flat secret left -- see Phase 13)
 //
-// This deliverable supports ONE set of credentials for the whole
-// deployment (one Daraja app), not per-tenant credentials — matches
-// lb_mpesa_config's own scope (shortcode is per-business, but the
-// consumer key/secret are a single Daraja app registration). Real
-// per-tenant Daraja apps (each business with its own paybill/till and
-// its own Daraja credentials) would need a secrets-per-business lookup
-// here instead of flat env vars — flagged as a known limitation, not
-// guessed at, since it changes how secrets are stored.
+// UPDATED (Phase 13): consumer key/secret/passkey are now PER BUSINESS,
+// entered by the owner through the app (mpesa-save-config Edge Function
+// writes them; see schema/phase13_mpesa_client_credentials.sql for why
+// they live in a deny-all-RLS table rather than a normal one). This
+// function looks them up per business_id below, using the service-role
+// client -- the one place besides mpesa-save-config allowed past that
+// table's RLS. There is no longer a single shared Daraja app for the
+// whole deployment; each business supplies its own.
 //
 // NOT TESTED — no Daraja sandbox credentials or deployed Supabase
 // project in this environment. This is real, complete code, written
@@ -32,15 +29,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const CONSUMER_KEY = Deno.env.get("MPESA_CONSUMER_KEY")!;
-const CONSUMER_SECRET = Deno.env.get("MPESA_CONSUMER_SECRET")!;
-const PASSKEY = Deno.env.get("MPESA_PASSKEY")!;
-const ENV = Deno.env.get("MPESA_ENV") || "sandbox";
 const CALLBACK_URL = Deno.env.get("MPESA_CALLBACK_URL")!;
 
-const BASE_URL = ENV === "production"
-  ? "https://api.safaricom.co.ke"
-  : "https://sandbox.safaricom.co.ke";
+function baseUrlFor(environment: string) {
+  return environment === "production"
+    ? "https://api.safaricom.co.ke"
+    : "https://sandbox.safaricom.co.ke";
+}
 
 function timestamp() {
   const d = new Date();
@@ -48,9 +43,9 @@ function timestamp() {
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
-async function getAccessToken(): Promise<string> {
-  const auth = btoa(`${CONSUMER_KEY}:${CONSUMER_SECRET}`);
-  const res = await fetch(`${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
+async function getAccessToken(baseUrl: string, consumerKey: string, consumerSecret: string): Promise<string> {
+  const auth = btoa(`${consumerKey}:${consumerSecret}`);
+  const res = await fetch(`${baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
     headers: { Authorization: `Basic ${auth}` },
   });
   if (!res.ok) throw new Error(`Daraja OAuth failed: ${res.status} ${await res.text()}`);
@@ -90,20 +85,41 @@ serve(async (req) => {
 
     const { data: config } = await supabase
       .from("lb_mpesa_config")
-      .select("shortcode, is_active")
+      .select("shortcode, is_active, environment, has_consumer_key, has_consumer_secret, has_passkey")
       .eq("business_id", businessId)
       .maybeSingle();
 
     if (!config?.is_active) {
       return new Response(JSON.stringify({ error: "M-Pesa is not turned on for this business yet. Set it up under Settings first." }), { status: 400 });
     }
+    if (!config.has_consumer_key || !config.has_consumer_secret || !config.has_passkey) {
+      // A business can be "is_active = true" with an incomplete secret
+      // set if they toggled it on before finishing the form -- caught
+      // here rather than failing later with a cryptic Daraja OAuth
+      // error for a missing key.
+      return new Response(JSON.stringify({ error: "M-Pesa setup isn't complete for this business yet. Add your Consumer Key, Consumer Secret, and Passkey under Settings → M-Pesa." }), { status: 400 });
+    }
 
+    // Phase 13 -- per-business secrets, fetched with the service-role
+    // client (the caller-scoped `supabase` client above can't read this
+    // table at all -- see phase13_mpesa_client_credentials.sql).
+    const serviceClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const { data: secrets, error: secretsError } = await serviceClient
+      .from("lb_mpesa_secrets")
+      .select("consumer_key, consumer_secret, passkey")
+      .eq("business_id", businessId)
+      .maybeSingle();
+    if (secretsError || !secrets?.consumer_key || !secrets?.consumer_secret || !secrets?.passkey) {
+      return new Response(JSON.stringify({ error: "Couldn't load this business's M-Pesa credentials. Re-check them under Settings → M-Pesa." }), { status: 500 });
+    }
+
+    const baseUrl = baseUrlFor(config.environment);
     const ts = timestamp();
-    const password = btoa(`${config.shortcode}${PASSKEY}${ts}`);
+    const password = btoa(`${config.shortcode}${secrets.passkey}${ts}`);
 
-    const accessToken = await getAccessToken();
+    const accessToken = await getAccessToken(baseUrl, secrets.consumer_key, secrets.consumer_secret);
 
-    const stkRes = await fetch(`${BASE_URL}/mpesa/stkpush/v1/processrequest`, {
+    const stkRes = await fetch(`${baseUrl}/mpesa/stkpush/v1/processrequest`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({

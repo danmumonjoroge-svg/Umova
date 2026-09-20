@@ -279,11 +279,16 @@ export default function GoodsReceivingPage() {
               className="border rounded px-3 py-2"
             >
               <option value="">{poLoading ? 'Loading purchase orders…' : 'Select Purchase Order'}</option>
-              {receivablePOs.map(po => (
-                <option key={po.id} value={po.id}>
-                  {po.po_number} — {po.supplier?.name} ({po.status})
-                </option>
-              ))}
+              {receivablePOs.map(po => {
+                const overdue = po.expected_delivery_date &&
+                  new Date(po.expected_delivery_date) < new Date(new Date().toDateString());
+                return (
+                  <option key={po.id} value={po.id}>
+                    {po.po_number} — {po.supplier?.name} ({po.status})
+                    {po.expected_delivery_date ? ` · expected ${po.expected_delivery_date}${overdue ? ' [OVERDUE]' : ''}` : ''}
+                  </option>
+                );
+              })}
             </select>
             <input
               placeholder="Reference invoice #"
