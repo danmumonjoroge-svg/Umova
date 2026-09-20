@@ -19,6 +19,7 @@ import { useMpesaPayment } from '../hooks/useMpesaPayment';
 import ReceiptModal from '../components/ReceiptModal';
 import { receiptService } from '../services/receiptService';
 import { settingsService } from '../services/settingsService';
+import { Image as ImageIcon } from 'lucide-react';
 
 const VARIABLE_MODES = ['WEIGHT', 'VOLUME', 'CUSTOM'];
 
@@ -525,7 +526,7 @@ export default function POSPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search / Scan barcode..."
-              className="flex-1 border rounded px-3 py-2"
+              className="flex-1 min-w-0 border rounded px-3 py-2"
             />
             {/* Large, thumb-friendly scan button — mobile-first per spec section 27 */}
             <button
@@ -557,11 +558,27 @@ export default function POSPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {/* Phone fix: grid-cols-2 stays until lg (1024px) rather than
+              switching to 3 at sm (640px) — this pane is only half-width
+              once md: kicks in (768px+), so 3 image cards in a half-width
+              pane got cramped well before the screen was actually wide
+              enough. Image added below (was text-only before) so a
+              product is recognizable by sight, not just by name — the
+              square aspect-ratio box also keeps every card the same
+              height regardless of name length, which is most of what
+              was making the grid look "not proportionate." */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
             {filteredProducts.map(p => (
-              <button key={p.id} onClick={() => addToCart(p)} className="bg-white p-3 rounded shadow hover:bg-blue-50 text-left">
-                <div className="font-semibold text-sm truncate">{p.name}</div>
-                <div className="text-blue-600 font-bold">{p.selling_price?.toLocaleString()}</div>
+              <button key={p.id} onClick={() => addToCart(p)} className="bg-white rounded shadow hover:bg-blue-50 text-left overflow-hidden flex flex-col">
+                <div className="w-full aspect-square bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+                  {p.image_url
+                    ? <img src={p.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    : <ImageIcon size={24} className="text-gray-300" />}
+                </div>
+                <div className="p-2 min-w-0">
+                  <div className="font-semibold text-sm truncate">{p.name}</div>
+                  <div className="text-blue-600 font-bold">{p.selling_price?.toLocaleString()}</div>
+                </div>
               </button>
             ))}
           </div>
@@ -645,7 +662,7 @@ export default function POSPage() {
                     <select
                       value={p.method}
                       onChange={e => updateSplitPayment(p.id, 'method', e.target.value)}
-                      className="border rounded px-2 py-2 text-sm"
+                      className="border rounded px-2 py-2 text-sm shrink-0"
                     >
                       {['CASH', 'MOBILE_MONEY', 'CARD', 'CREDIT'].map(m => <option key={m} value={m}>{m.replace('_', ' ')}</option>)}
                     </select>
@@ -653,9 +670,9 @@ export default function POSPage() {
                       type="number" min="0" step="0.01" placeholder="Amount"
                       value={p.amount}
                       onChange={e => updateSplitPayment(p.id, 'amount', e.target.value)}
-                      className="border rounded px-3 py-2 flex-1"
+                      className="border rounded px-3 py-2 flex-1 min-w-0"
                     />
-                    <button onClick={() => removeSplitPayment(p.id)} className="text-red-500 text-sm px-2">✕</button>
+                    <button onClick={() => removeSplitPayment(p.id)} className="text-red-500 text-sm px-2 shrink-0">✕</button>
                   </div>
                 ))}
                 <button onClick={addSplitPayment} className="text-sm text-emerald-700 font-semibold">+ Add payment</button>
@@ -685,8 +702,8 @@ export default function POSPage() {
             )}
             {!splitMode && paymentMethod === 'CASH' && (
               <div className="flex gap-2 mb-3">
-                <input type="number" placeholder="Amount received" value={customerAmount} onChange={e => setCustomerAmount(e.target.value)} className="border rounded px-3 py-2 flex-1" />
-                <div className="px-3 py-2 bg-green-100 text-green-700 rounded">Change: {change >= 0 ? change.toLocaleString() : '-'}</div>
+                <input type="number" placeholder="Amount received" value={customerAmount} onChange={e => setCustomerAmount(e.target.value)} className="border rounded px-3 py-2 flex-1 min-w-0" />
+                <div className="px-3 py-2 bg-green-100 text-green-700 rounded shrink-0 whitespace-nowrap">Change: {change >= 0 ? change.toLocaleString() : '-'}</div>
               </div>
             )}
             {!splitMode && paymentMethod === 'MOBILE_MONEY' && (
