@@ -15,6 +15,10 @@ import { cacheProducts } from '../offline/offlineCache';
 // there. Kept to its own hook/modal so the existing CASH/CARD/CREDIT
 // checkout path above (completeSale) is completely unchanged.
 import { useMpesaPayment } from '../hooks/useMpesaPayment';
+// Phase 14 -- the sale receipt itself: print / WhatsApp / email.
+import ReceiptModal from '../components/ReceiptModal';
+import { receiptService } from '../services/receiptService';
+import { settingsService } from '../services/settingsService';
 
 const VARIABLE_MODES = ['WEIGHT', 'VOLUME', 'CUSTOM'];
 
@@ -33,6 +37,18 @@ export default function POSPage() {
   const { customers } = useCustomers();
   const { isOnline } = useNetStatus();
   const mpesa = useMpesaPayment();
+
+  // Phase 14 -- receipt state. `business` is fetched once (it barely
+  // changes) rather than via the heavier useSettings() hook, which also
+  // pulls in POS settings this page doesn't need.
+  const [business, setBusiness] = useState(null);
+  const [posSettings, setPosSettings] = useState(null);
+  const [receiptModal, setReceiptModal] = useState(null); // { receipt, customer, isOffline } | null
+  useEffect(() => {
+    if (!tenant?.business_id) return;
+    settingsService.getBusinessProfile(tenant.business_id).then(setBusiness).catch(() => {});
+    settingsService.getPosSettings(tenant.business_id).then(setPosSettings).catch(() => {});
+  }, [tenant?.business_id]);
   const [mpesaPhone, setMpesaPhone] = useState('');
   const [showMpesaModal, setShowMpesaModal] = useState(false);
 
@@ -281,7 +297,7 @@ export default function POSPage() {
     if (!phone) { setSaleError('Enter the customer\'s M-Pesa phone number.'); return; }
 
     const cartSnapshot = cart.map(i => ({
-      product_id: i.product_id, quantity: i.quantity, unit_price: i.unit_price,
+      product_id: i.product_id, name: i.name, quantity: i.quantity, unit_price: i.unit_price,
       cost_price: i.cost_price, discount_amount: i.discount_amount || 0, selling_mode: i.selling_mode,
     }));
 
@@ -294,11 +310,28 @@ export default function POSPage() {
     }
   };
 
+  // Phase 14: once M-Pesa confirms, fetch the receipt
+  // confirm_mpesa_payment() now writes (see schema/phase14_receipts.sql)
+  // in the background, so it's ready the moment the cashier presses
+  // "Done" below -- no extra wait on top of the STK confirmation itself.
+  const [mpesaReceipt, setMpesaReceipt] = useState(null);
+  useEffect(() => {
+    if (mpesa.phase === 'paid' && mpesa.transaction?.sale_id) {
+      receiptService.getBySaleId(mpesa.transaction.sale_id).then(setMpesaReceipt).catch(() => {});
+    }
+    if (mpesa.phase === 'idle') setMpesaReceipt(null);
+  }, [mpesa.phase, mpesa.transaction]);
+
   const closeMpesaModal = () => {
-    if (mpesa.phase === 'paid') {
+    const wasPaid = mpesa.phase === 'paid';
+    if (wasPaid) {
       setCart([]); setCustomerAmount(''); setSearch(''); setSelectedCustomerId(''); setMpesaPhone('');
     }
     setShowMpesaModal(false);
+    if (wasPaid && mpesaReceipt) {
+      const customer = customers.find(c => c.id === mpesa.transaction?.customer_id) || null;
+      setReceiptModal({ receipt: mpesaReceipt, customer, isOffline: false });
+    }
     mpesa.reset();
   };
 
@@ -359,6 +392,7 @@ export default function POSPage() {
       customer_id: selectedCustomerId || null, // guaranteed non-empty for CREDIT by the checks above
       items: cart.map(i => ({
         product_id: i.product_id,
+        name: i.name, // Phase 14: captured onto the receipt snapshot at sale time
         quantity: i.quantity,
         unit_price: i.unit_price,
         cost_price: i.cost_price,
@@ -375,16 +409,39 @@ export default function POSPage() {
       // offlineSaleService.js's header for the three possible outcomes.
       const fullSale = { ...sale, tenant_id: tenant?.id, business_id: tenant?.business_id ?? null, cashier_id: staffId };
       const result = await createOfflineAwareSale(fullSale, { isOnline });
+      const selectedCustomer = customers.find(c => c.id === selectedCustomerId) || null;
       setCart([]); setCustomerAmount(''); setSearch(''); setSelectedCustomerId('');
       setSplitPayments([]); setSplitMode(false);
-      // Never say "completed" for a queued sale (brief section 43) --
-      // the owner needs to know it hasn't reached the server yet, even
-      // though the till already behaves as if it has (stock decremented,
-      // receipt-shaped data available).
+      // Phase 14: show the receipt instead of a bare alert(). For an
+      // online sale, fetch the REAL lb_receipts row saleService.create()
+      // already wrote (has a server-issued receipt_number). For an
+      // offline/LOCAL_PENDING sale there is no server row yet -- a
+      // synthetic receipt object, shaped identically, lets the cashier
+      // print/share it immediately without waiting for sync (brief
+      // section 27's own "must not have to wait for Supabase").
       if (result._offlineStatus === 'LOCAL_PENDING') {
-        alert(`Sale saved (${result.sale_number}) — it will sync automatically once you're back online.`);
+        setReceiptModal({
+          receipt: {
+            receipt_number: result.sale_number, // no real one exists yet
+            created_at: result.completed_at,
+            receipt_data: {
+              sale_number: result.sale_number, items: result.items, payments: result.payments,
+              subtotal: result.subtotal, discount_total: result.discount_total,
+              tax_total: result.tax_total, total_amount: result.total_amount,
+              completed_at: result.completed_at,
+            },
+          },
+          customer: selectedCustomer, isOffline: true,
+        });
       } else {
-        alert('Sale completed!');
+        try {
+          const receipt = await receiptService.getBySaleId(result.id);
+          if (receipt) setReceiptModal({ receipt, customer: selectedCustomer, isOffline: false });
+        } catch {
+          // Sale itself already succeeded -- a failed receipt FETCH
+          // shouldn't look like the sale failed. It's still in
+          // lb_receipts and reachable later; just nothing pops up now.
+        }
       }
     } catch (err) {
       setSaleError(err.message || 'Failed to complete sale.');
@@ -451,7 +508,17 @@ export default function POSPage() {
         <span className="font-bold">POS — Shift Open</span>
         <button onClick={() => setShowCloseShiftModal(true)} className="bg-red-600 px-3 py-1 rounded text-sm shrink-0">Close Shift</button>
       </div>
-      <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
+      {/* Phone fix: on mobile this becomes a single stacked column
+          (catalog, then cart+payment below it), so it needs to scroll
+          as ONE page — hence overflow-y-auto here on small screens.
+          At md: it switches to the two-pane side-by-side layout, and
+          overflow-hidden here is what lets each pane (left: overflow-y-auto
+          catalog, right: its own internal flex layout) scroll
+          independently instead of the whole row scrolling as a unit.
+          Without this split, content below the fold on a phone was
+          unreachable — clipped by overflow-hidden with nothing to
+          scroll it, not just visually cramped. */}
+      <div className="flex flex-1 overflow-y-auto md:overflow-hidden flex-col md:flex-row">
         <div className="w-full md:w-1/2 p-4 overflow-y-auto bg-gray-50">
           <div className="flex gap-2 mb-4">
             <input
@@ -505,12 +572,12 @@ export default function POSPage() {
           <div className="flex-1 overflow-y-auto">
             {cart.map(item => (
               <div key={item.product_id} className="py-2 border-b">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="font-medium">{item.name}</div>
+                <div className="flex flex-wrap justify-between items-center gap-y-1">
+                  <div className="min-w-0 pr-2">
+                    <div className="font-medium truncate">{item.name}</div>
                     <div className="text-sm text-gray-500">{item.unit_price?.toLocaleString()} x {item.quantity}</div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <button onClick={() => updateQty(item.product_id, item.quantity - 1)} className="w-6 h-6 bg-gray-200 rounded">-</button>
                     <span>{item.quantity}</span>
                     <button onClick={() => updateQty(item.product_id, item.quantity + 1)} className="w-6 h-6 bg-gray-200 rounded">+</button>
@@ -648,7 +715,7 @@ export default function POSPage() {
           request having been sent. */}
       {showMpesaModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-sm shadow-xl p-6 text-center">
+          <div className="bg-white rounded-xl w-full max-w-sm shadow-xl p-6 text-center max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-lg mb-1">M-Pesa Payment</h3>
             <p className="text-sm text-gray-500 mb-4">Amount: <span className="font-semibold text-gray-800">KES {total.toLocaleString()}</span></p>
 
@@ -695,6 +762,24 @@ export default function POSPage() {
         </div>
       )}
 
+      {/* Phase 14 -- the sale receipt (print/WhatsApp/email). Mounted
+          last so it renders on top of everything else, including the
+          M-Pesa modal it can appear right after. */}
+      {receiptModal && (
+        <ReceiptModal
+          receipt={receiptModal.receipt}
+          customer={receiptModal.customer}
+          isOffline={receiptModal.isOffline}
+          business={business}
+          posSettings={posSettings}
+          tenantId={tenant?.id}
+          businessId={tenant?.business_id}
+          staffId={staffId}
+          isOnline={isOnline}
+          onClose={() => setReceiptModal(null)}
+        />
+      )}
+
       {/* Camera / manual scan surface — used for every scan-to-sale flow */}
       <ScannerModal
         open={showScanner}
@@ -708,7 +793,7 @@ export default function POSPage() {
       {/* Weight/Volume/Custom quantity prompt (spec section 13) */}
       {pendingVariableProduct && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5">
+          <div className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-lg mb-1">{pendingVariableProduct.product.name}</h3>
             <p className="text-sm text-gray-500 mb-4">
               Selling mode: {pendingVariableProduct.product.selling_mode}
@@ -748,7 +833,7 @@ export default function POSPage() {
       {/* Unknown barcode → quick product create, without leaving the sale (spec section 18) */}
       {quickCreateBarcode && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitQuickCreate} className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-3">
+          <form onSubmit={submitQuickCreate} className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-lg">Create Product</h3>
             <p className="text-xs text-gray-500 font-mono">Barcode: {quickCreateBarcode}</p>
             {quickCreateError && <div className="bg-red-50 text-red-700 text-sm rounded px-3 py-2">{quickCreateError}</div>}
@@ -795,7 +880,7 @@ export default function POSPage() {
           cashier what was actually in the till. */}
       {showCloseShiftModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitCloseShift} className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-3">
+          <form onSubmit={submitCloseShift} className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-lg">Close Shift</h3>
             <p className="text-sm text-gray-500">Count the till and enter what's actually there.</p>
             {closeError && <div className="bg-red-50 text-red-700 text-sm rounded px-3 py-2">{closeError}</div>}

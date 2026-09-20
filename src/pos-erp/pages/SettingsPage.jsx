@@ -5,13 +5,16 @@
 // staff CRUD) isn't built yet (see AUDIT.md), Security is the existing
 // POS auth screens.
 
-import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Loader2, Save } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Settings as SettingsIcon, Loader2, Save, Upload, Image as ImageIcon } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
+import { settingsService } from '../services/settingsService';
+import { usePosErpAuth } from '../auth/usePosErpAuth';
 
 const ALL_PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK', 'CREDIT', 'VOUCHER', 'OTHER'];
 
 export default function SettingsPage() {
+  const { tenant } = usePosErpAuth();
   const { profile, posSettings, loading, error, updateProfile, savePosSettings } = useSettings();
 
   const [profileForm, setProfileForm] = useState(null);
@@ -22,6 +25,8 @@ export default function SettingsPage() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [saveError, setSaveError] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef(null);
 
   useEffect(() => { if (profile) setProfileForm(profile); }, [profile]);
   useEffect(() => {
@@ -33,6 +38,26 @@ export default function SettingsPage() {
   }, [posSettings]);
 
   const flash = (msg) => { setSaveMsg(msg); setTimeout(() => setSaveMsg(''), 2500); };
+
+  // Phase 15: logo upload is its own action, separate from "Save
+  // Profile" below — it uploads and saves in one step (via
+  // settingsService.uploadLogo()) so the owner doesn't pick a file and
+  // then have to remember to also press Save for it to take effect.
+  const handleLogoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSaveError(''); setUploadingLogo(true);
+    try {
+      const updated = await settingsService.uploadLogo(tenant?.business_id, file);
+      setProfileForm(updated);
+      flash('Logo updated.');
+    } catch (err) {
+      setSaveError(err.message);
+    } finally {
+      setUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
 
   const submitProfile = async (e) => {
     e.preventDefault();
@@ -90,6 +115,33 @@ export default function SettingsPage() {
       {/* Business Profile */}
       <form onSubmit={submitProfile} className="bg-white border border-slate-200 rounded-2xl p-6 space-y-3">
         <h2 className="font-bold text-slate-800">Business Profile</h2>
+
+        {/* Phase 15: logo — a place to insert a photo, right next to
+            the business name field it sits above. Uploads immediately
+            on file choice (see handleLogoChange) rather than waiting
+            for "Save Profile" below, since a photo is a distinct
+            action from editing text fields. */}
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+            {profileForm.logo_url ? (
+              <img src={profileForm.logo_url} alt="Business logo" className="w-full h-full object-cover" />
+            ) : (
+              <ImageIcon size={22} className="text-slate-300" />
+            )}
+          </div>
+          <div>
+            <button
+              type="button" onClick={() => logoInputRef.current?.click()} disabled={uploadingLogo}
+              className="flex items-center gap-2 text-sm font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg disabled:opacity-60"
+            >
+              {uploadingLogo ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+              {uploadingLogo ? 'Uploading…' : profileForm.logo_url ? 'Change logo' : 'Add a logo'}
+            </button>
+            <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
+            <p className="text-[11px] text-slate-400 mt-1">Shows in the sidebar and on printed/shared receipts. PNG or JPG, under 2MB.</p>
+          </div>
+        </div>
+
         <input placeholder="Business name" value={profileForm.name || ''} onChange={e => setProfileForm({ ...profileForm, name: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2 focus:border-emerald-700 focus:ring-4 focus:ring-amber-100 outline-none" />
         <div className="grid grid-cols-2 gap-3">
           <input placeholder="Phone" value={profileForm.phone || ''} onChange={e => setProfileForm({ ...profileForm, phone: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />

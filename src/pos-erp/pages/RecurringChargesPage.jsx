@@ -202,7 +202,7 @@ export default function RecurringChargesPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <form onSubmit={submit} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3">
+          <form onSubmit={submit} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-lg text-slate-800">New Recurring Charge</h3>
               <button type="button" onClick={() => setShowForm(false)}><X size={18} className="text-slate-400" /></button>
@@ -233,7 +233,7 @@ export default function RecurringChargesPage() {
 
       {payingInvoice && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitPayment} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3">
+          <form onSubmit={submitPayment} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-lg text-slate-800">Record Payment</h3>
             <p className="text-sm text-slate-500">
               {payingInvoice.customer?.name} — {payingInvoice.charge?.charge_name}, balance <span className="font-bold text-amber-700">{fmt(Number(payingInvoice.amount) - Number(payingInvoice.paid_amount || 0))}</span>

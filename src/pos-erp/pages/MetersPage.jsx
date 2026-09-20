@@ -143,7 +143,7 @@ export default function MetersPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <form onSubmit={submitMeter} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3">
+          <form onSubmit={submitMeter} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-lg text-slate-800">Add Meter</h3>
               <button type="button" onClick={() => setShowForm(false)}><X size={18} className="text-slate-400" /></button>
@@ -171,7 +171,7 @@ export default function MetersPage() {
 
       {readingMeter && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitReading} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3">
+          <form onSubmit={submitReading} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-lg text-slate-800">Record Reading — {readingMeter.meter_number}</h3>
             {!readingMeter.customer_id && (
               <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">No customer assigned to this meter — the reading will be saved but not billed.</p>

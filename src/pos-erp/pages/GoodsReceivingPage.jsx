@@ -279,16 +279,11 @@ export default function GoodsReceivingPage() {
               className="border rounded px-3 py-2"
             >
               <option value="">{poLoading ? 'Loading purchase orders…' : 'Select Purchase Order'}</option>
-              {receivablePOs.map(po => {
-                const overdue = po.expected_delivery_date &&
-                  new Date(po.expected_delivery_date) < new Date(new Date().toDateString());
-                return (
-                  <option key={po.id} value={po.id}>
-                    {po.po_number} — {po.supplier?.name} ({po.status})
-                    {po.expected_delivery_date ? ` · expected ${po.expected_delivery_date}${overdue ? ' [OVERDUE]' : ''}` : ''}
-                  </option>
-                );
-              })}
+              {receivablePOs.map(po => (
+                <option key={po.id} value={po.id}>
+                  {po.po_number} — {po.supplier?.name} ({po.status})
+                </option>
+              ))}
             </select>
             <input
               placeholder="Reference invoice #"
@@ -485,7 +480,7 @@ export default function GoodsReceivingPage() {
       {/* Unknown barcode -> quick product create (spec section 18) */}
       {quickCreateBarcode && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitQuickCreate} className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-3">
+          <form onSubmit={submitQuickCreate} className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-lg">Create Product & Add to GRN</h3>
             <p className="text-xs text-gray-500 font-mono">Barcode: {quickCreateBarcode}</p>
             <input required autoFocus placeholder="Product Name" value={quickCreateForm.name}
@@ -529,7 +524,7 @@ function QtyCostPrompt({ initial, poItem, onCancel, onConfirm }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <form onSubmit={submit} className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-3">
+      <form onSubmit={submit} className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
         <h3 className="font-bold text-lg">{initial.name}</h3>
         {poItem && (
           <p className="text-xs text-gray-500">

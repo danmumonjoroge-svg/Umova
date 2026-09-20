@@ -169,6 +169,17 @@ export const saleService = {
     const { error: iErr } = await supabase.from('lb_sale_items').insert(itemRows);
     if (iErr) throw iErr;
 
+    // Phase 14 (receipts): lb_sale_items has no name column (a receipt
+    // reprinted later should show the product's CURRENT name via a join,
+    // which is what saleService.getById() already does with
+    // `items:lb_sale_items(*, product:lb_products(id,name,sku))`). But
+    // the receipt SNAPSHOT below is deliberately point-in-time (see the
+    // comment above it), so it needs the name captured NOW, at sale
+    // time, not joined later. sale.items[].name is optional -- callers
+    // that don't pass it (older code paths, if any) just get a receipt
+    // line with no name, not a crash.
+    const receiptItems = sale.items.map((i, idx) => ({ ...itemRows[idx], name: i.name || null }));
+
     if (sale.payments?.length) {
       const paymentRows = sale.payments.map((p) => ({
         tenant_id: sale.tenant_id,
@@ -216,7 +227,7 @@ export const saleService = {
       receipt_type: 'THERMAL',
       receipt_data: {
         sale_number: headerData.sale_number,
-        items: itemRows,
+        items: receiptItems,
         payments: sale.payments || [],
         subtotal,
         discount_total: discountTotal,

@@ -155,7 +155,7 @@ export default function AppointmentsPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <form onSubmit={submit} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3">
+          <form onSubmit={submit} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-lg text-slate-800">Book Appointment</h3>
               <button type="button" onClick={() => setShowForm(false)}><X size={18} className="text-slate-400" /></button>
@@ -183,7 +183,7 @@ export default function AppointmentsPage() {
 
       {completing && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitComplete} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3">
+          <form onSubmit={submitComplete} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-lg text-slate-800">Complete &amp; Sell</h3>
             <p className="text-sm text-slate-500">
               {completing.customer?.name} — {completing.service?.name}, <span className="font-bold text-amber-700">{fmt(completing.service?.selling_price)}</span>

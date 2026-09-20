@@ -26,6 +26,12 @@ import { paymentService } from '../services/paymentService';
 import { receivablesService } from '../services/receivablesService';
 import { useTemplates, useCommunicationLog } from '../hooks/useCommunication';
 import { normalizePhoneForWhatsApp } from '../services/communicationService';
+// Phase 16: proper statement — printable, with the customer's own
+// contact details and a purchased/paid/balance summary, not just a bare
+// transaction list. Shares the same print utility the sale receipt uses
+// (utils/printDocument.js) rather than a second print implementation.
+import { printDocument, escapeHtml } from '../utils/printDocument';
+import { Printer } from 'lucide-react';
 
 const CUSTOMER_TYPES = ['WALK_IN', 'REGISTERED', 'BUSINESS', 'CREDIT'];
 const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK', 'VOUCHER', 'OTHER'];
@@ -193,6 +199,48 @@ export default function CustomersPage() {
     }
   };
 
+  // Phase 16: purchased/paid totals, derived from the same signed
+  // amounts the row list already colour-codes (negative = reduces
+  // balance = a payment; positive = a charge) rather than trusting a
+  // free-text transaction_type string that could read differently
+  // across older rows.
+  const statementTotals = statementRows.reduce((acc, r) => {
+    const amt = Number(r.amount) || 0;
+    if (amt > 0) acc.purchased += amt; else acc.paid += Math.abs(amt);
+    return acc;
+  }, { purchased: 0, paid: 0 });
+
+  const printStatement = () => {
+    const c = statementCustomer;
+    const rowsHtml = statementRows.map(r => `
+      <tr>
+        <td>${new Date(r.created_at).toLocaleDateString()}</td>
+        <td>${escapeHtml(r.transaction_type)}${r.notes ? ` — ${escapeHtml(r.notes)}` : ''}</td>
+        <td class="right">${fmt(r.amount)}</td>
+        <td class="right bold">${fmt(r.balance_after)}</td>
+      </tr>`).join('');
+    printDocument(`Statement — ${c.name}`, `
+      <div class="center bold" style="font-size:16px;">${escapeHtml(c.name)}</div>
+      <div class="center muted">
+        ${c.phone ? escapeHtml(c.phone) : ''}${c.phone && c.email ? ' · ' : ''}${c.email ? escapeHtml(c.email) : ''}
+      </div>
+      <div class="divider"></div>
+      <div class="center bold" style="font-size:14px;">Account Statement</div>
+      <div class="center muted">${new Date().toLocaleDateString()}</div>
+      <div class="divider"></div>
+      <table>
+        <tr><td>Total Purchases</td><td class="right">${fmt(statementTotals.purchased)}</td></tr>
+        <tr><td>Total Paid</td><td class="right">${fmt(statementTotals.paid)}</td></tr>
+        <tr class="bold"><td>Balance Owed</td><td class="right">${fmt(c.outstanding_balance)}</td></tr>
+      </table>
+      <div class="divider"></div>
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th class="right">Amount</th><th class="right">Balance</th></tr></thead>
+        <tbody>${rowsHtml || '<tr><td colspan="4" class="center muted">No transactions yet</td></tr>'}</tbody>
+      </table>
+    `, `table { font-size: 12px; } th { text-align: left; border-bottom: 1px solid #ccc; }`);
+  };
+
   const visibleCustomers = receivablesOnly ? customers.filter(c => Number(c.outstanding_balance) > 0) : customers;
 
   return (
@@ -316,7 +364,7 @@ export default function CustomersPage() {
       {/* Record standalone payment */}
       {payingCustomer && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitPayment} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3">
+          <form onSubmit={submitPayment} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-lg text-slate-800">Record Payment</h3>
             <p className="text-sm text-slate-500">
               {payingCustomer.name} — owes <span className="font-bold text-amber-700">{fmt(payingCustomer.outstanding_balance)}</span>
@@ -357,19 +405,42 @@ export default function CustomersPage() {
       {/* Statement */}
       {statementCustomer && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl p-5 max-h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center mb-1">
-              <h3 className="font-bold text-lg text-slate-800">{statementCustomer.name} — Statement</h3>
-              <button onClick={() => setStatementCustomer(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl p-5 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-start mb-1">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800">{statementCustomer.name} — Statement</h3>
+                {/* Personal info the statement should carry, not just a
+                    name — the phone/email an owner would need to reach
+                    this customer about the balance. */}
+                <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 mt-0.5">
+                  {statementCustomer.phone && <span>{statementCustomer.phone}</span>}
+                  {statementCustomer.email && <span>{statementCustomer.email}</span>}
+                </div>
+              </div>
+              <button onClick={() => setStatementCustomer(null)} className="text-slate-400 hover:text-slate-600 shrink-0">✕</button>
             </div>
-            <p className="text-sm text-slate-500 mb-3">
-              Current balance: <span className="font-bold text-amber-700">{fmt(statementCustomer.outstanding_balance)}</span>
-            </p>
-            <div className="flex-1 overflow-y-auto">
+
+            <div className="grid grid-cols-3 gap-2 my-3">
+              <div className="bg-slate-50 rounded-lg px-2 py-2 text-center">
+                <div className="text-[10px] font-bold text-slate-400 uppercase">Purchased</div>
+                <div className="font-bold text-slate-700 text-sm">{fmt(statementTotals.purchased)}</div>
+              </div>
+              <div className="bg-emerald-50 rounded-lg px-2 py-2 text-center">
+                <div className="text-[10px] font-bold text-emerald-600 uppercase">Paid</div>
+                <div className="font-bold text-emerald-700 text-sm">{fmt(statementTotals.paid)}</div>
+              </div>
+              <div className="bg-amber-50 rounded-lg px-2 py-2 text-center">
+                <div className="text-[10px] font-bold text-amber-600 uppercase">Owes</div>
+                <div className="font-bold text-amber-700 text-sm">{fmt(statementCustomer.outstanding_balance)}</div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0">
               {statementLoading ? (
                 <div className="text-center py-8 text-slate-500">Loading…</div>
               ) : (
-                <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[380px]">
                   <thead className="bg-slate-50 text-slate-500 sticky top-0">
                     <tr><th className="px-2 py-1">Date</th><th>Type</th><th>Amount</th><th>Balance</th></tr>
                   </thead>
@@ -387,8 +458,15 @@ export default function CustomersPage() {
                     )}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
+            <button
+              onClick={printStatement}
+              className="mt-3 w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold py-2.5 rounded-xl"
+            >
+              <Printer size={15} /> Print Statement
+            </button>
           </div>
         </div>
       )}

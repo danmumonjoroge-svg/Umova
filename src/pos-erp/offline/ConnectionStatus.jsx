@@ -52,7 +52,12 @@ export default function ConnectionStatus() {
   } else if (phase === 'justUpdated') {
     content = <><CheckCircle2 size={13} /> Updated</>;
   } else if (!isOnline) {
-    content = <><CloudOff size={13} /> Offline — Everything is saved</>;
+    // Full wording (brief section 26) from sm: up; on a phone-width
+    // topbar (hamburger + page title + this pill + bell icon, all in
+    // one row) the full sentence was wide enough to force a horizontal
+    // squeeze or clip on narrow screens -- "Offline" alone still tells
+    // the cashier what they need to know at that width.
+    content = <><CloudOff size={13} /> <span className="hidden sm:inline">Offline — Everything is saved</span><span className="sm:hidden">Offline</span></>;
   } else {
     content = <><Cloud size={13} /> Online</>;
   }
@@ -62,7 +67,7 @@ export default function ConnectionStatus() {
     : 'bg-emerald-50 text-emerald-700 border-emerald-200';
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 shrink-0">
       <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${tone}`}>
         {content}
       </span>

@@ -10,11 +10,14 @@
 import React, { useState } from "react";
 import {
   Truck, Search, Plus, X, Phone, Mail, MapPin, CreditCard,
-  FileText, Receipt, Undo2, Wallet, ChevronRight, Loader2,
+  FileText, Receipt, Undo2, Wallet, ChevronRight, Loader2, Printer,
 } from "lucide-react";
 import { useSuppliers, useSupplierDetail } from "../hooks/useSuppliers";
 import { usePosErpAuth } from "../auth/usePosErpAuth";
 import { supplierService } from "../services/supplierService";
+// Phase 16: a proper, printable statement for suppliers too — same
+// shared print utility the sale receipt and customer statement use.
+import { printDocument, escapeHtml } from "../utils/printDocument";
 
 export default function SuppliersPage() {
   const { suppliers, loading, error, create, update, deactivate, reactivate, fetch } = useSuppliers();
@@ -243,6 +246,53 @@ export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
   const [tab, setTab] = useState("grns");
   const [showPayment, setShowPayment] = useState(false);
 
+  // Phase 16: purchased/paid totals for a proper statement — GRNs
+  // (goods actually received) rather than POs (which may still be
+  // pending/unfulfilled) is what "purchased" means here, matching how
+  // the brief's own §8 example frames it ("Bought: X, Paid: Y").
+  const totalPurchased = grns.reduce((s, g) => s + Number(g.total_amount || 0), 0);
+  const totalPaid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+
+  const printStatement = () => {
+    const fmt = (n) => Number(n || 0).toLocaleString();
+    // One consolidated, date-sorted ledger across all four transaction
+    // types — the tabbed view above is better for browsing on screen,
+    // but a printed statement should read as one running account, not
+    // four separate lists the recipient has to reassemble themselves.
+    const rows = [
+      ...purchaseOrders.map(po => ({ date: po.order_date, label: `PO ${po.po_number}`, amount: Number(po.total_amount) })),
+      ...grns.map(g => ({ date: g.received_date, label: `Goods received ${g.grn_number}`, amount: Number(g.total_amount) })),
+      ...payments.map(p => ({ date: p.payment_date, label: `Payment ${p.payment_number} (${String(p.payment_method || '').replace('_', ' ')})`, amount: -Number(p.amount) })),
+      ...returns.map(r => ({ date: r.created_at, label: `Return ${r.return_number}${r.reason ? ` — ${r.reason}` : ''}`, amount: -Number(r.total_amount) })),
+    ].filter(r => r.date).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const rowsHtml = rows.map(r => `
+      <tr><td>${new Date(r.date).toLocaleDateString()}</td><td>${escapeHtml(r.label)}</td><td class="right">${fmt(r.amount)}</td></tr>
+    `).join('');
+
+    printDocument(`Statement — ${supplier.name}`, `
+      <div class="center bold" style="font-size:16px;">${escapeHtml(supplier.name)}</div>
+      <div class="center muted">
+        ${supplier.phone ? escapeHtml(supplier.phone) : ''}${supplier.phone && supplier.email ? ' · ' : ''}${supplier.email ? escapeHtml(supplier.email) : ''}
+      </div>
+      ${supplier.address ? `<div class="center muted">${escapeHtml(supplier.address)}</div>` : ''}
+      <div class="divider"></div>
+      <div class="center bold" style="font-size:14px;">Supplier Statement</div>
+      <div class="center muted">${new Date().toLocaleDateString()}</div>
+      <div class="divider"></div>
+      <table>
+        <tr><td>Total Purchased</td><td class="right">${fmt(totalPurchased)}</td></tr>
+        <tr><td>Total Paid</td><td class="right">${fmt(totalPaid)}</td></tr>
+        <tr class="bold"><td>Balance Owed</td><td class="right">${fmt(supplier.outstanding_balance)}</td></tr>
+      </table>
+      <div class="divider"></div>
+      <table>
+        <thead><tr><th>Date</th><th>Detail</th><th class="right">Amount</th></tr></thead>
+        <tbody>${rowsHtml || '<tr><td colspan="3" class="center muted">No transactions yet</td></tr>'}</tbody>
+      </table>
+    `, `table { font-size: 12px; } th { text-align: left; border-bottom: 1px solid #ccc; }`);
+  };
+
   const tabs = [
     { key: "pos", label: "Purchase Orders", icon: FileText, rows: purchaseOrders },
     { key: "grns", label: "GRNs", icon: Truck, rows: grns },
@@ -267,7 +317,7 @@ export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
           <button onClick={onClose}><X size={18} className="text-slate-400" /></button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 p-5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5">
           <div className="rounded-xl bg-red-50 border border-red-200 p-4">
             <div className="text-[11px] font-bold text-red-700 uppercase flex items-center gap-1"><Wallet size={13} /> Outstanding</div>
             <div className="text-xl font-black text-red-700 mt-1">{Number(supplier.outstanding_balance || 0).toLocaleString()}</div>
@@ -276,14 +326,28 @@ export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
             <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1"><CreditCard size={13} /> Credit limit</div>
             <div className="text-xl font-black text-slate-700 mt-1">{Number(supplier.credit_limit || 0).toLocaleString()}</div>
           </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
+            <div className="text-[11px] font-bold text-slate-500 uppercase">Purchased</div>
+            <div className="text-xl font-black text-slate-700 mt-1">{totalPurchased.toLocaleString()}</div>
+          </div>
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+            <div className="text-[11px] font-bold text-emerald-600 uppercase">Paid</div>
+            <div className="text-xl font-black text-emerald-700 mt-1">{totalPaid.toLocaleString()}</div>
+          </div>
         </div>
 
-        <div className="px-5">
+        <div className="px-5 flex gap-2">
           <button
             onClick={() => setShowPayment(true)}
-            className="w-full bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold py-2.5 rounded-xl transition mb-5"
+            className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold py-2.5 rounded-xl transition mb-5"
           >
             Record Payment
+          </button>
+          <button
+            onClick={printStatement}
+            className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold px-4 py-2.5 rounded-xl transition mb-5"
+          >
+            <Printer size={15} /> Print Statement
           </button>
         </div>
 
@@ -384,7 +448,7 @@ function RecordPaymentModal({ supplier, onClose, onRecorded }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm p-5">
+      <div className="bg-white rounded-2xl w-full max-w-sm p-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-slate-800">Record Payment</h3>
           <button onClick={onClose}><X size={18} className="text-slate-400" /></button>

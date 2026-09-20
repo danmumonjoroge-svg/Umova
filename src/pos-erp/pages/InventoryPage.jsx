@@ -164,7 +164,7 @@ function AdjustStockModal({ product, onClose, onAdjust }) {
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm p-5">
+      <div className="bg-white rounded-2xl w-full max-w-sm p-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="font-bold text-slate-800">Adjust Stock</h3>

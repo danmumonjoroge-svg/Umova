@@ -18,10 +18,16 @@
 -- Prevents two ACTIVE products in the same tenant+business from sharing a
 -- barcode, while leaving NULL/blank barcodes (products without one) and
 -- inactive/archived products unrestricted.
+--
+-- FIX: the original predicate referenced lb_products.status, which
+-- doesn't exist on this table — this project tracks active/inactive on
+-- lb_products with is_active (a text enum: 'active' / 'inactive'), the
+-- same column productService.js's deactivate()/reactivate() already
+-- read and write. Confirmed against that file, not guessed.
 DROP INDEX IF EXISTS uq_lb_products_barcode_scoped;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_lb_products_barcode_scoped
     ON lb_products (tenant_id, business_id, barcode)
-    WHERE barcode IS NOT NULL AND barcode <> '' AND status = 'ACTIVE';
+    WHERE barcode IS NOT NULL AND barcode <> '' AND is_active = 'active';
 
 -- 2. Multi-barcode mapping (carton / pack / supplier barcodes) -----------
 CREATE TABLE IF NOT EXISTS lb_product_barcodes (

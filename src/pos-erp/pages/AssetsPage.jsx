@@ -329,7 +329,7 @@ export default function AssetsPage() {
       {/* Disposal */}
       {disposing && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={() => setDisposing(null)}>
-          <form onClick={e => e.stopPropagation()} onSubmit={handleDispose} className="bg-white rounded-2xl p-6 w-full max-w-md space-y-3">
+          <form onClick={e => e.stopPropagation()} onSubmit={handleDispose} className="bg-white rounded-2xl p-6 w-full max-w-md space-y-3 max-h-[90vh] overflow-y-auto">
             <h2 className="font-bold text-slate-800">{disposing.name} — sold or gone</h2>
             <p className="text-sm text-slate-500">
               It's worth {fmt(bookValue(disposing))} on your books right now. If you sold it for more, that's a gain; for less, a loss.

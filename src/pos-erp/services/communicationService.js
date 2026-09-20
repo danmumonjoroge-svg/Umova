@@ -66,7 +66,12 @@ const DEFAULT_SUPPLIER_TEMPLATES = [
   { message_type: 'SUPPLIER_DELIVERY_REMINDER', channel: 'WHATSAPP', body: 'Hi {{supplier_name}}, checking in on the delivery for our recent order. Please let us know the expected date. Thank you. — {{business_name}}' },
 ];
 
-function renderTemplate(body, variables) {
+// Exported (Phase 14: receipt sending) so receiptService.js can render
+// the same RECEIPT template wording for a walk-in customer who has no
+// lb_customers row to attach a tracked communicationLogService entry
+// to — see receiptService.js's header for why that path can't use
+// whatsappService.prepare() directly.
+export function renderTemplate(body, variables) {
   return (body || '').replace(/\{\{(\w+)\}\}/g, (match, key) => (variables[key] != null ? String(variables[key]) : match));
 }
 

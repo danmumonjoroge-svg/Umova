@@ -60,7 +60,7 @@ export default function ScannerModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden">
+      <div className="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h3 className="font-bold text-lg">{title}</h3>
           <button onClick={onClose} className="text-gray-500 text-xl leading-none">&times;</button>

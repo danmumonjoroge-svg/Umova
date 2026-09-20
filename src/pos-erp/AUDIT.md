@@ -1551,3 +1551,367 @@ stage gate, Stage 1B genuinely finished and tested first — not just the
 Sales/Stock slice built this session.
 
 Do not treat this as production-ready. It has not been proven to work.
+
+## 28. Phase 13 — Let an owner set up their own Daraja credentials (closes a real gap)
+
+Raised directly: there was no way for a business owner to enter their own
+M-Pesa/Daraja details at all. Phase 12's design assumed one shared Daraja
+app for the whole platform, set once via `supabase secrets set` — fine
+for a single-business deployment, useless for a multi-tenant one where
+each business has its own till/paybill and its own Daraja registration.
+This phase fixes that properly rather than papering over it.
+
+**Why this needed a new table, not just new columns on `lb_mpesa_config`.**
+`lb_mpesa_config` is a normal RLS-scoped table — any authenticated POS
+session for that business can read every column of their own row through
+the ordinary Supabase client. Fine for a shortcode (it's already printed
+on receipts). Not fine for a Daraja consumer secret or passkey — brief
+section 34 is explicit that these must never reach "normal frontend
+code," and a value the business's own browser session can query back is
+exactly that, even though RLS correctly keeps other tenants out.
+
+**The fix:** `lb_mpesa_secrets` (new table) has RLS enabled with **zero
+policies** — Postgres's default-deny applies to every role except
+`service_role`, which bypasses RLS entirely. No anon-key or
+authenticated-JWT request, from any tenant including the row's own
+business, can read or write this table directly through the normal
+Supabase client. The only way in or out is the two Edge Functions:
+`mpesa-save-config` (write) and `mpesa-stk-push` (read, to actually make
+a request) — both using the service-role key specifically to reach past
+that wall. `lb_mpesa_config` gained three booleans
+(`has_consumer_key`/`has_consumer_secret`/`has_passkey`) and a timestamp
+— the only things that ever cross back from the secrets table to
+something the owner's own browser can query, so the Settings screen can
+say "Consumer secret: saved" without the secret itself ever making that
+trip.
+
+**`mpesa-save-config` (new Edge Function)** does the actual write, in
+four checked steps: (1) verifies the caller genuinely belongs to the
+business they're claiming to configure, by querying `lb_businesses`
+*as the caller* — if that business's own RLS policy won't let them read
+it, they don't get to configure its M-Pesa either; (2) writes the
+non-secret fields (shortcode/environment/on-off) through the normal,
+RLS-respecting path; (3) writes only the secret fields actually present
+in the request to `lb_mpesa_secrets` via service-role, merging against
+what's already there rather than overwriting with blanks — an owner
+fixing a typo in the shortcode doesn't have to re-paste their consumer
+secret; (4) returns only masked confirmation flags, never a secret
+value, not even the one just submitted.
+
+**`mpesa-stk-push` was updated** to match: it no longer reads
+`MPESA_CONSUMER_KEY`/`MPESA_CONSUMER_SECRET`/`MPESA_PASSKEY` from flat
+deployment-wide env vars. It now checks `lb_mpesa_config`'s three
+`has_*` flags first (a clear "setup isn't complete" error if any are
+missing, rather than a cryptic Daraja OAuth failure), then fetches that
+specific business's secrets from `lb_mpesa_secrets` via service-role
+before making the OAuth/STK calls. `MPESA_CALLBACK_URL` is the only flat
+secret left — that's the deployment's own callback endpoint, not
+business-specific data, so it correctly stays a single env var.
+
+**The Settings UI** is a collapsible "M-Pesa Setup" panel at the top of
+`pages/MpesaPage.jsx` — the page an owner would already be looking at.
+Four fields (till/paybill number, mode, consumer key, consumer secret,
+passkey — one dropdown, four inputs), a plain-language explanation of
+where these come from (with a link to Safaricom's developer portal), and
+one Save button. Once a secret is saved, its input shows a green check
+and a "Saved — leave blank to keep it" placeholder; the actual value is
+never re-fetched or re-displayed anywhere, including immediately after
+saving it. The on/off toggle is disabled until all three secrets and a
+shortcode are on file, so a half-configured business can't accidentally
+go "live" with STK requests that would just fail Daraja's own OAuth
+check.
+
+Files: `schema/phase13_mpesa_client_credentials.sql` (new),
+`supabase/functions/mpesa-save-config/index.ts` (new),
+`supabase/functions/mpesa-stk-push/index.ts` (secrets lookup reworked),
+`services/mpesaService.js` (`saveConfig` now calls the Edge Function),
+`pages/MpesaPage.jsx` (Settings panel added), `DEPLOYMENT_NOTES.md`.
+
+**Still not tested** — same caveat as every M-Pesa file: no deployed
+Supabase project, no Daraja sandbox account, in this environment. The
+ownership check in `mpesa-save-config` (step 1) depends on
+`lb_businesses` actually having a `tenant_id = get_current_tenant_id()`
+RLS policy — every other `lb_*` table in this codebase has exactly that
+policy and phase1's own comments describe it as already in place, so
+this is a reasonable assumption, not a new guess, but it hasn't been
+confirmed against a live schema dump this session.
+
+## 29. Phone-size responsiveness pass
+
+Raised directly: "ensure it can be operated on any phone size screen."
+Audited every page and shared layout component for narrow-viewport
+behaviour rather than just eyeballing one screen size. Found and fixed
+five real issues — three of them genuine content-clipping bugs (data
+users could not reach at all on a phone, not just cramped spacing), not
+cosmetic ones.
+
+**1. The Sell/till screen's cart+payment panel was unreachable on
+phones — the most important fix here.** `POSPage.jsx`'s two-pane layout
+(`flex flex-1 overflow-hidden flex-col md:flex-row`) was built assuming
+a bounded-height row, which is only true at `md:` and up (flex-row +
+the parent's own bounded height via flex-1/stretch). On mobile it
+becomes a column, but neither the row container nor its two children
+have a real height to stretch against, so the intended "scrollable
+middle, fixed edges" behaviour silently doesn't apply — content just
+renders at natural size, and because the row container itself was
+`overflow-hidden` (not `-auto`), anything taller than the viewport
+below the fold was **clipped and permanently unreachable**, not merely
+scrolled out of view. This was almost certainly invisible before this
+session's own `min-h-screen` → `h-screen overflow-hidden` fix to
+`POSLayout.jsx` (the earlier bug let the WHOLE page grow instead, which
+accidentally masked this one). Fixed by making the row scroll as a
+single column below `md:` (`overflow-y-auto md:overflow-hidden`) — on a
+phone the cashier now scrolls: product catalog → cart → payment → 
+Complete Sale, all in one natural page, with nothing clipped.
+
+**2. `PurchaseOrdersPage.jsx`'s line-items table had the identical class
+of bug** — `overflow-hidden` directly wrapping a 5-column table with no
+horizontal scroll path. On a narrow phone, the Total column (and the
+row's action button) would be silently cut off with no way to reach
+them. Changed to `overflow-x-auto` with a `min-w-[480px]` floor on the
+table itself, so it scrolls sideways instead of clipping.
+
+**3. `CustomersPage.jsx`'s customer statement table** (Date/Type/Amount/
+Balance, inside the statement modal) had vertical scroll but no
+horizontal one — a long transaction note in the Type column could push
+the table wider than the modal on a phone with no way to see the
+clipped columns. Wrapped in its own `overflow-x-auto` with a
+`min-w-[380px]` floor.
+
+**4. The topbar's connection pill could crowd out the page title or
+bell icon on the narrowest phones.** "Offline — Everything is saved"
+(brief section 26's own required wording) is a long, `whitespace-nowrap`
+string sitting between a hamburger+title on one side and a bell icon on
+the other, in a single non-wrapping row. Below `sm:`, it now shows just
+"Offline" (still clear, still using the required icon) and expands to
+the full sentence from `sm:` up where there's room. Online/Updating/
+Updated were already short enough to leave alone.
+
+**5. A modal safety net, applied everywhere at once rather than
+page-by-page.** Scanned every file for the dialog-box pattern this
+codebase uses consistently (`fixed inset-0 ... flex items-center
+justify-center` immediately followed by a `w-full max-w-sm/md/lg/xl`
+box) and added `max-h-[90vh] overflow-y-auto` to every one that didn't
+already have a height guard — 13 files, ~20 individual dialogs (create/
+edit forms, confirmation dialogs, the M-Pesa status modal, the barcode
+scanner). None of these were observed to actually overflow in testing
+(most are short forms), but on a small landscape phone, a browser with
+extra chrome, or simply a future field added to one of these forms,
+there was previously no way to reach content below the fold inside the
+dialog itself — this closes that class of bug pre-emptively rather than
+one report at a time. `CustomersPage.jsx`'s own statement modal already
+had this (`max-h-[80vh] flex flex-col`) and was correctly left
+untouched by the script.
+
+**Also hardened, smaller:** the cart line-item row in POSPage now wraps
+and truncates instead of assuming a fixed minimum width — a very long
+product name plus quantity controls plus a running total no longer has
+a fixed-width collision path on a ~320px-wide screen.
+
+**Not changed, and why:** the product/service grids
+(`grid-cols-1`/`grid-cols-2` at the smallest breakpoint across
+POSDashboard, MpesaPage, AssetsPage, and the POS catalog itself),
+the mobile sidebar drawer (`POSLayout.jsx`), and every table that
+already had `overflow-x-auto` (AssetsPage, CashPage, InventoryPage,
+ProductsPage) were already built responsively and needed nothing.
+
+**Not verified against a real device or browser** — same limitation as
+everywhere else in this session: no deployed build, no phone, no
+browser DevTools device emulator available in this environment. This
+was a systematic code-level audit (grep-driven, checked against actual
+Tailwind/flex behaviour), not a click-through test. If something still
+looks wrong on a specific phone, the fastest fix is telling me the exact
+screen and screen width — narrowing to a specific breakpoint is much
+faster than a blanket re-audit.
+
+Files changed: `pages/POSPage.jsx`, `offline/ConnectionStatus.jsx`,
+`pages/PurchaseOrdersPage.jsx`, `pages/CustomersPage.jsx`, plus
+`max-h-[90vh] overflow-y-auto` added to modal boxes in:
+`components/ScannerModal.jsx`, `pages/SuppliersPage.jsx`,
+`pages/UnitsPage.jsx`, `pages/ServicesPage.jsx`, `pages/MetersPage.jsx`,
+`pages/InventoryPage.jsx`, `pages/AppointmentsPage.jsx`,
+`pages/ExpensesPage.jsx`, `pages/RecurringChargesPage.jsx`,
+`pages/AssetsPage.jsx`, `pages/GoodsReceivingPage.jsx`.
+
+## 30. Phase 14 — Sale receipts: Print / WhatsApp / Email
+
+Closed a gap `saleService.create()`'s own comment already named:
+"Sending/printing UI is a separate phase." A receipt row (`lb_receipts`,
+with a content snapshot) has always been written on every till sale —
+nothing existed to show, print, or send it. POSPage just did
+`alert('Sale completed!')`.
+
+**Print** uses the browser's native print dialog (`utils/printDocument.js`,
+new, small, shared) — no PDF library, and it's the only way to actually
+reach a real thermal/receipt printer if the device has one configured;
+"Save as PDF" is just another option inside that same native dialog for
+anyone who wants a file instead.
+
+**WhatsApp and Email are both "hand off to the customer's own app,"
+never a server-side send** — same reasoning as brief section 16's own
+WhatsApp design (no API, `wa.me`, the person presses Send themselves).
+This project has no SMS/email provider connected at all (Settings' own
+communication toggle is disabled and says so), so there is no server
+send capability to build a receipt-email feature on top of without
+inventing one that doesn't exist. Email uses a `mailto:` link for
+exactly the same reason WhatsApp uses `wa.me`: it opens a real app the
+customer already has, with the message ready, and the UI says exactly
+that ("you'll still need to press Send there") rather than implying
+delivery (section 43).
+
+**Walk-in customers are handled deliberately, not as an afterthought.**
+Most kiosk sales have no saved `lb_customers` row. The receipt modal
+lets the cashier type a phone or email in on the spot. A saved
+customer's WhatsApp receipt goes through the normal tracked path
+(`whatsappService.prepare()` — Prepared → Opened in WhatsApp → visible
+in that customer's own Messages history); a walk-in's send is NOT
+logged to `lb_communication_log` at all, because that table's own CHECK
+constraint requires exactly one of `customer_id`/`supplier_id` — a
+walk-in has neither, and logging it against a fabricated ID would be
+worse than not logging it. This is stated in `receiptService.js`'s own
+header, not just here.
+
+**Deliberately not using the "did you press Send?" confirm step** the
+Remind buttons use elsewhere. That pattern exists for periodic,
+higher-stakes debt-chasing messages where an audit trail of follow-
+through matters. A receipt fires after every single sale — forcing a
+confirmation click each time would add friction to the core till loop
+dozens of times a day for little benefit. The tracked customer path
+still records Prepared/Opened for anyone who wants to check Messages
+later; it just doesn't block this screen on it.
+
+**Product names on the receipt required a real fix, not a workaround.**
+`lb_sale_items` has no `name` column (a reprint should show a product's
+CURRENT name via the join `saleService.getById()` already does) — but
+the receipt SNAPSHOT is deliberately point-in-time, so it needs the name
+captured AT SALE TIME. `sale.items[].name` is now threaded through from
+POSPage's cart (which already has it) into `saleService.create()`,
+which builds a separate `receiptItems` array (never touching the
+`lb_sale_items` insert itself) carrying `name` into `receipt_data`.
+
+**M-Pesa sales had a real, separate gap: no receipt row at all.**
+`confirm_mpesa_payment()` (Phase 12) creates a sale through a completely
+different path — a confirmed Safaricom callback, not the till's
+checkout button — and never wrote to `lb_receipts`. Found while building
+this, not before. `schema/phase14_receipts.sql` redefines that one
+function (via `CREATE OR REPLACE`, this project's own established
+pattern for layering fixes rather than editing earlier migration files
+in place) to also insert the same shape of receipt row the JS path
+writes, built from the same `cart_snapshot` that already creates the
+sale items — so an M-Pesa receipt looks identical to a cash/card/credit
+one to `receiptService.js`, which doesn't need to know which path
+produced it. POSPage's M-Pesa flow now fetches this receipt in the
+background the moment `mpesa.phase` becomes `'paid'`, so it's ready the
+instant the cashier presses "Done."
+
+**Offline sales get a receipt too, before syncing** — a synthetic object
+shaped identically to a real `lb_receipts` row (receipt_number is the
+`LOCAL-SALE-*` id, since no real one exists until sync), built entirely
+client-side from what `createOfflineAwareSale()` already returns. The
+modal shows a clear "saved on this device, will sync later" notice
+first — nothing pretends this is a synced sale.
+
+Files: `utils/printDocument.js` (new), `services/receiptService.js`
+(new), `components/ReceiptModal.jsx` (new),
+`schema/phase14_receipts.sql` (new), `services/saleService.js` (receipt
+item names), `services/communicationService.js` (`renderTemplate`
+exported for the walk-in WhatsApp path), `pages/POSPage.jsx` (wired into
+both the normal checkout and the M-Pesa confirmation).
+
+**Not tested against a live database or a real WhatsApp/mail app** —
+same standing caveat as the rest of this session. The `mailto:` length
+cap (receipts get truncated past ~1500 characters with a note, since
+mail client URL-length limits vary and aren't reliably documented) is a
+real, known constraint of the mailto approach, not a bug to be fixed
+later — a genuine file attachment would need an actual email-sending
+backend, which doesn't exist in this project.
+
+## 31. Phase 15 — Business logo + branding in Settings
+
+Direct ask: "on settings there should be a place to insert photo and
+business name." `lb_businesses.logo_url` already existed as a column
+(confirmed in `settingsService.js`'s own header comment) — what was
+missing was somewhere to actually upload a file TO, and a UI to do it
+from.
+
+**Supabase Storage**, not a database column holding image bytes — a
+small browser-uploaded logo is exactly what Storage exists for, with
+its own CDN-backed public URL. `schema/phase15_business_logo.sql` sets
+up the bucket policies (the bucket itself is created via the Supabase
+Dashboard, not SQL — noted explicitly in that file, since bucket
+creation isn't a migration-runnable statement). The bucket is
+public-read (a logo needs to render on receipts and the sidebar for
+anyone without requiring an auth token — the same "safe to be visible,
+not safe to be secret" category Phase 13's shortcode already sits in)
+but write-restricted by folder: a policy checks that
+`(storage.foldername(name))[1]` — the first path segment — matches a
+`business_id` the caller's own tenant actually owns, so a business can
+never overwrite another's logo despite the bucket being publicly
+readable.
+
+**One logo per business, by convention, not accident**:
+`settingsService.uploadLogo()` always writes to
+`<business_id>/logo.<ext>`, `upsert: true` — a re-upload replaces the
+old file rather than accumulating orphaned images nothing ever cleans
+up. A cache-busting `?v=<timestamp>` query param is appended to the
+saved URL so a browser that already cached the old logo image shows the
+new one immediately after a re-upload, rather than the stale cached
+version at an unchanged URL.
+
+**Settings UI**: a small photo tile + "Add a logo"/"Change logo" button
+sits directly above the Business Name field (uploads immediately on
+file choice, since a photo is a distinct action from editing the text
+fields below it and saves in the same call via `uploadLogo()` —
+`updateBusinessProfile()` itself only writes `logo_url` when a caller
+actually provides it, so a normal "Save Profile" text-field edit can
+never accidentally null out a logo nobody touched).
+
+**Shown as the "tenant profile photo"** in the sidebar header
+(`POSLayout.jsx`), replacing the generic store icon when a logo is set,
+and on every receipt (`receiptService.js`'s HTML/print builder and
+`ReceiptModal.jsx`'s on-screen preview already read `business.logo_url`
+directly, so no separate wiring was needed there once the field itself
+was populated).
+
+Files: `schema/phase15_business_logo.sql` (new),
+`services/settingsService.js` (`uploadLogo`, `logo_url` in
+`updateBusinessProfile`), `pages/SettingsPage.jsx` (upload UI),
+`POSLayout.jsx` (sidebar logo).
+
+**Not tested** — needs the bucket actually created in the Supabase
+Dashboard first (documented in the migration file's own header) before
+any upload can be attempted.
+
+## 32. Phase 16 — Proper customer and supplier statements
+
+Direct ask: statements should carry purchase/sale activity, paid, owed,
+AND personal information (phone, email) — not just a bare balance.
+
+**Customer statement** (`CustomersPage.jsx`'s existing statement modal,
+extended rather than rebuilt): now shows the customer's phone and email
+right under their name, three summary tiles (Total Purchased / Total
+Paid / Owes) above the transaction ledger, and a **Print Statement**
+button. The purchased/paid split is derived from the ledger's own signed
+`amount` column (positive = a charge, negative = reduces the balance) —
+the same signal the row list already colour-codes with (green for
+negative), rather than trusting a free-text `transaction_type` string
+that could read inconsistently across older rows.
+
+**Supplier statement** (`SuppliersPage.jsx`'s `SupplierDetailDrawer`,
+extended): gained two more summary tiles (Total Purchased, from GRNs —
+goods actually received, not POs which may still be pending — and Total
+Paid, from payments) alongside the existing Outstanding/Credit Limit
+ones, and a **Print Statement** button. The on-screen drawer keeps its
+existing tabbed view (Purchase Orders/GRNs/Payments/Returns — better for
+browsing), but printing consolidates all four into one date-sorted
+running ledger, because a document handed to someone should read as one
+account, not four lists they have to reassemble themselves.
+
+**Reused, not duplicated** (section 2): both print buttons call the
+exact same `utils/printDocument.js` the sale receipt uses — one
+implementation of "turn HTML into a print dialog," not three.
+
+Files: `pages/CustomersPage.jsx`, `pages/SuppliersPage.jsx`.
+
+**Not tested against a live database** — same standing limitation
+throughout this session.

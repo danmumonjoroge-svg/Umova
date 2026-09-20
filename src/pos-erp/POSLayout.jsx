@@ -32,6 +32,10 @@ import React, { useState, useMemo, useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { usePosErpAuth } from "./auth/usePosErpAuth";
 import { useNotifications } from "./hooks/useNotifications";
+// Phase 15: the sidebar's own tiny logo fetch. Deliberately NOT the full
+// useSettings() hook (that also pulls POS settings this layout doesn't
+// need) — just the one field this header actually renders.
+import { settingsService } from "./services/settingsService";
 import POSTopbar from "./POSTopbar";
 import {
   LayoutDashboard, ShoppingCart, Package, Boxes, Truck, Users, UserRound, Wallet, Receipt,
@@ -123,6 +127,11 @@ export default function POSLayout() {
   const location = useLocation();
   const { count: notificationCount } = useNotifications();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [logoUrl, setLogoUrl] = useState(null);
+  useEffect(() => {
+    if (!tenant?.business_id) return;
+    settingsService.getBusinessProfile(tenant.business_id).then(p => setLogoUrl(p?.logo_url || null)).catch(() => {});
+  }, [tenant?.business_id]);
 
   const isActive = (to, end) =>
     end ? location.pathname === to : location.pathname.startsWith(to);
@@ -190,7 +199,11 @@ export default function POSLayout() {
           md:translate-x-0 md:static md:z-auto md:w-60`}
       >
         <div className="p-5 flex items-center gap-2 border-b border-slate-800">
-          <Store size={20} className="text-amber-400 shrink-0" />
+          {logoUrl ? (
+            <img src={logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
+          ) : (
+            <Store size={20} className="text-amber-400 shrink-0" />
+          )}
           <div className="min-w-0 flex-1">
             <div className="font-bold text-sm truncate">{tenant?.business_name || "POS"}</div>
             <div className="text-[11px] text-slate-400 font-mono">{tenant?.business_code}</div>
