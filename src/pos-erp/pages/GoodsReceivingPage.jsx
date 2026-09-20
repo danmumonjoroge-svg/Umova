@@ -36,7 +36,10 @@ export default function GoodsReceivingPage() {
 
   const { suppliers } = useSuppliers();
   const { products } = useProducts();
-  const { orders: purchaseOrders, loading: poLoading } = usePurchaseOrders({ status: undefined });
+  // No-arg call: `{ status: undefined }` was a brand-new object on every
+  // render, which can make the hook's fetch effect re-run forever (the
+  // endless spinner). We filter to receivable POs below anyway.
+  const { orders: purchaseOrders, loading: poLoading } = usePurchaseOrders();
   const { createFromPO, createQuickReceipt } = useGoodsReceived();
 
   const [mode, setMode] = useState('PO'); // 'PO' | 'QUICK'
@@ -134,6 +137,31 @@ export default function GoodsReceivingPage() {
     notOnPO: mode === 'PO' && !poItem,
     ...emptyLineDefaults,
   });
+
+  // Fills the GRN from the selected PO: one line per item still
+  // outstanding, pre-set to the remaining quantity. Cashier then only
+  // edits what actually arrived.
+  const loadPOItems = () => {
+    if (!selectedPO?.items?.length) return;
+    const newLines = selectedPO.items
+      .filter(it => remainingOnPO(it) > 0)
+      .map(it => {
+        const prod = products.find(p => p.id === it.product_id);
+        return {
+          product_id: it.product_id,
+          purchase_order_item_id: it.id,
+          name: it.product?.name || prod?.name || 'Item',
+          sku: it.product?.sku || prod?.sku,
+          unit_id: it.unit_id || prod?.unit_id,
+          unit_cost: it.unit_cost ?? prod?.cost_price ?? 0,
+          quantity_received: remainingOnPO(it),
+          notOnPO: false,
+          ...emptyLineDefaults,
+        };
+      });
+    setLines(newLines);
+    setOverReceiveWarning('');
+  };
 
   // Manual add — search by name/SKU and add directly, no scan required.
   // This is the only way to add an item that has no barcode at all (or
@@ -296,6 +324,29 @@ export default function GoodsReceivingPage() {
               onChange={e => setReferenceInvoice(e.target.value)}
               className="border rounded px-3 py-2"
             />
+            {!poLoading && receivablePOs.length === 0 && (
+              <p className="md:col-span-2 text-xs text-amber-700 bg-amber-50 rounded px-3 py-2">
+                No approved purchase orders to receive against. Create one and approve it on the Purchase Orders page.
+              </p>
+            )}
+            {selectedPO && (
+              <div className="md:col-span-2 bg-blue-50 border border-blue-100 rounded px-3 py-2 text-sm flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-semibold">{selectedPO.po_number} — {selectedPO.supplier?.name}</div>
+                  <div className="text-xs text-gray-600">
+                    {selectedPO.items?.length || 0} item(s) ordered · Status: {selectedPO.status?.replace('_', ' ')}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={loadPOItems}
+                  disabled={!selectedPO.items?.length}
+                  className="bg-blue-600 text-white text-xs font-semibold px-3 py-2 rounded disabled:opacity-40 shrink-0"
+                >
+                  Load all PO items
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

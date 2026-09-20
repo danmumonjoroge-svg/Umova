@@ -23,18 +23,24 @@ export function usePurchaseOrders(options = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // `options = {}` is a brand-new object on every render, so depending on
+  // it made `fetch` change every render -> the effect below re-ran ->
+  // setLoading/setOrders re-rendered -> infinite loop (endless spinner).
+  // A serialized key only changes when the option VALUES change.
+  const optionsKey = JSON.stringify(options);
+
   const fetch = useCallback(async (params = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await purchaseOrderService.getAll({ ...options, ...params });
+      const result = await purchaseOrderService.getAll({ ...JSON.parse(optionsKey), ...params });
       setOrders(result.data || []);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [options]);
+  }, [optionsKey]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -65,18 +71,24 @@ export function useGoodsReceived(options = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // `options = {}` is a brand-new object on every render, so depending on
+  // it made `fetch` change every render -> the effect below re-ran ->
+  // setLoading/setOrders re-rendered -> infinite loop (endless spinner).
+  // A serialized key only changes when the option VALUES change.
+  const optionsKey = JSON.stringify(options);
+
   const fetch = useCallback(async (params = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await goodsReceivedService.getAll({ ...options, ...params });
+      const result = await goodsReceivedService.getAll({ ...JSON.parse(optionsKey), ...params });
       setRecords(result.data || []);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [options]);
+  }, [optionsKey]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -112,18 +124,24 @@ export function useSupplierReturns(options = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // `options = {}` is a brand-new object on every render, so depending on
+  // it made `fetch` change every render -> the effect below re-ran ->
+  // setLoading/setOrders re-rendered -> infinite loop (endless spinner).
+  // A serialized key only changes when the option VALUES change.
+  const optionsKey = JSON.stringify(options);
+
   const fetch = useCallback(async (params = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await supplierReturnService.getAll({ ...options, ...params });
+      const result = await supplierReturnService.getAll({ ...JSON.parse(optionsKey), ...params });
       setReturns(result.data || []);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [options]);
+  }, [optionsKey]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
