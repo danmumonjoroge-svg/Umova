@@ -34,7 +34,7 @@ const emptyLineDefaults = { batch_number: '', expiry_date: '' };
 export default function GoodsReceivingPage() {
   const { staffId } = usePosErpAuth();
 
-  const { suppliers } = useSuppliers();
+  const { suppliers, fetch: refetchSuppliers } = useSuppliers();
   const { products } = useProducts();
   // No-arg call: `{ status: undefined }` was a brand-new object on every
   // render, which can make the hook's fetch effect re-run forever (the
@@ -61,6 +61,16 @@ export default function GoodsReceivingPage() {
   const [posting, setPosting] = useState(false);
   const [quickCreateBarcode, setQuickCreateBarcode] = useState(null);
   const [quickCreateForm, setQuickCreateForm] = useState({ name: '', selling_price: '', cost_price: '' });
+
+  // How this purchase is being paid for. Deliberately starts EMPTY (not
+  // defaulted to cash) so a cashier can't silently record a payment that
+  // never happened — they must pick one before POST GRN enables.
+  //   CASH    = paid in full now      CREDIT  = pay the supplier later
+  //   PARTIAL = part now, rest owed
+  const [paymentType, setPaymentType] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [amountPaid, setAmountPaid] = useState('');
+  const [paymentRef, setPaymentRef] = useState('');
 
   const selectedPO = useMemo(
     () => purchaseOrders.find(po => po.id === selectedPOId) || null,
@@ -242,8 +252,22 @@ export default function GoodsReceivingPage() {
     setQuickCreateBarcode(null);
   };
 
+  const grnTotal = lines.reduce((sum, l) => sum + (Number(l.quantity_received) || 0) * (Number(l.unit_cost) || 0), 0);
+  const partialAmount = Number(amountPaid) || 0;
+  const paidNow = paymentType === 'CASH' ? grnTotal : paymentType === 'PARTIAL' ? Math.min(partialAmount, grnTotal) : 0;
+  const owedToSupplier = grnTotal - paidNow;
+
+  const activeSupplierId = mode === 'PO' ? selectedPO?.supplier_id : quickSupplierId;
+  const activeSupplier = suppliers.find(s => s.id === activeSupplierId) || null;
+  const projectedBalance = Number(activeSupplier?.outstanding_balance || 0) + owedToSupplier;
+  const overCreditLimit = !!activeSupplier && Number(activeSupplier.credit_limit) > 0 && projectedBalance > Number(activeSupplier.credit_limit);
+
+  const paymentValid =
+    paymentType === 'CASH' || paymentType === 'CREDIT' ||
+    (paymentType === 'PARTIAL' && partialAmount > 0 && partialAmount < grnTotal);
+
   const canPost = lines.length > 0 && lines.every(l => l.quantity_received > 0 && l.unit_cost >= 0) &&
-    (mode === 'PO' ? !!selectedPOId : !!quickSupplierId);
+    (mode === 'PO' ? !!selectedPOId : !!quickSupplierId) && paymentValid;
 
   const postGRN = async () => {
     setPostError('');
@@ -258,16 +282,26 @@ export default function GoodsReceivingPage() {
         expiry_date: l.expiry_date || null,
       }));
 
+      const payment = {
+        type: paymentType,
+        amount_paid: paymentType === 'PARTIAL' ? partialAmount : undefined,
+        method: paymentType === 'CREDIT' ? null : paymentMethod,
+        reference_no: paymentType === 'CREDIT' ? null : (paymentRef || null),
+      };
+
+      let grn;
       if (mode === 'PO') {
-        await createFromPO(selectedPOId, {
+        grn = await createFromPO(selectedPOId, {
           invoice_no: referenceInvoice || null,
           items,
+          payment,
         });
       } else {
-        await createQuickReceipt({
+        grn = await createQuickReceipt({
           supplier_id: quickSupplierId,
           invoice_no: referenceInvoice || null,
           items,
+          payment,
         });
       }
 
@@ -276,7 +310,22 @@ export default function GoodsReceivingPage() {
       setQuickSupplierId('');
       setReferenceInvoice('');
       setOverReceiveWarning('');
-      alert('GRN posted. Inventory updated.');
+      setPaymentType('');
+      setAmountPaid('');
+      setPaymentRef('');
+      setPaymentMethod('CASH');
+      refetchSuppliers(); // outstanding balances just changed
+      const pr = grn?.payment_result;
+      if (pr?.error) {
+        // Stock is in; only the money side needs attention. Not an
+        // exception, so the form still clears (re-posting would receive
+        // the goods a second time).
+        alert(`GRN posted. Inventory updated.\n\n⚠ ${pr.error}`);
+      } else if (pr) {
+        alert(`GRN posted. Inventory updated.\nPaid: ${pr.paid.toLocaleString()} · Owed to supplier: ${pr.owed.toLocaleString()}`);
+      } else {
+        alert('GRN posted. Inventory updated.');
+      }
     } catch (err) {
       setPostError(err.message);
     } finally {
@@ -503,6 +552,82 @@ export default function GoodsReceivingPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* How the goods are being paid for — feeds the supplier's balance
+            and statement. Must be chosen; nothing is assumed. */}
+        <div className="mt-4 border-t pt-4">
+          <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Payment for this delivery</div>
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            {[
+              { key: 'CASH', label: 'Paid in full' },
+              { key: 'PARTIAL', label: 'Part paid' },
+              { key: 'CREDIT', label: 'On credit' },
+            ].map(o => (
+              <button
+                key={o.key}
+                type="button"
+                onClick={() => setPaymentType(o.key)}
+                className={`py-2 rounded text-sm font-semibold ${paymentType === o.key ? 'bg-emerald-800 text-white' : 'bg-gray-100 text-gray-700'}`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+
+          {paymentType === '' && (
+            <p className="text-xs text-amber-700 bg-amber-50 rounded px-3 py-2">
+              Choose how this delivery is being paid for before posting.
+            </p>
+          )}
+
+          {(paymentType === 'CASH' || paymentType === 'PARTIAL') && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="border rounded px-3 py-2 min-w-0">
+                <option value="CASH">Cash</option>
+                <option value="MOBILE_MONEY">Mobile Money</option>
+                <option value="BANK">Bank</option>
+                <option value="CARD">Card</option>
+                <option value="OTHER">Other</option>
+              </select>
+              {paymentType === 'PARTIAL' && (
+                <input
+                  type="number" min="0" step="0.01" placeholder="Amount paid now"
+                  value={amountPaid} onChange={e => setAmountPaid(e.target.value)}
+                  className="border rounded px-3 py-2 min-w-0"
+                />
+              )}
+              <input
+                placeholder="Payment reference (optional)"
+                value={paymentRef} onChange={e => setPaymentRef(e.target.value)}
+                className="border rounded px-3 py-2 min-w-0"
+              />
+            </div>
+          )}
+
+          {paymentType === 'PARTIAL' && partialAmount > 0 && partialAmount >= grnTotal && (
+            <p className="text-xs text-red-600 mb-2">Part payment must be less than the delivery total. Use "Paid in full" instead.</p>
+          )}
+
+          {paymentType !== '' && (
+            <div className="text-sm space-y-1">
+              <div className="flex justify-between"><span className="text-gray-500">Delivery total</span><span className="font-semibold">{grnTotal.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Paid now</span><span className="font-semibold text-emerald-700">{paidNow.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Added to what you owe the supplier</span><span className="font-semibold text-red-600">{owedToSupplier.toLocaleString()}</span></div>
+              {activeSupplier && (
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>{activeSupplier.name}: currently owed {Number(activeSupplier.outstanding_balance || 0).toLocaleString()}</span>
+                  <span>after this: {projectedBalance.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {overCreditLimit && (
+            <p className="mt-2 text-xs text-amber-800 bg-amber-50 rounded px-3 py-2">
+              ⚠ This would take the supplier past their credit limit ({Number(activeSupplier.credit_limit).toLocaleString()}). You can still post it.
+            </p>
+          )}
         </div>
 
         <button

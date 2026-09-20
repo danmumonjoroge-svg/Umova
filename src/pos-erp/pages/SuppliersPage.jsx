@@ -15,9 +15,10 @@ import {
 import { useSuppliers, useSupplierDetail } from "../hooks/useSuppliers";
 import { usePosErpAuth } from "../auth/usePosErpAuth";
 import { supplierService } from "../services/supplierService";
-// Phase 16: a proper, printable statement for suppliers too — same
-// shared print utility the sale receipt and customer statement use.
-import { printDocument, escapeHtml } from "../utils/printDocument";
+// Statement with running balance / date range / print lives in its own
+// file (replaces the old flat "print statement" that mixed POs into the
+// amounts).
+import SupplierStatementModal from "./SupplierStatementModal";
 
 export default function SuppliersPage() {
   const { suppliers, loading, error, create, update, deactivate, reactivate, fetch } = useSuppliers();
@@ -245,6 +246,7 @@ export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
   const { purchaseOrders, grns, payments, returns, loading, refetch } = useSupplierDetail(supplier.id);
   const [tab, setTab] = useState("grns");
   const [showPayment, setShowPayment] = useState(false);
+  const [showStatement, setShowStatement] = useState(false);
 
   // Phase 16: purchased/paid totals for a proper statement — GRNs
   // (goods actually received) rather than POs (which may still be
@@ -252,46 +254,6 @@ export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
   // the brief's own §8 example frames it ("Bought: X, Paid: Y").
   const totalPurchased = grns.reduce((s, g) => s + Number(g.total_amount || 0), 0);
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
-
-  const printStatement = () => {
-    const fmt = (n) => Number(n || 0).toLocaleString();
-    // One consolidated, date-sorted ledger across all four transaction
-    // types — the tabbed view above is better for browsing on screen,
-    // but a printed statement should read as one running account, not
-    // four separate lists the recipient has to reassemble themselves.
-    const rows = [
-      ...purchaseOrders.map(po => ({ date: po.order_date, label: `PO ${po.po_number}`, amount: Number(po.total_amount) })),
-      ...grns.map(g => ({ date: g.received_date, label: `Goods received ${g.grn_number}`, amount: Number(g.total_amount) })),
-      ...payments.map(p => ({ date: p.payment_date, label: `Payment ${p.payment_number} (${String(p.payment_method || '').replace('_', ' ')})`, amount: -Number(p.amount) })),
-      ...returns.map(r => ({ date: r.created_at, label: `Return ${r.return_number}${r.reason ? ` — ${r.reason}` : ''}`, amount: -Number(r.total_amount) })),
-    ].filter(r => r.date).sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    const rowsHtml = rows.map(r => `
-      <tr><td>${new Date(r.date).toLocaleDateString()}</td><td>${escapeHtml(r.label)}</td><td class="right">${fmt(r.amount)}</td></tr>
-    `).join('');
-
-    printDocument(`Statement — ${supplier.name}`, `
-      <div class="center bold" style="font-size:16px;">${escapeHtml(supplier.name)}</div>
-      <div class="center muted">
-        ${supplier.phone ? escapeHtml(supplier.phone) : ''}${supplier.phone && supplier.email ? ' · ' : ''}${supplier.email ? escapeHtml(supplier.email) : ''}
-      </div>
-      ${supplier.address ? `<div class="center muted">${escapeHtml(supplier.address)}</div>` : ''}
-      <div class="divider"></div>
-      <div class="center bold" style="font-size:14px;">Supplier Statement</div>
-      <div class="center muted">${new Date().toLocaleDateString()}</div>
-      <div class="divider"></div>
-      <table>
-        <tr><td>Total Purchased</td><td class="right">${fmt(totalPurchased)}</td></tr>
-        <tr><td>Total Paid</td><td class="right">${fmt(totalPaid)}</td></tr>
-        <tr class="bold"><td>Balance Owed</td><td class="right">${fmt(supplier.outstanding_balance)}</td></tr>
-      </table>
-      <div class="divider"></div>
-      <table>
-        <thead><tr><th>Date</th><th>Detail</th><th class="right">Amount</th></tr></thead>
-        <tbody>${rowsHtml || '<tr><td colspan="3" class="center muted">No transactions yet</td></tr>'}</tbody>
-      </table>
-    `, `table { font-size: 12px; } th { text-align: left; border-bottom: 1px solid #ccc; }`);
-  };
 
   const tabs = [
     { key: "pos", label: "Purchase Orders", icon: FileText, rows: purchaseOrders },
@@ -344,10 +306,10 @@ export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
             Record Payment
           </button>
           <button
-            onClick={printStatement}
+            onClick={() => setShowStatement(true)}
             className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold px-4 py-2.5 rounded-xl transition mb-5"
           >
-            <Printer size={15} /> Print Statement
+            <Printer size={15} /> Statement
           </button>
         </div>
 
@@ -384,6 +346,10 @@ export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
           ))}
         </div>
       </div>
+
+      {showStatement && (
+        <SupplierStatementModal supplier={supplier} onClose={() => setShowStatement(false)} />
+      )}
 
       {showPayment && (
         <RecordPaymentModal

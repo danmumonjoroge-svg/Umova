@@ -47,6 +47,7 @@
 // you'd rather do that — that's a small change in createQuickReceipt.
 
 import { posSupabase as supabase } from './posSupabaseClient';
+import { supplierService } from './supplierService';
 
 const PO_TABLE = 'lb_purchase_orders';
 const POI_TABLE = 'lb_purchase_order_items';
@@ -203,7 +204,9 @@ export const goodsReceivedService = {
    * Receive against an existing PO.
    * @param {string} poId
    * @param {object} grn - { tenant_id, business_id?, invoice_no?, notes?, received_by,
+   *   payment?: { type: 'CASH'|'CREDIT'|'PARTIAL', amount_paid?, method?, reference_no? },
    *   items: [{ product_id, purchase_order_item_id, quantity, unit_cost, batch_no?, expiry_date?, notes? }] }
+   *   `payment` decides how the purchase hits the supplier's balance — see _finishReceipt.
    */
   async createFromPO(poId, grn) {
     if (!grn.tenant_id) throw new Error('goodsReceivedService.createFromPO: tenant_id is required.');
@@ -239,13 +242,14 @@ export const goodsReceivedService = {
     await this._receiveItems(grnData, grn.items, warehouse_id);
     await this._rollupPOReceipt(poId, grn.items);
 
-    return this.getById(grnData.id);
+    return this._finishReceipt(grnData.id, grn);
   },
 
   /**
    * Quick receipt with no pre-existing PO — creates a minimal PO first
    * (see header note above for why).
    * @param {object} grn - { tenant_id, business_id?, supplier_id, invoice_no?, notes?, received_by,
+   *   payment?: { type: 'CASH'|'CREDIT'|'PARTIAL', amount_paid?, method?, reference_no? },
    *   items: [{ product_id, quantity, unit_cost, batch_no?, expiry_date?, notes? }] }
    */
   async createQuickReceipt(grn) {
@@ -298,10 +302,65 @@ export const goodsReceivedService = {
     await this._receiveItems(grnData, itemsWithPOI, warehouse_id);
     await this._rollupPOReceipt(po.id, itemsWithPOI);
 
-    return this.getById(grnData.id);
+    return this._finishReceipt(grnData.id, grn);
   },
 
   // ---- internal: shared by both receipt paths ----
+
+  /**
+   * Final step of both receipt paths: load the finished GRN and, if the
+   * caller said how it was paid, apply it to the supplier's account.
+   *
+   *   1. post_grn_to_supplier_balance()  -> outstanding_balance += total
+   *   2. supplierService.recordPayment() -> outstanding_balance -= paid
+   *      (existing RPC; writes the lb_supplier_payments row linked to
+   *      this GRN, which is what the supplier statement reads)
+   *
+   * The stock is ALREADY received by the time this runs, so a failure
+   * here must NOT throw — the caller would think the GRN failed and the
+   * cashier could post it twice. Instead the outcome is returned on
+   * `payment_result` and the page shows a clear warning.
+   */
+  async _finishReceipt(grnId, input) {
+    const grn = await this.getById(grnId);
+    if (!input.payment) return grn; // legacy callers: behaviour unchanged
+
+    const total = Number(grn.total_amount || 0);
+    const type = input.payment.type;
+    let paid = 0;
+    if (type === 'CASH') paid = total;
+    else if (type === 'PARTIAL') paid = Math.min(Math.max(Number(input.payment.amount_paid) || 0, 0), total);
+
+    const result = { total, paid, owed: total - paid, error: null };
+
+    try {
+      const { error } = await supabase.rpc('post_grn_to_supplier_balance', { p_grn_id: grnId });
+      if (error) throw error;
+    } catch (err) {
+      result.error = `Goods were received, but the supplier's balance was NOT updated: ${err.message}. Nothing was paid or recorded — fix this before re-posting so the goods aren't received twice.`;
+      return { ...grn, payment_result: result };
+    }
+
+    if (paid > 0) {
+      try {
+        await supplierService.recordPayment({
+          businessId: grn.business_id,
+          supplierId: grn.supplier_id,
+          grnId,
+          amount: paid,
+          paymentMethod: input.payment.method || 'CASH',
+          referenceNo: input.payment.reference_no || null,
+          notes: `Payment on ${grn.grn_number}`,
+          createdBy: input.received_by,
+        });
+      } catch (err) {
+        result.error = `Goods were received and the supplier was charged ${total.toLocaleString()}, but the payment of ${paid.toLocaleString()} could not be recorded: ${err.message}. Record it from the supplier's page (Record Payment).`;
+        result.owed = total;
+        result.paid = 0;
+      }
+    }
+    return { ...grn, payment_result: result };
+  },
 
   async _receiveItems(grnData, items, warehouse_id) {
     const itemRows = items.map((i) => ({
