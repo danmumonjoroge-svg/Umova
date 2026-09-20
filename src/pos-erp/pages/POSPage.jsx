@@ -504,7 +504,7 @@ export default function POSPage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-h-0 flex flex-col">
       <div className="bg-gray-800 text-white p-3 flex flex-wrap justify-between items-center gap-2">
         <span className="font-bold">POS — Shift Open</span>
         <button onClick={() => setShowCloseShiftModal(true)} className="bg-red-600 px-3 py-1 rounded text-sm shrink-0">Close Shift</button>
@@ -519,8 +519,8 @@ export default function POSPage() {
           Without this split, content below the fold on a phone was
           unreachable — clipped by overflow-hidden with nothing to
           scroll it, not just visually cramped. */}
-      <div className="flex flex-1 overflow-y-auto md:overflow-hidden flex-col md:flex-row">
-        <div className="w-full md:w-1/2 p-4 overflow-y-auto bg-gray-50">
+      <div className="flex flex-1 min-h-0 overflow-hidden flex-col md:flex-row">
+        <div className="flex-1 basis-0 min-h-0 min-w-0 p-4 overflow-y-auto bg-gray-50">
           <div className="flex gap-2 mb-4">
             <input
               value={search}
@@ -584,9 +584,9 @@ export default function POSPage() {
           </div>
         </div>
 
-        <div className="w-full md:w-1/2 p-4 bg-white flex flex-col">
+        <div className="flex-1 basis-0 min-h-0 min-w-0 p-4 overflow-y-auto bg-white flex flex-col">
           <h3 className="font-bold mb-2">Current Sale</h3>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1">
             {cart.map(item => (
               <div key={item.product_id} className="py-2 border-b">
                 <div className="flex flex-wrap justify-between items-center gap-y-1">
