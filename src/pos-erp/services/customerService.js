@@ -118,4 +118,22 @@ export const customerService = {
     if (error) throw error;
     return data;
   },
+
+  /**
+   * Mirrors supplierService.getWithOutstandingBalances() exactly — same
+   * shape, same reasoning: a lightweight list of "who currently owes
+   * money", reused by the Home dashboard for a genuine COUNT of how
+   * many customers a receivables total is spread across, which the
+   * balance sheet's single sum (financialReportsService) can't answer
+   * on its own.
+   */
+  async getWithOutstandingBalances() {
+    const { data, error } = await supabase
+      .from('lb_customers')
+      .select('id, name, phone, outstanding_balance, credit_limit')
+      .gt('outstanding_balance', 0)
+      .order('outstanding_balance', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
 };
