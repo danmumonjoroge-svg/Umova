@@ -1,6 +1,10 @@
 // src/pos-erp/POSApp.jsx
 //
-// UPDATED: added "inventory" route.
+// "My Business" routing. Every pre-existing route below is unchanged.
+// NEW: one full-screen workspace per module (retail, money, people,
+// comms, rentals, salon, more) -- the landing page each sidebar/bottom-
+// bar entry opens (see navigation/navConfig.js). Ordinary React Router
+// routes, so browser back behaves normally.
 
 import React from "react";
 import { Routes, Route } from "react-router-dom";
@@ -31,6 +35,13 @@ import FinancialReportsPage from "./pages/FinancialReportsPage";
 import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
 import ReportsPage from "./pages/ReportsPage";
 import InventoryPage from "./pages/InventoryPage";
+import RetailWorkspace from "./pages/workspaces/RetailWorkspace";
+import MoneyWorkspace from "./pages/workspaces/MoneyWorkspace";
+import PeopleWorkspace from "./pages/workspaces/PeopleWorkspace";
+import MessagesWorkspace from "./pages/workspaces/MessagesWorkspace";
+import RentalsWorkspace from "./pages/workspaces/RentalsWorkspace";
+import SalonWorkspace from "./pages/workspaces/SalonWorkspace";
+import MoreWorkspace from "./pages/workspaces/MoreWorkspace";
 
 const SKIP_AUTH = process.env.REACT_APP_POS_SKIP_AUTH === "true";
 
@@ -50,6 +61,16 @@ const PosRoutes = () => (
     <Route element={<POSLayout />}>
       <Route index element={<POSPage />} />
       <Route path="dashboard" element={<POSDashboard />} />
+
+      {/* Workspaces -- one full-screen landing page per module */}
+      <Route path="retail" element={<RetailWorkspace />} />
+      <Route path="money" element={<MoneyWorkspace />} />
+      <Route path="people" element={<PeopleWorkspace />} />
+      <Route path="comms" element={<MessagesWorkspace />} />
+      <Route path="rentals" element={<RentalsWorkspace />} />
+      <Route path="salon" element={<SalonWorkspace />} />
+      <Route path="more" element={<MoreWorkspace />} />
+
       <Route path="products" element={<ProductsPage />} />
       <Route path="customers" element={<CustomersPage />} />
       <Route path="inventory" element={<InventoryPage />} />

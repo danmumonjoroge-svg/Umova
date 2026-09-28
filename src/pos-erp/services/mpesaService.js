@@ -99,6 +99,50 @@ export const mpesaService = {
     return data || [];
   },
 
+  /**
+   * Has this M-Pesa code already been used on a sale? Used when a cashier
+   * records "customer already paid" by typing the code from the customer's
+   * SMS -- stops the same SMS being used to "pay" for two sales. Checks
+   * both places a code can live: a confirmed STK transaction, and a
+   * payment a cashier recorded by hand. Online only (offline sales are
+   * checked against the server only when they sync -- see the note in
+   * POSPage's completeSale).
+   * @returns {Promise<boolean>}
+   */
+  async isCodeUsed(businessId, code) {
+    const [stk, manual] = await Promise.all([
+      supabase.from('lb_mpesa_transactions').select('id').eq('business_id', businessId).eq('mpesa_receipt_number', code).limit(1),
+      supabase.from('lb_payments').select('id').eq('business_id', businessId).eq('payment_method', 'MOBILE_MONEY').eq('reference_no', code).limit(1),
+    ]);
+    if (stk.error) throw stk.error;
+    if (manual.error) throw manual.error;
+    return (stk.data?.length || 0) > 0 || (manual.data?.length || 0) > 0;
+  },
+
+  /**
+   * M-Pesa payments a cashier RECORDED BY HAND (typed the code) on a given
+   * day -- the counterpart to getForDate() above, which only knows about
+   * STK prompts. Deliberately NOT joined to lb_sales: this only needs the
+   * amount/code/time, and skipping the join avoids depending on a
+   * relationship name that hasn't been confirmed for lb_payments.
+   * STK-confirmed sales also write an lb_payments row (with the M-Pesa
+   * receipt as its reference), so those are removed by matching codes
+   * against `stkReceipts` -- the caller passes the day's STK receipt
+   * numbers.
+   */
+  async getManualForDate({ businessId, date, stkReceipts = [] }) {
+    const { data, error } = await supabase
+      .from('lb_payments')
+      .select('id, amount, reference_no, created_at, sale_id')
+      .eq('business_id', businessId)
+      .eq('payment_method', 'MOBILE_MONEY')
+      .gte('created_at', `${date}T00:00:00`).lte('created_at', `${date}T23:59:59`)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    const stk = new Set(stkReceipts.filter(Boolean));
+    return (data || []).filter((p) => !p.reference_no || !stk.has(p.reference_no));
+  },
+
   /** A stuck PENDING row the owner has decided to give up on manually (e.g. they know the customer walked away). Doesn't touch Daraja -- purely a local bookkeeping decision, logged as such. */
   async markNeedsAttention(id, note) {
     const { data, error } = await supabase

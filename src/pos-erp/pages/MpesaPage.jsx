@@ -1,5 +1,13 @@
 // src/pos-erp/pages/MpesaPage.jsx
 //
+// WHERE M-PESA LIVES (My Business redesign): at the till, M-Pesa is a
+// PAYMENT MODE -- pick "M-Pesa", then either send the buyer a prompt or
+// enter the code when they already paid (components/MpesaPayPanel.jsx).
+// THIS page is the back office for it, reached from My Money -> M-Pesa:
+// set-up, and the day's records. It also lists payments a cashier
+// recorded by hand ("Already paid" + code), which the STK-only view
+// used to know nothing about.
+//
 // Brief section 39/41 -- "M-Pesa" reconciliation view, under My Money.
 // Bucketing (Received/Confirmed/Pending/Needs attention, then
 // Matched/Unmatched/Pending/Failed lists) matches the brief's own
@@ -71,6 +79,7 @@ function MpesaSettings({ tenant }) {
     try {
       const cfg = await mpesaService.getConfig(tenant.business_id);
       setConfig(cfg);
+      if (!cfg?.is_active) setOpen(true); // not switched on yet -> show the setup instead of hiding it
       if (cfg) {
         setForm(f => ({ ...f, shortcode: cfg.shortcode || '', environment: cfg.environment || 'sandbox', isActive: !!cfg.is_active }));
       }
@@ -229,12 +238,24 @@ export default function MpesaPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
+  const [manualRows, setManualRows] = useState([]);
 
   const load = useCallback(async () => {
     if (!tenant?.business_id) return;
     setLoading(true); setError('');
     try {
-      setRows(await mpesaService.getForDate({ businessId: tenant.business_id, date }));
+      const stk = await mpesaService.getForDate({ businessId: tenant.business_id, date });
+      setRows(stk);
+      // Codes typed by a cashier at the till. A failure here must not hide the STK records.
+      try {
+        setManualRows(await mpesaService.getManualForDate({
+          businessId: tenant.business_id, date,
+          stkReceipts: stk.map((r) => r.mpesa_receipt_number),
+        }));
+      } catch (manualErr) {
+        console.error('[MpesaPage] manual payments failed to load:', manualErr);
+        setManualRows([]);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -244,13 +265,16 @@ export default function MpesaPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // The old "Received" tile summed EVERY request, failed and cancelled
+  // included, so it overstated what came in. First tile is now real money
+  // only: confirmed prompts + codes recorded at the till.
   const totals = rows.reduce((acc, r) => {
-    acc.received += Number(r.amount || 0);
     if (r.status === 'PAID') acc.confirmed += Number(r.amount || 0);
     if (r.status === 'PENDING') acc.pending += Number(r.amount || 0);
     if (r.status === 'NEEDS_ATTENTION') acc.needsAttention += Number(r.amount || 0);
     return acc;
-  }, { received: 0, confirmed: 0, pending: 0, needsAttention: 0 });
+  }, { confirmed: 0, pending: 0, needsAttention: 0 });
+  const manualTotal = manualRows.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
   const matched = rows.filter(r => r.status === 'PAID' && r.sale_id);
   const unmatched = rows.filter(r => r.status === 'PAID' && !r.sale_id); // see header note -- expected to always be empty under this design
@@ -271,34 +295,37 @@ export default function MpesaPage() {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+    <div className="px-4 py-4 sm:p-6 max-w-5xl mx-auto min-w-0">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-2">
+        <h1 className="hidden md:flex text-2xl font-bold text-slate-800 items-center gap-2">
           <Smartphone size={22} className="text-emerald-700" /> M-Pesa
         </h1>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="border border-slate-200 rounded-xl px-3 min-h-[44px] text-sm bg-white" />
       </div>
+      <p className="text-sm text-slate-500 mb-4">
+        Take M-Pesa at the till by choosing <span className="font-semibold text-slate-700">M-Pesa</span> as the payment method: send the buyer a prompt, or enter the code if they already paid. This page is where you set it up and check the day's payments.
+      </p>
 
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{error}</div>}
 
       <MpesaSettings tenant={tenant} />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-          <div className="text-xs font-bold text-slate-400 uppercase">Received</div>
-          <div className="text-xl font-black text-slate-800">{fmt(totals.received)}</div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 col-span-2 sm:col-span-1 min-w-0">
+          <div className="text-xs font-bold text-slate-400 uppercase">M-Pesa in today</div>
+          <div className="text-xl font-black text-slate-800 truncate">{fmt(totals.confirmed + manualTotal)}</div>
         </div>
-        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-          <div className="text-xs font-bold text-slate-400 uppercase">Confirmed</div>
-          <div className="text-xl font-black text-emerald-700">{fmt(totals.confirmed)}</div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 min-w-0">
+          <div className="text-xs font-bold text-slate-400 uppercase">Prompts paid</div>
+          <div className="text-xl font-black text-emerald-700 truncate">{fmt(totals.confirmed)}</div>
         </div>
-        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-          <div className="text-xs font-bold text-slate-400 uppercase">Pending</div>
-          <div className="text-xl font-black text-amber-700">{fmt(totals.pending)}</div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 min-w-0">
+          <div className="text-xs font-bold text-slate-400 uppercase">Codes recorded</div>
+          <div className="text-xl font-black text-slate-800 truncate">{fmt(manualTotal)}</div>
         </div>
-        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-          <div className="text-xs font-bold text-slate-400 uppercase">Needs attention</div>
-          <div className="text-xl font-black text-red-600">{fmt(totals.needsAttention)}</div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 min-w-0">
+          <div className="text-xs font-bold text-slate-400 uppercase">Waiting / check</div>
+          <div className="text-xl font-black text-amber-700 truncate">{fmt(totals.pending + totals.needsAttention)}</div>
         </div>
       </div>
 
@@ -309,6 +336,21 @@ export default function MpesaPage() {
           <Section title={`Matched (${matched.length})`} empty="No confirmed payments yet today.">
             {matched.map(r => (
               <Row key={r.id} r={r} extra={r.sale ? `Sale #${r.sale.sale_number}` : null} />
+            ))}
+          </Section>
+
+          <Section title={`Recorded at the till (${manualRows.length})`} empty="No M-Pesa codes recorded by a cashier today.">
+            {manualRows.map(p => (
+              <div key={p.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-800">KES {(Number(p.amount) || 0).toLocaleString()}</div>
+                  <div className="text-xs text-slate-400 truncate">
+                    {new Date(p.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                    {p.reference_no ? ` · ${p.reference_no}` : ' · no code entered'}
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full whitespace-nowrap bg-slate-100 text-slate-600">Typed by cashier</span>
+              </div>
             ))}
           </Section>
 

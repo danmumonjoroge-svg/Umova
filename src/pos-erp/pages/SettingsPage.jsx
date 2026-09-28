@@ -10,6 +10,8 @@ import { Settings as SettingsIcon, Loader2, Save, Upload, Image as ImageIcon } f
 import { useSettings } from '../hooks/useSettings';
 import { settingsService } from '../services/settingsService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
+import { useCapabilities } from '../navigation/CapabilitiesContext';
+import { CAPABILITIES, ALL_CAPABILITY_KEYS } from '../navigation/navConfig';
 
 const ALL_PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK', 'CREDIT', 'VOUCHER', 'OTHER'];
 
@@ -27,6 +29,9 @@ export default function SettingsPage() {
   const [saveError, setSaveError] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef(null);
+  const { enabled: enabledCaps, refresh: refreshCaps } = useCapabilities();
+  const [capsDraft, setCapsDraft] = useState(null); // null = untouched, follows saved value
+  const [savingCaps, setSavingCaps] = useState(false);
 
   useEffect(() => { if (profile) setProfileForm(profile); }, [profile]);
   useEffect(() => {
@@ -87,6 +92,35 @@ export default function SettingsPage() {
     }
   };
 
+  // "What does your business do?" -- stored in the existing lb_pos_settings
+  // JSONB blob (settings.enabled_capabilities); navigation reads it via
+  // CapabilitiesContext. Saved on its own so it can't be lost by, or
+  // interfere with, the payments/receipt form below.
+  const capsShown = capsDraft ?? enabledCaps;
+  const toggleCap = (k) => {
+    const cur = capsShown;
+    setCapsDraft(cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]);
+  };
+  const submitCaps = async () => {
+    setSaveError('');
+    if (capsShown.length === 0) { setSaveError('Pick at least one thing your business does.'); return; }
+    setSavingCaps(true);
+    try {
+      await savePosSettings({
+        settings: { ...settingsForm, enabled_capabilities: capsShown },
+        receipt_header: receiptHeader, receipt_footer: receiptFooter,
+      });
+      setSettingsForm({ ...settingsForm, enabled_capabilities: capsShown });
+      await refreshCaps();
+      setCapsDraft(null);
+      flash('Saved. Your menu has been updated.');
+    } catch (err) {
+      setSaveError(err.message);
+    } finally {
+      setSavingCaps(false);
+    }
+  };
+
   const toggleMethod = (m) => {
     const current = settingsForm.payment_methods_enabled || [];
     setSettingsForm({
@@ -100,7 +134,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto space-y-8">
+    <div className="px-4 py-4 sm:p-8 max-w-3xl mx-auto space-y-6 sm:space-y-8 min-w-0">
       <div>
         <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
           <SettingsIcon size={22} className="text-amber-600" /> Settings
@@ -143,7 +177,7 @@ export default function SettingsPage() {
         </div>
 
         <input placeholder="Business name" value={profileForm.name || ''} onChange={e => setProfileForm({ ...profileForm, name: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2 focus:border-emerald-700 focus:ring-4 focus:ring-amber-100 outline-none" />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <input placeholder="Phone" value={profileForm.phone || ''} onChange={e => setProfileForm({ ...profileForm, phone: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
           <input placeholder="Email" value={profileForm.email || ''} onChange={e => setProfileForm({ ...profileForm, email: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
         </div>
@@ -156,6 +190,28 @@ export default function SettingsPage() {
           <Save size={15} /> {savingProfile ? 'Saving…' : 'Save Profile'}
         </button>
       </form>
+
+      {/* What does your business do? -- decides which of Retail / Rentals / Salon appear in the menu. Nothing is deleted by turning one off. */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-3">
+        <div>
+          <h2 className="font-bold text-slate-800">What does your business do?</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Choose everything that applies. This only changes what shows in your menu. Turning one off deletes nothing.</p>
+        </div>
+        <div className="space-y-2">
+          {ALL_CAPABILITY_KEYS.map((k) => (
+            <label key={k} className={`flex items-start gap-3 rounded-xl border p-3 min-h-[56px] cursor-pointer ${capsShown.includes(k) ? 'border-emerald-700 bg-emerald-50' : 'border-slate-200'}`}>
+              <input type="checkbox" className="mt-1 w-4 h-4" checked={capsShown.includes(k)} onChange={() => toggleCap(k)} />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-slate-800">{CAPABILITIES[k].label}</span>
+                <span className="block text-xs text-slate-500">{CAPABILITIES[k].hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <button type="button" onClick={submitCaps} disabled={savingCaps || capsDraft === null} className="flex items-center gap-2 bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-semibold px-4 min-h-[44px] rounded-xl disabled:opacity-50">
+          <Save size={15} /> {savingCaps ? 'Saving…' : 'Save'}
+        </button>
+      </div>
 
       {/* POS Settings */}
       <form onSubmit={submitSettings} className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">

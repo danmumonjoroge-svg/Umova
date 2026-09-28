@@ -1,7 +1,13 @@
 // src/pos-erp/pages/POSDashboard.jsx
 //
-// STAGE 1A, SECTION 1-2: "Home" screen for the owner-facing "My Business"
-// experience. Enhanced pass: added a performance snapshot (today vs
+// "Home" -- the owner's command centre (My Business redesign, brief §8).
+// Laid out to answer three questions in order: 1. What happened today?
+// 2. What needs my attention? 3. What can I do quickly? Everything else
+// (stock value, who owes what, counts) is a quiet list underneath rather
+// than a wall of big number cards. Data loading below is UNCHANGED from
+// the previous version -- only the presentation was redesigned.
+//
+// (previous note) Owner-facing "My Business" experience. Enhanced pass: added a performance snapshot (today vs
 // yesterday, a 7-day trend) and a "People & Activity" count row
 // (customers, suppliers, who-owes-you counts, appointments, rental
 // tenants) — everything the owner previously had to click into a
@@ -51,9 +57,10 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ShoppingCart, Package, AlertTriangle, Wallet, ArrowRight, Home, CalendarClock,
-  TrendingUp, TrendingDown, Users, Receipt, MessageSquare, Truck, UserRound, Building2,
+  ShoppingCart, Package, ArrowRight, CalendarClock,
+  TrendingUp, TrendingDown, Users, Receipt, Truck, Building2,
 } from "lucide-react";
+import { useCapabilities } from "../navigation/CapabilitiesContext";
 import { usePosErpAuth } from "../auth/usePosErpAuth";
 import { useCashierShifts } from "../hooks/useCashierShifts";
 import { useLowStock } from "../hooks/useLowStock";
@@ -73,6 +80,7 @@ const isoDaysAgo = (n) => {
 
 export default function POSDashboard() {
   const { staffName, tenant } = usePosErpAuth();
+  const { enabled: enabledCaps } = useCapabilities();
   const { activeShift, loading: shiftsLoading } = useCashierShifts();
   const { lowStock, outOfStock, loading: stockLoading } = useLowStock();
   const { units } = useUnits();
@@ -191,106 +199,97 @@ export default function POSDashboard() {
     });
   }
 
+  const retailOn = enabledCaps.includes("retail");
+  const rentalsOn = enabledCaps.includes("rentals");
+  const salonOn = enabledCaps.includes("salon");
+
+  const quick = [
+    { to: "/pos", icon: ShoppingCart, title: "Sell", subtitle: "Ring up a sale", primary: true },
+    retailOn && { to: "/pos/goods-receiving", icon: Truck, title: "Receive stock", subtitle: "Record a delivery" },
+    { to: "/pos/expenses", icon: Receipt, title: "Record spending", subtitle: "Log what you spent" },
+    { to: "/pos/customers", icon: Users, title: "Customers", subtitle: "See who owes you" },
+    retailOn && { to: "/pos/inventory", icon: Package, title: "Check stock", subtitle: "See what you have" },
+    salonOn && { to: "/pos/appointments", icon: CalendarClock, title: "Appointments", subtitle: "Book or complete a service" },
+    rentalsOn && units.length > 0 && { to: "/pos/units", icon: Building2, title: "Rentals", subtitle: "Units and rent" },
+  ].filter(Boolean);
+
   return (
-    <div className="p-6 md:p-8 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-slate-800 mb-1">
-        {greeting}{staffName ? `, ${staffName}` : ""} 👋
-      </h1>
-      <p className="text-slate-500 text-sm mb-6">
-        {tenant?.business_name || "Your business"} — here's how today looks.
-      </p>
+    <div className="px-4 py-4 sm:p-6 lg:p-8 max-w-4xl mx-auto min-w-0">
+      <div className="mb-4">
+        <h1 className="text-xl md:text-2xl font-bold text-[#26352D]">
+          {greeting}{staffName ? `, ${staffName}` : ""}
+        </h1>
+        <p className="text-sm text-[#68756D]">{tenant?.business_name || "Your business"}</p>
+      </div>
 
       {loadError && (
-        <div className="mb-6 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
-          {loadError}
-        </div>
+        <div className="mb-4 text-xs text-[#7a5f1f] bg-[#C6A15B]/15 border border-[#C6A15B]/40 rounded-lg px-3 py-2">{loadError}</div>
       )}
 
-      <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Today</div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-        <MoneyCard
-          icon={TrendingUp}
-          label="Made Today"
-          value={income ? fmt(income.revenue) : "…"}
-          tone="slate"
-          badge={vsYesterday != null ? <ChangeBadge pct={vsYesterday} /> : null}
-        />
-        <MoneyCard icon={Wallet} label="My Profit" value={income ? fmt(income.netIncome) : "…"} tone={income && income.netIncome < 0 ? "red" : "emerald"} />
-        <MoneyCard icon={Package} label="My Stock" value={balances ? fmt(balances.assets.inventoryValue) : "…"} tone="slate" />
-        <MoneyCard icon={Users} label="People Who Owe Me" value={balances ? fmt(balances.assets.accountsReceivable) : "…"} tone="amber" />
-        <MoneyCard icon={Truck} label="People I Owe" value={balances ? fmt(balances.liabilities.accountsPayable) : "…"} tone="amber" />
-        <MoneyCard
-          icon={AlertTriangle}
-          label="Low Stock"
-          value={stockLoading ? "…" : String(lowStockCount)}
-          tone={lowStockCount > 0 ? "red" : "slate"}
-        />
-      </div>
-
-      {/* Performance — a 7-day glance, not a full report. Bars are plain
-          CSS (no charting library), matching the rest of this app's
-          dependency-light style. Each day's total_sales comes from the
-          same reportsService function the daily-closing flow trusts, so
-          this can never quietly disagree with a day once it's closed. */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wide">This Week's Performance</div>
-          <div className="text-sm font-bold text-slate-700">
-            {weekTrend ? fmt(weekTrend.reduce((s, v) => s + v, 0)) : "…"} <span className="text-slate-400 font-normal text-xs">total</span>
+      {/* 1. What happened today? */}
+      <div className="bg-[#1B5138] text-white rounded-xl p-4 sm:p-5 mb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-white/70">Made today</div>
+            <div className="text-3xl font-bold mt-0.5 break-words">{income ? fmt(income.revenue) : "…"}</div>
+          </div>
+          {vsYesterday != null && <ChangeBadge pct={vsYesterday} />}
+        </div>
+        <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-white/15">
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase tracking-wide text-white/70">My profit</div>
+            <div className={`text-lg font-bold ${income && income.netIncome < 0 ? "text-red-200" : ""}`}>{income ? fmt(income.netIncome) : "…"}</div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase tracking-wide text-white/70">Spent today</div>
+            <div className="text-lg font-bold">{income ? fmt(income.totalExpenses) : "…"}</div>
           </div>
         </div>
-        {weekTrend ? <WeekTrend values={weekTrend} /> : <div className="h-24 flex items-center justify-center text-slate-300 text-sm">Loading…</div>}
       </div>
 
-      {/* People & Activity — counts an owner previously had to open a
-          separate page to even glimpse. Every figure is a genuine count
-          from the service that owns it (see the header note table),
-          never derived from a total that was built for a different
-          purpose. */}
-      <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">People &amp; Activity</div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-        <StatCard icon={UserRound} label="Customers" value={peopleCounts ? String(peopleCounts.totalCustomers) : "…"} sub={peopleCounts ? `${peopleCounts.customersOwing} owe you` : null} to="/pos/customers" />
-        <StatCard icon={Truck} label="Suppliers" value={peopleCounts ? String(peopleCounts.totalSuppliers) : "…"} sub={peopleCounts ? `${peopleCounts.suppliersOwed} you owe` : null} to="/pos/suppliers" />
-        <StatCard icon={CalendarClock} label="Appointments Today" value={String(todaysAppointments)} to="/pos/appointments" />
-        {units.length > 0 && (
-          <StatCard icon={Building2} label="Active Tenants" value={String(occupiedUnits)} sub={`of ${units.length} units`} to="/pos/units" />
-        )}
+      <div className="bg-white border border-[#DDE3DD] rounded-xl p-4 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D]">This week</div>
+          <div className="text-sm font-bold text-[#26352D]">
+            {weekTrend ? fmt(weekTrend.reduce((a, v) => a + v, 0)) : "…"} <span className="text-[#68756D] font-normal text-xs">total</span>
+          </div>
+        </div>
+        {weekTrend ? <WeekTrend values={weekTrend} /> : <div className="h-16 flex items-center justify-center text-[#68756D] text-sm">Loading…</div>}
       </div>
 
-      {attention.length > 0 && (
-        <div className="mb-8">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">What Needs My Attention</div>
-          <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100">
+      {/* 2. What needs my attention? */}
+      <div className="mb-6">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-2">Needs your attention</div>
+        {attention.length > 0 ? (
+          <div className="bg-white border border-[#DDE3DD] rounded-xl divide-y divide-[#DDE3DD] overflow-hidden">
             {attention.map((item, i) => (
-              <Link
-                key={i}
-                to={item.to}
-                className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition"
-              >
-                <div className="flex items-center gap-3">
+              <Link key={i} to={item.to} className="flex items-center justify-between gap-3 px-4 py-3 min-h-[52px] hover:bg-[#F7F6F0] active:bg-[#F7F6F0]">
+                <div className="flex items-center gap-3 min-w-0">
                   <Dot tone={item.tone} />
-                  <span className="text-sm text-slate-700">{item.text}</span>
+                  <span className="text-sm text-[#26352D]">{item.text}</span>
                 </div>
-                <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1 shrink-0 ml-3">
-                  {item.action} <ArrowRight size={12} />
-                </span>
+                <span className="text-xs font-semibold text-[#237A52] flex items-center gap-1 shrink-0">{item.action} <ArrowRight size={12} /></span>
               </Link>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="bg-white border border-[#DDE3DD] rounded-xl px-4 py-4 text-sm text-[#68756D]">Nothing needs you right now.</div>
+        )}
+      </div>
 
-      <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Quick Actions</div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <QuickLink to="/pos" icon={ShoppingCart} title="Sell" subtitle="Ring up a sale" />
-        <QuickLink to="/pos/goods-receiving" icon={Package} title="Add Stock" subtitle="Record a new delivery" />
-        <QuickLink to="/pos/expenses" icon={Receipt} title="Record Money" subtitle="Log an expense or spend" />
-        <QuickLink to="/pos/inventory" icon={Package} title="Check Stock" subtitle="See what you have" />
-        <QuickLink to="/pos/customers" icon={Users} title="Customers" subtitle="See who owes you" />
-        <QuickLink to="/pos/suppliers" icon={Truck} title="Suppliers" subtitle="See who you owe" />
-        <QuickLink to="/pos/messages" icon={MessageSquare} title="Messages" subtitle="Send a WhatsApp message" />
-        {units.length > 0 && <QuickLink to="/pos/units" icon={Home} title="Units" subtitle="Manage occupancy and rent" />}
-        {appointments.length > 0 && <QuickLink to="/pos/appointments" icon={CalendarClock} title="Appointments" subtitle="Book or complete a service" />}
+      {/* 3. What can I do quickly? */}
+      <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-2">Quick actions</div>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        {quick.map((q) => <QuickTile key={q.title} {...q} />)}
+      </div>
+
+      {/* Where things stand -- a quiet list, not a wall of KPI cards */}
+      <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-2">Where things stand</div>
+      <div className="bg-white border border-[#DDE3DD] rounded-xl divide-y divide-[#DDE3DD] overflow-hidden">
+        {retailOn && <StandRow to="/pos/inventory" icon={Package} label="My stock" value={balances ? fmt(balances.assets.inventoryValue) : "…"} sub={lowStockCount > 0 ? `${lowStockCount} running low` : stockLoading ? null : "All stocked up"} subTone={lowStockCount > 0 ? "warn" : null} />}
+        <StandRow to="/pos/customers" icon={Users} label="People who owe me" value={balances ? fmt(balances.assets.accountsReceivable) : "…"} sub={peopleCounts ? `${peopleCounts.customersOwing} of ${peopleCounts.totalCustomers} customers` : null} />
+        {retailOn && <StandRow to="/pos/payables" icon={Truck} label="People I owe" value={balances ? fmt(balances.liabilities.accountsPayable) : "…"} sub={peopleCounts ? `${peopleCounts.suppliersOwed} of ${peopleCounts.totalSuppliers} suppliers` : null} />}
+        {rentalsOn && units.length > 0 && <StandRow to="/pos/units" icon={Building2} label="Rented units" value={`${occupiedUnits} of ${units.length}`} />}
       </div>
     </div>
   );
@@ -301,62 +300,53 @@ function fmt(n) {
 }
 
 function Dot({ tone }) {
-  const cls = { red: "bg-red-500", amber: "bg-amber-500", blue: "bg-blue-500", emerald: "bg-emerald-500" }[tone] || "bg-slate-400";
+  const cls = { red: "bg-red-500", amber: "bg-[#C6A15B]", blue: "bg-[#237A52]", emerald: "bg-[#237A52]" }[tone] || "bg-[#68756D]";
   return <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cls}`} />;
 }
 
-// Real percentage only — never shown when there's genuinely nothing
-// honest to compare against (yesterday being 0 isn't "+∞%").
+// Real percentage only -- never shown when there's genuinely nothing
+// honest to compare against (yesterday being 0 isn't "+infinity %").
 function ChangeBadge({ pct }) {
   const up = pct >= 0;
   const Icon = up ? TrendingUp : TrendingDown;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${up ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
-      <Icon size={10} /> {up ? "+" : ""}{pct}%
+    <span className={`shrink-0 inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${up ? "bg-white/15 text-white" : "bg-red-100 text-red-700"}`}>
+      <Icon size={12} /> {up ? "+" : ""}{pct}% <span className="font-medium opacity-80 hidden sm:inline">vs yesterday</span>
     </span>
   );
 }
 
-function MoneyCard({ icon: Icon, label, value, tone, badge }) {
-  const toneClasses = {
-    emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    amber: "bg-amber-50 text-amber-700 border-amber-200",
-    red: "bg-red-50 text-red-700 border-red-200",
-    slate: "bg-slate-50 text-slate-700 border-slate-200",
-  }[tone];
-
+function QuickTile({ to, icon: Icon, title, subtitle, primary }) {
   return (
-    <div className={`rounded-2xl border p-4 md:p-5 ${toneClasses}`}>
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2">
-          <Icon size={15} />
-          <span className="text-[11px] font-bold uppercase tracking-wide">{label}</span>
-        </div>
-        {badge}
+    <Link
+      to={to}
+      className={`flex flex-col gap-2 rounded-xl p-4 min-h-[88px] border transition-colors min-w-0 ${
+        primary ? "bg-[#237A52] border-[#237A52] text-white hover:bg-[#1B5138]" : "bg-white border-[#DDE3DD] text-[#26352D] hover:border-[#237A52]"
+      }`}
+    >
+      <Icon size={22} className={primary ? "text-[#C6A15B]" : "text-[#237A52]"} />
+      <div className="min-w-0">
+        <div className="font-semibold truncate">{title}</div>
+        <div className={`text-xs truncate ${primary ? "text-white/75" : "text-[#68756D]"}`}>{subtitle}</div>
       </div>
-      <div className="text-xl md:text-2xl font-black break-words">{value}</div>
-    </div>
+    </Link>
   );
 }
 
-// A count-focused sibling to MoneyCard — same visual weight, but for
-// "how many" rather than "how much", with an optional one-line
-// sub-detail (e.g. "3 owe you") instead of a percentage badge.
-function StatCard({ icon: Icon, label, value, sub, to }) {
-  const content = (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 hover:border-emerald-300 hover:shadow-sm transition h-full">
-      <div className="flex items-center gap-2 mb-2 text-slate-500">
-        <Icon size={15} />
-        <span className="text-[11px] font-bold uppercase tracking-wide">{label}</span>
+function StandRow({ to, icon: Icon, label, value, sub, subTone }) {
+  return (
+    <Link to={to} className="flex items-center gap-3 px-4 py-3 min-h-[56px] hover:bg-[#F7F6F0] active:bg-[#F7F6F0]">
+      <div className="w-9 h-9 rounded-lg bg-[#237A52]/10 text-[#237A52] flex items-center justify-center shrink-0"><Icon size={17} /></div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium text-[#26352D]">{label}</div>
+        {sub && <div className={`text-xs ${subTone === "warn" ? "text-[#7a5f1f] font-semibold" : "text-[#68756D]"}`}>{sub}</div>}
       </div>
-      <div className="text-xl md:text-2xl font-black text-slate-800">{value}</div>
-      {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
-    </div>
+      <div className="text-sm font-bold text-[#26352D] shrink-0">{value}</div>
+    </Link>
   );
-  return to ? <Link to={to}>{content}</Link> : content;
 }
 
-// Plain CSS bar strip — 7 values, tallest bar scaled to the row's own
+// Plain CSS bar strip -- 7 values, tallest bar scaled to the row's own
 // max (not a fixed scale), so a slow week and a busy week both render
 // legibly instead of one flattening the other out.
 function WeekTrend({ values }) {
@@ -366,41 +356,23 @@ function WeekTrend({ values }) {
     return d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 2);
   });
   return (
-    <div className="flex items-end justify-between gap-2 h-24">
+    <div className="flex items-end justify-between gap-2 h-20">
       {values.map((v, i) => {
         const isToday = i === values.length - 1;
-        const heightPct = Math.max((v / max) * 100, v > 0 ? 6 : 2); // a real but tiny value still shows a sliver, not nothing
+        const heightPct = Math.max((v / max) * 100, v > 0 ? 6 : 2); // a real but tiny value still shows a sliver
         return (
-          <div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
+          <div key={i} className="flex-1 flex flex-col items-center justify-end h-full min-w-0">
             <div className="w-full flex items-end justify-center h-full">
               <div
-                className={`w-full max-w-[28px] rounded-t-md ${isToday ? "bg-emerald-600" : "bg-slate-200"}`}
+                className={`w-full max-w-[28px] rounded-t ${isToday ? "bg-[#237A52]" : "bg-[#DDE3DD]"}`}
                 style={{ height: `${heightPct}%` }}
                 title={fmt(v)}
               />
             </div>
-            <div className={`text-[10px] mt-1.5 font-semibold ${isToday ? "text-emerald-700" : "text-slate-400"}`}>{labels[i]}</div>
+            <div className={`text-[10px] mt-1 font-semibold ${isToday ? "text-[#237A52]" : "text-[#68756D]"}`}>{labels[i]}</div>
           </div>
         );
       })}
     </div>
-  );
-}
-
-function QuickLink({ to, icon: Icon, title, subtitle }) {
-  return (
-    <Link
-      to={to}
-      className="flex items-center justify-between bg-white border border-slate-200 rounded-2xl p-5 hover:border-emerald-300 hover:shadow-sm transition group"
-    >
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700"><Icon size={18} /></div>
-        <div>
-          <div className="font-semibold text-slate-800">{title}</div>
-          <div className="text-xs text-slate-500">{subtitle}</div>
-        </div>
-      </div>
-      <ArrowRight size={16} className="text-slate-300 group-hover:text-emerald-600 transition" />
-    </Link>
   );
 }

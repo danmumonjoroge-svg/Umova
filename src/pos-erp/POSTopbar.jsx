@@ -1,22 +1,24 @@
 // src/pos-erp/POSTopbar.jsx
 //
-// Sits at the top of POSLayout's main content area. Holds the
-// Communication/notifications entry point (bell icon) and a live
-// clock/date — the two things that belong at the top of every screen
-// rather than duplicated per-page.
+// Kept deliberately simple (brief section 12).
 //
-// notificationCount is a prop rather than something this component
-// fetches itself, so POSLayout (which already has tenant/staff context)
-// controls what actually counts as a notification — low stock, overdue
-// credit, etc. — once those pieces exist. Defaults to 0 so this renders
-// correctly before any of that is wired up.
+//   Desktop: breadcrumb/title on the left; on the right, connection
+//            status, date/time, notifications.
+//   Mobile:  [menu or back]  title  ........  status  bell
+//            The date/time is dropped (no room), and the connection
+//            pill shortens itself -- see ConnectionStatus.
+//
+// `parent` is the workspace a page belongs to (e.g. Retail for My Stock).
+// On a phone a child page shows a back arrow to that workspace instead
+// of the menu button; on desktop it shows "Retail > My Stock" so the
+// user always knows where they are without a nested sidebar.
 
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, Menu } from "lucide-react";
+import { Bell, Menu, ArrowLeft, ChevronRight } from "lucide-react";
 import ConnectionStatus from "./offline/ConnectionStatus";
 
-export default function POSTopbar({ title, notificationCount = 0, onMenuClick }) {
+export default function POSTopbar({ title, parent, notificationCount = 0, onMenuClick }) {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -25,33 +27,41 @@ export default function POSTopbar({ title, notificationCount = 0, onMenuClick })
   }, []);
 
   return (
-    <div className="h-16 bg-white border-b border-slate-200 border-t-2 border-t-amber-400 flex items-center justify-between px-4 sm:px-6 shrink-0">
-      <div className="flex items-center gap-3 min-w-0">
-        {/* Hamburger — only rendered on phones/small tablets (md:hidden).
-            On md+ the sidebar is always visible as a static panel, so
-            there's nothing for this to toggle there. */}
-        {onMenuClick && (
-          <button onClick={onMenuClick} className="md:hidden text-slate-500 hover:text-slate-800 -ml-1 p-1" aria-label="Open menu">
+    <div className="min-h-[56px] md:min-h-[60px] bg-white border-b border-[#DDE3DD] border-t-2 border-t-[#C6A15B] flex items-center justify-between gap-2 px-3 sm:px-6 shrink-0">
+      <div className="flex items-center gap-1 min-w-0">
+        {/* Phone-only leading control: back to the workspace on a child
+            page, otherwise the menu (secondary navigation drawer). */}
+        {parent ? (
+          <Link to={parent.to} className="md:hidden -ml-1 p-2.5 text-[#26352D]" aria-label={`Back to ${parent.label}`}>
+            <ArrowLeft size={22} />
+          </Link>
+        ) : onMenuClick ? (
+          <button onClick={onMenuClick} className="md:hidden -ml-1 p-2.5 text-[#26352D]" aria-label="Open menu">
             <Menu size={22} />
           </button>
+        ) : null}
+
+        {parent && (
+          <div className="hidden md:flex items-center gap-1.5 text-sm text-[#68756D] shrink-0">
+            <Link to={parent.to} className="hover:text-[#237A52] font-medium">{parent.label}</Link>
+            <ChevronRight size={14} />
+          </div>
         )}
-        <h2 className="font-bold text-slate-800 truncate">{title}</h2>
+        <h2 className="font-bold text-[#26352D] truncate">{title}</h2>
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-5 shrink-0">
-        {/* Stage 1B (brief section 26) -- lives in the topbar so it's
-            visible on every screen, not just the till. */}
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
         <ConnectionStatus />
-        <span className="text-xs text-slate-400 hidden lg:block">
+        <span className="text-xs text-[#68756D] hidden lg:block whitespace-nowrap">
           {now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
           {" · "}
           {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
         </span>
 
-        <Link to="/pos/communication" className="relative text-slate-500 hover:text-slate-800">
+        <Link to="/pos/communication" className="relative p-2 text-[#26352D] hover:text-[#237A52]" aria-label="Notifications">
           <Bell size={20} />
           {notificationCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] leading-none rounded-full px-1.5 py-1">
+            <span className="absolute top-0.5 right-0 bg-[#C6A15B] text-[#123C2A] text-[10px] font-bold leading-none rounded-full px-1.5 py-1">
               {notificationCount}
             </span>
           )}

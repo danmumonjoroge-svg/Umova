@@ -1,3 +1,19 @@
+// src/pos-erp/pages/POSPage.jsx -- Sell.
+//
+// "My Business" redesign of the till (brief section 9). Business logic is
+// unchanged: every sale still goes through createOfflineAwareSale() ->
+// saleService.create(), STK sales still come from confirm_mpesa_payment().
+// What changed:
+//   - M-Pesa is a PAYMENT MODE (Cash / M-Pesa / Card / Credit) with two
+//     ways to collect it: send the buyer a prompt (STK Push), or record
+//     the code when they already paid (works offline). See
+//     components/MpesaPayPanel.jsx.
+//   - Phones get a two-step flow (Items -> Sale) with a sticky checkout
+//     bar instead of two half-height scrolling panes.
+//   - Payment methods follow Settings -> "Payment methods accepted".
+//   - The catalogue is no longer capped at the first 50 items: it loads
+//     up to 500 and searches the server as you type.
+//   - Forest / Emerald / Gold styling, 44px+ touch targets.
 import React, { useState, useCallback, useEffect } from 'react';
 import { useProducts } from '../hooks/useProducts';
 import { useCashierShifts } from '../hooks/useCashierShifts';
@@ -19,13 +35,22 @@ import { useMpesaPayment } from '../hooks/useMpesaPayment';
 import ReceiptModal from '../components/ReceiptModal';
 import { receiptService } from '../services/receiptService';
 import { settingsService } from '../services/settingsService';
-import { Image as ImageIcon } from 'lucide-react';
+import { Image as ImageIcon, Camera, Search, ArrowLeft, Minus, Plus, Loader2, ShoppingCart } from 'lucide-react';
+import MpesaPayPanel from '../components/MpesaPayPanel';
+import MpesaPromptModal from '../components/MpesaPromptModal';
+import { mpesaService } from '../services/mpesaService';
+import { normalizeMpesaCode, isValidMpesaCode, isWholeShillings } from '../utils/mpesa';
 
 const VARIABLE_MODES = ['WEIGHT', 'VOLUME', 'CUSTOM'];
 
+// Owner-facing names. The stored value stays MOBILE_MONEY (that is what
+// lb_payments and every report already use) -- only the label changes.
+const ALL_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'CREDIT'];
+const METHOD_LABEL = { CASH: 'Cash', MOBILE_MONEY: 'M-Pesa', CARD: 'Card', CREDIT: 'Credit' };
+
 export default function POSPage() {
   const { staffId, tenant } = usePosErpAuth();
-  const { products, create: createProduct } = useProducts();
+  const { products, create: createProduct, fetch: fetchProducts } = useProducts();
   // Stage 1B: checkout no longer calls useSales().create() directly --
   // createOfflineAwareSale() (imported above) wraps saleService.create()
   // itself, so this hook (which also fires an unrelated sales-list fetch
@@ -52,6 +77,36 @@ export default function POSPage() {
   }, [tenant?.business_id]);
   const [mpesaPhone, setMpesaPhone] = useState('');
   const [showMpesaModal, setShowMpesaModal] = useState(false);
+
+  // ---- M-Pesa as a payment mode ----
+  const [mpesaMode, setMpesaMode] = useState('PROMPT'); // 'PROMPT' (STK push) | 'MANUAL' (buyer already paid; enter code)
+  const [mpesaCode, setMpesaCode] = useState('');
+  const [promptPhone, setPromptPhone] = useState(''); // the number the live prompt went to
+  const [mpesaConfig, setMpesaConfig] = useState(undefined); // undefined = still checking, null = none saved
+  const [mobileView, setMobileView] = useState('items'); // phones only: 'items' | 'sale'
+
+  // Is a prompt possible right now? Needs internet AND M-Pesa switched on
+  // with all three credentials saved (the same test the Edge Function
+  // applies, so the cashier finds out here instead of after tapping).
+  useEffect(() => {
+    if (!tenant?.business_id || !isOnline) return undefined;
+    let alive = true;
+    mpesaService.getConfig(tenant.business_id)
+      .then((c) => { if (alive) setMpesaConfig(c || null); })
+      .catch(() => { if (alive) setMpesaConfig(null); });
+    return () => { alive = false; };
+  }, [tenant?.business_id, isOnline]);
+  const stkConfigured = !!(mpesaConfig?.is_active && mpesaConfig.has_consumer_key && mpesaConfig.has_consumer_secret && mpesaConfig.has_passkey);
+  const stkStatus = !isOnline ? 'offline' : mpesaConfig === undefined ? 'checking' : stkConfigured ? 'ready' : 'not_setup';
+  // When a prompt isn't possible the till quietly uses "Already paid".
+  const effectiveMpesaMode = stkStatus === 'ready' ? mpesaMode : 'MANUAL';
+
+  // Payment methods follow Settings (default: all four).
+  const enabledMethods = (() => {
+    const list = posSettings?.settings?.payment_methods_enabled;
+    const filtered = Array.isArray(list) ? ALL_METHODS.filter((m) => list.includes(m)) : ALL_METHODS;
+    return filtered.length > 0 ? filtered : ALL_METHODS;
+  })();
 
   // Keep the offline product cache warm every time the online product
   // list refreshes. This is the ONLY writer of products_cache -- if the
@@ -114,6 +169,23 @@ export default function POSPage() {
   }, [isOnline, products]);
 
   const searchableProducts = products.length > 0 ? products : offlineFallbackProducts;
+
+  // If Settings turned off the method currently selected, fall back to the first one still on.
+  useEffect(() => {
+    if (!enabledMethods.includes(paymentMethod)) setPaymentMethod(enabledMethods[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posSettings]);
+
+  // Catalogue: up to 500 items when browsing, and a server-side search as
+  // the cashier types (so item #501+ is still findable). useProducts()'s
+  // own first load only fetches 50. Online only -- offline the cached list
+  // (see offlineFallbackProducts) is used and nothing is fetched.
+  useEffect(() => {
+    if (!isOnline) return undefined;
+    const term = search.trim();
+    const t = setTimeout(() => { fetchProducts({ search: term || undefined, limit: term ? 100 : 500 }); }, term ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [search, isOnline, fetchProducts]);
 
   const filteredProducts = searchableProducts.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -295,13 +367,21 @@ export default function POSPage() {
     if (cart.length === 0) return;
     setSaleError('');
     const phone = mpesaPhone || customers.find(c => c.id === selectedCustomerId)?.phone || '';
-    if (!phone) { setSaleError('Enter the customer\'s M-Pesa phone number.'); return; }
+    if (!phone) { setSaleError('Enter the buyer\'s M-Pesa phone number.'); return; }
+    // STK Push charges whole shillings only (the Edge Function rounds), so
+    // a total with cents would charge a different amount than the sale
+    // records. Say so up front instead of creating that mismatch.
+    if (!isWholeShillings(total)) {
+      setSaleError(`M-Pesa prompts work in whole shillings and this sale is KES ${total.toLocaleString()}. Adjust a discount to a whole amount, or choose "Already paid" and enter the code.`);
+      return;
+    }
 
     const cartSnapshot = cart.map(i => ({
       product_id: i.product_id, name: i.name, quantity: i.quantity, unit_price: i.unit_price,
       cost_price: i.cost_price, discount_amount: i.discount_amount || 0, selling_mode: i.selling_mode,
     }));
 
+    setPromptPhone(phone);
     setShowMpesaModal(true);
     try {
       await mpesa.send({ phone, amount: total, cartSnapshot, customerId: selectedCustomerId || null, shiftId: activeShift.id });
@@ -323,10 +403,23 @@ export default function POSPage() {
     if (mpesa.phase === 'idle') setMpesaReceipt(null);
   }, [mpesa.phase, mpesa.transaction]);
 
+  // A request that is still waiting must never be forgotten about: hiding
+  // the modal keeps it alive (banner on the till), and the modal comes
+  // back by itself the moment the result arrives.
+  useEffect(() => {
+    if ((mpesa.phase === 'paid' || mpesa.phase === 'failed') && !showMpesaModal) setShowMpesaModal(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mpesa.phase]);
+  const mpesaBusy = mpesa.phase === 'sending' || mpesa.phase === 'pending';
+
+  const retryMpesaPrompt = () => { mpesa.reset(); handleMpesaCheckout(); };
+  const switchToMpesaCode = () => { mpesa.reset(); setShowMpesaModal(false); setMpesaMode('MANUAL'); };
+
   const closeMpesaModal = () => {
     const wasPaid = mpesa.phase === 'paid';
     if (wasPaid) {
       setCart([]); setCustomerAmount(''); setSearch(''); setSelectedCustomerId(''); setMpesaPhone('');
+      setMpesaCode(''); setMobileView('items');
     }
     setShowMpesaModal(false);
     if (wasPaid && mpesaReceipt) {
@@ -334,6 +427,23 @@ export default function POSPage() {
       setReceiptModal({ receipt: mpesaReceipt, customer, isOffline: false });
     }
     mpesa.reset();
+  };
+
+  // Stops one M-Pesa SMS being used to "pay" for two sales. Online only:
+  // offline the code can't be looked up, so it is saved as typed and the
+  // owner can review it on the M-Pesa page once it syncs. A failed lookup
+  // never blocks a real sale.
+  const codeAlreadyUsed = async (code) => {
+    if (!isOnline || !tenant?.business_id) return false;
+    try {
+      if (await mpesaService.isCodeUsed(tenant.business_id, code)) {
+        setSaleError(`M-Pesa code ${code} was already used on another sale. Check the buyer's SMS.`);
+        return true;
+      }
+    } catch (err) {
+      console.error('[POS] M-Pesa code lookup failed (sale not blocked):', err);
+    }
+    return false;
   };
 
   const completeSale = async () => {
@@ -363,11 +473,25 @@ export default function POSPage() {
         setSaleError('Select a customer before completing a credit sale.');
         return;
       }
+      // An M-Pesa line in a split sale is always "already paid" -- a
+      // prompt can't cover part of a cart (the STK sale is created for the
+      // whole cart on confirmation) -- so its code is required.
+      const mpesaLines = validLines.filter(p => p.method === 'MOBILE_MONEY');
+      if (mpesaLines.some(p => !isValidMpesaCode(p.reference_no))) {
+        setSaleError('Enter the M-Pesa code (from the SMS) for each M-Pesa payment.');
+        return;
+      }
+      const codes = mpesaLines.map(p => normalizeMpesaCode(p.reference_no));
+      if (new Set(codes).size !== codes.length) {
+        setSaleError('The same M-Pesa code is entered twice.');
+        return;
+      }
+      for (const c of codes) { if (await codeAlreadyUsed(c)) return; }
       payments = validLines.map(p => ({
         payment_method: p.method,
         amount: parseFloat(p.amount),
         change_amount: 0,
-        reference_no: p.reference_no || null,
+        reference_no: p.method === 'MOBILE_MONEY' ? normalizeMpesaCode(p.reference_no) : (p.reference_no || null),
       }));
     } else {
       // Same requirement the DB trigger enforces — checked here too so the
@@ -377,12 +501,26 @@ export default function POSPage() {
         setSaleError('Select a customer before completing a credit sale.');
         return;
       }
-      const changeAmount = paymentMethod === 'CASH' ? Math.max(0, change) : 0;
-      payments = [{
-        payment_method: paymentMethod,
-        amount: total,
-        change_amount: changeAmount,
-      }];
+      if (paymentMethod === 'MOBILE_MONEY') {
+        // "Already paid": the buyer paid the till/paybill themselves and
+        // the cashier types the code from their SMS. Recorded as a normal
+        // MOBILE_MONEY payment with the code as its reference, so it works
+        // offline and shows on the M-Pesa page under "Recorded by cashier".
+        const code = normalizeMpesaCode(mpesaCode);
+        if (!isValidMpesaCode(code)) {
+          setSaleError('Enter the M-Pesa code from the buyer\'s SMS (like SHK7X9ABCD).');
+          return;
+        }
+        if (await codeAlreadyUsed(code)) return;
+        payments = [{ payment_method: 'MOBILE_MONEY', amount: total, change_amount: 0, reference_no: code }];
+      } else {
+        const changeAmount = paymentMethod === 'CASH' ? Math.max(0, change) : 0;
+        payments = [{
+          payment_method: paymentMethod,
+          amount: total,
+          change_amount: changeAmount,
+        }];
+      }
     }
 
     // shift_id is required — without it, closing this shift can never
@@ -412,7 +550,7 @@ export default function POSPage() {
       const result = await createOfflineAwareSale(fullSale, { isOnline });
       const selectedCustomer = customers.find(c => c.id === selectedCustomerId) || null;
       setCart([]); setCustomerAmount(''); setSearch(''); setSelectedCustomerId('');
-      setSplitPayments([]); setSplitMode(false);
+      setSplitPayments([]); setSplitMode(false); setMpesaCode(''); setMobileView('items');
       // Phase 14: show the receipt instead of a bare alert(). For an
       // online sale, fetch the REAL lb_receipts row saleService.create()
       // already wrote (has a server-issued receipt_number). For an
@@ -474,29 +612,46 @@ export default function POSPage() {
     }
   };
 
+  const cartCount = cart.reduce((n, i) => n + (VARIABLE_MODES.includes(i.selling_mode) ? 1 : i.quantity), 0);
+  const isMpesaSingle = !splitMode && paymentMethod === 'MOBILE_MONEY';
+  const isPrompt = isMpesaSingle && effectiveMpesaMode === 'PROMPT';
+  const isMpesaCode = isMpesaSingle && effectiveMpesaMode === 'MANUAL';
+  const creditPicked = splitMode ? splitPayments.some(p => p.method === 'CREDIT') : paymentMethod === 'CREDIT';
+  const canSubmit = cart.length > 0
+    && !mpesaBusy
+    && !(splitMode && Math.abs(splitRemaining) > 0.01)
+    && !(isPrompt && stkStatus !== 'ready')
+    && !(isMpesaCode && !isValidMpesaCode(mpesaCode));
+  const submitLabel = isPrompt ? `Send M-Pesa prompt · KES ${total.toLocaleString()}` : `Complete sale · KES ${total.toLocaleString()}`;
+
   if (!activeShift) {
     return (
-      <div className="p-6 text-center">
-        <h2 className="text-xl font-bold mb-4">No Active Shift</h2>
-        <button onClick={() => setShowShiftModal(true)} className="bg-blue-600 text-white px-6 py-3 rounded">Open Shift</button>
-        {showShiftModal && (
-          <div className="mt-4">
-            <input type="number" placeholder="Opening float" value={shiftFloat} onChange={e => setShiftFloat(e.target.value)} className="border rounded px-3 py-2 mr-2" />
-            <button onClick={() => { openShift(parseFloat(shiftFloat) || 0); setShowShiftModal(false); }} className="bg-green-600 text-white px-4 py-2 rounded">Start</button>
-          </div>
-        )}
+      <div className="p-4 sm:p-6 max-w-md mx-auto">
+        <div className="bg-white border border-[#DDE3DD] rounded-xl p-5 text-center">
+          <div className="w-12 h-12 rounded-full bg-[#237A52]/10 text-[#237A52] flex items-center justify-center mx-auto mb-3"><ShoppingCart size={22} /></div>
+          <h2 className="text-lg font-bold text-[#26352D]">Start your shift to sell</h2>
+          <p className="text-sm text-[#68756D] mt-1 mb-4">Enter the cash you are starting the till with. It can be 0.</p>
+          {!showShiftModal ? (
+            <button onClick={() => setShowShiftModal(true)} className="w-full min-h-[48px] bg-[#237A52] hover:bg-[#1B5138] text-white font-semibold rounded-xl">Open shift</button>
+          ) : (
+            <div className="flex gap-2">
+              <input type="number" inputMode="decimal" placeholder="Opening cash (float)" value={shiftFloat} onChange={e => setShiftFloat(e.target.value)} className="flex-1 min-w-0 border border-[#DDE3DD] rounded-xl px-3 py-3 text-base" autoFocus />
+              <button onClick={() => { openShift(parseFloat(shiftFloat) || 0); setShowShiftModal(false); }} className="shrink-0 min-h-[48px] px-5 bg-[#237A52] hover:bg-[#1B5138] text-white font-semibold rounded-xl">Start</button>
+            </div>
+          )}
+        </div>
         {/* Shown once, right after a close, so the cashier actually sees
-            whether the till balanced — this is the entire point of
+            whether the till balanced -- this is the entire point of
             collecting actual cash in the first place. */}
         {closeSummary && (
-          <div className="mt-6 mx-auto max-w-sm bg-white rounded-xl shadow p-5 text-left">
-            <h3 className="font-bold text-slate-800 mb-3">Shift Closed — {closeSummary.shift_number}</h3>
-            <div className="flex justify-between text-sm py-1"><span className="text-slate-500">Expected cash</span><span className="font-semibold">{Number(closeSummary.expected_cash).toLocaleString()}</span></div>
-            <div className="flex justify-between text-sm py-1"><span className="text-slate-500">Actual cash</span><span className="font-semibold">{Number(closeSummary.actual_cash).toLocaleString()}</span></div>
-            <div className={`flex justify-between text-sm py-1 font-bold ${Number(closeSummary.variance) === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+          <div className="mt-4 bg-white border border-[#DDE3DD] rounded-xl p-5 text-left">
+            <h3 className="font-bold text-[#26352D] mb-3">Shift closed — {closeSummary.shift_number}</h3>
+            <div className="flex justify-between text-sm py-1"><span className="text-[#68756D]">Expected cash</span><span className="font-semibold">{Number(closeSummary.expected_cash).toLocaleString()}</span></div>
+            <div className="flex justify-between text-sm py-1"><span className="text-[#68756D]">Actual cash</span><span className="font-semibold">{Number(closeSummary.actual_cash).toLocaleString()}</span></div>
+            <div className={`flex justify-between text-sm py-1 font-bold ${Number(closeSummary.variance) === 0 ? 'text-[#237A52]' : 'text-red-600'}`}>
               <span>Variance</span><span>{Number(closeSummary.variance) > 0 ? '+' : ''}{Number(closeSummary.variance).toLocaleString()}</span>
             </div>
-            <button onClick={() => setCloseSummary(null)} className="mt-3 w-full bg-slate-100 text-slate-600 text-sm py-2 rounded-lg">Dismiss</button>
+            <button onClick={() => setCloseSummary(null)} className="mt-3 w-full min-h-[44px] bg-[#F7F6F0] text-[#26352D] text-sm font-semibold rounded-xl">Dismiss</button>
           </div>
         )}
       </div>
@@ -505,278 +660,287 @@ export default function POSPage() {
 
   return (
     <div className="h-full min-h-0 flex flex-col">
-      <div className="bg-gray-800 text-white p-3 flex flex-wrap justify-between items-center gap-2">
-        <span className="font-bold">POS — Shift Open</span>
-        <button onClick={() => setShowCloseShiftModal(true)} className="bg-red-600 px-3 py-1 rounded text-sm shrink-0">Close Shift</button>
+      <div className="bg-[#1B5138] text-white px-3 sm:px-4 py-2 flex flex-wrap justify-between items-center gap-2">
+        <span className="font-semibold text-sm">Selling · shift open</span>
+        <button onClick={() => setShowCloseShiftModal(true)} className="bg-white/15 hover:bg-white/25 px-3 min-h-[36px] rounded-lg text-xs font-semibold shrink-0">Close shift</button>
       </div>
-      {/* Phone fix: on mobile this becomes a single stacked column
-          (catalog, then cart+payment below it), so it needs to scroll
-          as ONE page — hence overflow-y-auto here on small screens.
-          At md: it switches to the two-pane side-by-side layout, and
-          overflow-hidden here is what lets each pane (left: overflow-y-auto
-          catalog, right: its own internal flex layout) scroll
-          independently instead of the whole row scrolling as a unit.
-          Without this split, content below the fold on a phone was
-          unreachable — clipped by overflow-hidden with nothing to
-          scroll it, not just visually cramped. */}
+
+      {/* Phones show ONE of the two panes at a time (Items, then Sale),
+          switched by the sticky bar / the back button. md and up shows both
+          side by side, as before. */}
       <div className="flex flex-1 min-h-0 overflow-hidden flex-col md:flex-row">
-        <div className="flex-1 basis-0 min-h-0 min-w-0 p-4 overflow-y-auto bg-gray-50">
-          <div className="flex gap-2 mb-4">
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search / Scan barcode..."
-              className="flex-1 min-w-0 border rounded px-3 py-2"
-            />
-            {/* Large, thumb-friendly scan button — mobile-first per spec section 27 */}
+        {/* ============ ITEMS ============ */}
+        <div className={`${mobileView === 'items' ? 'block' : 'hidden'} md:block flex-1 basis-0 min-h-0 min-w-0 p-3 md:p-4 overflow-y-auto bg-[#F7F6F0]`}>
+          <div className="flex gap-2 mb-3">
+            <div className="relative flex-1 min-w-0">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#68756D]" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search or scan barcode"
+                className="w-full min-w-0 border border-[#DDE3DD] bg-white rounded-xl pl-9 pr-3 min-h-[48px] text-base"
+              />
+            </div>
             <button
               onClick={() => setShowScanner(true)}
-              className="bg-blue-600 text-white px-5 py-2 rounded-lg font-semibold text-lg shrink-0"
-              aria-label="Scan Barcode"
+              className="bg-[#237A52] hover:bg-[#1B5138] text-white px-4 min-h-[48px] rounded-xl font-semibold shrink-0 flex items-center gap-2"
+              aria-label="Scan barcode"
             >
-              📷 Scan
+              <Camera size={20} /> <span className="hidden sm:inline">Scan</span>
             </button>
           </div>
 
           {stockWarning && (
-            <div className="bg-red-50 text-red-700 text-sm rounded px-3 py-2 mb-3">{stockWarning}</div>
+            <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{stockWarning}</div>
           )}
 
           {recentScans.length > 0 && (
-            <div className="bg-white rounded shadow p-3 mb-4">
-              <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Recently Scanned</h4>
-              <div className="space-y-1 max-h-32 overflow-y-auto">
+            <div className="bg-white border border-[#DDE3DD] rounded-xl p-3 mb-3">
+              <h4 className="text-[11px] font-bold text-[#68756D] uppercase mb-2">Recently scanned</h4>
+              <div className="space-y-1 max-h-24 overflow-y-auto">
                 {recentScans.map((s, idx) => (
-                  <div key={idx} className="flex justify-between text-sm">
-                    <span className={s.result === SCAN_RESULTS.RESOLVED ? 'text-gray-800' : 'text-red-500'}>
+                  <div key={idx} className="flex justify-between gap-2 text-sm">
+                    <span className={`min-w-0 truncate ${s.result === SCAN_RESULTS.RESOLVED ? 'text-[#26352D]' : 'text-red-500'}`}>
                       {s.result === SCAN_RESULTS.RESOLVED ? s.product.name : `Not found: ${s.barcode}`}
                     </span>
-                    <span className="text-gray-400 text-xs">{new Date(s.at).toLocaleTimeString()}</span>
+                    <span className="text-[#68756D] text-xs shrink-0">{new Date(s.at).toLocaleTimeString()}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Phone fix: grid-cols-2 stays until lg (1024px) rather than
-              switching to 3 at sm (640px) — this pane is only half-width
-              once md: kicks in (768px+), so 3 image cards in a half-width
-              pane got cramped well before the screen was actually wide
-              enough. Image added below (was text-only before) so a
-              product is recognizable by sight, not just by name — the
-              square aspect-ratio box also keeps every card the same
-              height regardless of name length, which is most of what
-              was making the grid look "not proportionate." */}
+          {/* grid-cols-2 until lg: this pane is only half-width from md up,
+              so three image cards in a half pane got cramped early. The
+              square image box keeps every card the same height. */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
             {filteredProducts.map(p => (
-              <button key={p.id} onClick={() => addToCart(p)} className="bg-white rounded shadow hover:bg-blue-50 text-left overflow-hidden flex flex-col">
-                <div className="w-full aspect-square bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+              <button key={p.id} onClick={() => addToCart(p)} className="bg-white border border-[#DDE3DD] rounded-xl hover:border-[#237A52] active:bg-emerald-50 text-left overflow-hidden flex flex-col min-w-0">
+                <div className="w-full aspect-square bg-[#F7F6F0] flex items-center justify-center overflow-hidden shrink-0">
                   {p.image_url
                     ? <img src={p.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
-                    : <ImageIcon size={24} className="text-gray-300" />}
+                    : <ImageIcon size={24} className="text-[#DDE3DD]" />}
                 </div>
-                <div className="p-2 min-w-0">
+                <div className="p-2.5 min-w-0">
                   <div className="font-semibold text-sm truncate">{p.name}</div>
-                  <div className="text-blue-600 font-bold">{p.selling_price?.toLocaleString()}</div>
+                  <div className="text-[#237A52] font-bold">{p.selling_price?.toLocaleString()}</div>
                 </div>
               </button>
             ))}
           </div>
+          {filteredProducts.length === 0 && (
+            <div className="text-center text-sm text-[#68756D] py-10">
+              {search ? `No items match "${search}".` : isOnline ? 'No items yet. Add some under Retail → My Items.' : 'No items saved on this device yet. Connect once to load them.'}
+            </div>
+          )}
+
+          {/* Phone-only checkout bar. Sticks to the bottom of THIS pane, so
+              it always sits just above the bottom navigation. */}
+          {cart.length > 0 && (
+            <div className="md:hidden sticky bottom-0 -mx-3 -mb-3 mt-3 px-3 py-2.5 bg-white border-t border-[#DDE3DD]">
+              <button
+                onClick={() => setMobileView('sale')}
+                className="w-full min-h-[52px] rounded-xl bg-[#237A52] active:bg-[#1B5138] text-white font-semibold flex items-center justify-between px-4"
+              >
+                <span className="flex items-center gap-2"><ShoppingCart size={18} /> {cartCount} item{cartCount === 1 ? '' : 's'}</span>
+                <span>View sale · KES {total.toLocaleString()}</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="flex-1 basis-0 min-h-0 min-w-0 p-4 overflow-y-auto bg-white flex flex-col">
-          <h3 className="font-bold mb-2">Current Sale</h3>
+        {/* ============ SALE ============ */}
+        <div className={`${mobileView === 'sale' ? 'flex' : 'hidden'} md:flex flex-1 basis-0 min-h-0 min-w-0 p-3 md:p-4 overflow-y-auto bg-white flex-col md:border-l border-[#DDE3DD]`}>
+          <div className="flex items-center gap-2 mb-2">
+            <button onClick={() => setMobileView('items')} className="md:hidden -ml-2 p-2 text-[#26352D]" aria-label="Back to items"><ArrowLeft size={20} /></button>
+            <h3 className="font-bold text-[#26352D]">Current sale{cart.length > 0 ? ` (${cartCount})` : ''}</h3>
+            {cart.length > 0 && <button onClick={() => { setCart([]); setMobileView('items'); }} className="ml-auto text-xs font-semibold text-[#68756D] hover:text-red-600 min-h-[36px] px-2">Clear</button>}
+          </div>
+
           <div className="flex-1">
             {cart.map(item => (
-              <div key={item.product_id} className="py-2 border-b">
-                <div className="flex flex-wrap justify-between items-center gap-y-1">
-                  <div className="min-w-0 pr-2">
+              <div key={item.product_id} className="py-2.5 border-b border-[#DDE3DD]">
+                <div className="flex justify-between items-center gap-2">
+                  <div className="min-w-0 flex-1">
                     <div className="font-medium truncate">{item.name}</div>
-                    <div className="text-sm text-gray-500">{item.unit_price?.toLocaleString()} x {item.quantity}</div>
+                    <div className="text-sm text-[#68756D]">{item.unit_price?.toLocaleString()} × {item.quantity}</div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => updateQty(item.product_id, item.quantity - 1)} className="w-6 h-6 bg-gray-200 rounded">-</button>
-                    <span>{item.quantity}</span>
-                    <button onClick={() => updateQty(item.product_id, item.quantity + 1)} className="w-6 h-6 bg-gray-200 rounded">+</button>
-                    <span className="font-bold w-20 text-right">{item.total?.toLocaleString()}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button onClick={() => updateQty(item.product_id, item.quantity - 1)} className="w-9 h-9 bg-[#F7F6F0] border border-[#DDE3DD] rounded-lg flex items-center justify-center" aria-label="Less"><Minus size={16} /></button>
+                    <span className="w-7 text-center font-semibold">{item.quantity}</span>
+                    <button onClick={() => updateQty(item.product_id, item.quantity + 1)} className="w-9 h-9 bg-[#F7F6F0] border border-[#DDE3DD] rounded-lg flex items-center justify-center" aria-label="More"><Plus size={16} /></button>
                   </div>
+                  <span className="font-bold w-20 text-right shrink-0">{item.total?.toLocaleString()}</span>
                 </div>
-                {/* Per-line discount, KES amount — clamped in updateDiscount so it
-                    can never exceed this line's own subtotal. */}
-                <div className="flex justify-end items-center gap-2 mt-1">
-                  <span className="text-xs text-gray-400">Discount (KES)</span>
+                {/* Per-line discount, KES amount -- clamped in updateDiscount
+                    so it can never exceed this line's own subtotal. */}
+                <div className="flex justify-end items-center gap-2 mt-1.5">
+                  <span className="text-xs text-[#68756D]">Discount (KES)</span>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="number" inputMode="decimal" min="0" step="0.01"
                     value={item.discount_amount || ''}
                     onChange={e => updateDiscount(item.product_id, parseFloat(e.target.value) || 0)}
                     placeholder="0"
-                    className="w-24 border rounded px-2 py-1 text-sm text-right"
+                    className="w-24 border border-[#DDE3DD] rounded-lg px-2 py-1.5 text-sm text-right"
                   />
                 </div>
               </div>
             ))}
-            {cart.length === 0 && <div className="text-gray-400 text-center py-10">No items</div>}
-          </div>
-          <div className="border-t pt-4 mt-4">
-            <div className="flex justify-between text-lg mb-2"><span>Subtotal</span><span className="font-bold">{subtotal.toLocaleString()}</span></div>
-            {discountTotal > 0 && (
-              <div className="flex justify-between text-lg mb-2 text-emerald-700"><span>Discount</span><span className="font-bold">-{discountTotal.toLocaleString()}</span></div>
+            {cart.length === 0 && (
+              <div className="text-[#68756D] text-center py-10 text-sm">
+                No items yet.
+                <button onClick={() => setMobileView('items')} className="md:hidden block mx-auto mt-3 text-[#237A52] font-semibold underline min-h-[44px]">Add items</button>
+              </div>
             )}
-            <div className="flex justify-between text-xl mb-4"><span>TOTAL</span><span className="font-bold text-blue-600">{total.toLocaleString()}</span></div>
+          </div>
+
+          <div className="border-t border-[#DDE3DD] pt-4 mt-4">
+            <div className="flex justify-between mb-1.5"><span className="text-[#68756D]">Subtotal</span><span className="font-semibold">{subtotal.toLocaleString()}</span></div>
+            {discountTotal > 0 && (
+              <div className="flex justify-between mb-1.5 text-[#237A52]"><span>Discount</span><span className="font-semibold">-{discountTotal.toLocaleString()}</span></div>
+            )}
+            <div className="flex justify-between text-xl mb-4"><span className="font-semibold">Total</span><span className="font-bold text-[#237A52]">KES {total.toLocaleString()}</span></div>
+
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-gray-500 uppercase">Payment</span>
+              <span className="text-[11px] font-bold text-[#68756D] uppercase">How is the buyer paying?</span>
               <button
                 onClick={() => { setSplitMode(!splitMode); setSplitPayments([]); setSaleError(''); }}
-                className={`text-xs font-semibold px-2 py-1 rounded ${splitMode ? 'bg-emerald-800 text-white' : 'bg-gray-100 text-gray-600'}`}
+                className={`text-xs font-semibold px-2.5 min-h-[32px] rounded-lg ${splitMode ? 'bg-[#237A52] text-white' : 'bg-[#F7F6F0] border border-[#DDE3DD] text-[#26352D]'}`}
               >
-                {splitMode ? 'Split payment: ON' : 'Split payment'}
+                {splitMode ? 'Split payment: on' : 'Split payment'}
               </button>
             </div>
 
             {!splitMode ? (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {['CASH', 'MOBILE_MONEY', 'CARD', 'CREDIT'].map(m => {
-                  // Section 23: M-Pesa STK cannot be initiated offline --
-                  // disabled here rather than left to fail after the tap.
-                  const disabled = m === 'MOBILE_MONEY' && !isOnline;
-                  return (
-                    <button
-                      key={m} disabled={disabled}
-                      onClick={() => setPaymentMethod(m)}
-                      title={disabled ? "No internet connection. M-Pesa request will be available when you're back online." : undefined}
-                      className={`flex-1 min-w-[70px] py-2 rounded text-sm ${paymentMethod === m ? 'bg-emerald-800 text-white' : 'bg-gray-100'} disabled:opacity-40 disabled:cursor-not-allowed`}
-                    >{m.replace('_', ' ')}</button>
-                  );
-                })}
+              <div className={`grid gap-2 mb-3 ${enabledMethods.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {enabledMethods.map(m => (
+                  <button
+                    key={m}
+                    onClick={() => { setPaymentMethod(m); setSaleError(''); }}
+                    aria-pressed={paymentMethod === m}
+                    className={`min-h-[48px] rounded-xl text-sm font-semibold border transition-colors ${
+                      paymentMethod === m ? 'bg-[#237A52] text-white border-[#237A52]' : 'bg-white text-[#26352D] border-[#DDE3DD] hover:bg-[#F7F6F0]'
+                    }`}
+                  >{METHOD_LABEL[m]}</button>
+                ))}
               </div>
             ) : (
-              // Split/mixed payment: one or more lines, each its own
-              // method + amount (e.g. part CASH, part MOBILE_MONEY on the
-              // same sale). No change handling here — Complete Sale stays
-              // disabled until the lines add up exactly (see completeSale).
+              // Split / mixed payment: one or more lines, each its own
+              // method + amount. No change handling here -- Complete Sale
+              // stays disabled until the lines add up exactly.
               <div className="mb-3 space-y-2">
                 {splitPayments.map(p => (
-                  <div key={p.id} className="flex gap-2 items-center">
-                    <select
-                      value={p.method}
-                      onChange={e => updateSplitPayment(p.id, 'method', e.target.value)}
-                      className="border rounded px-2 py-2 text-sm shrink-0"
-                    >
-                      {['CASH', 'MOBILE_MONEY', 'CARD', 'CREDIT'].map(m => <option key={m} value={m}>{m.replace('_', ' ')}</option>)}
-                    </select>
-                    <input
-                      type="number" min="0" step="0.01" placeholder="Amount"
-                      value={p.amount}
-                      onChange={e => updateSplitPayment(p.id, 'amount', e.target.value)}
-                      className="border rounded px-3 py-2 flex-1 min-w-0"
-                    />
-                    <button onClick={() => removeSplitPayment(p.id)} className="text-red-500 text-sm px-2 shrink-0">✕</button>
+                  <div key={p.id} className="rounded-xl border border-[#DDE3DD] p-2 space-y-2">
+                    <div className="flex gap-2 items-center">
+                      <select
+                        value={p.method}
+                        onChange={e => updateSplitPayment(p.id, 'method', e.target.value)}
+                        className="border border-[#DDE3DD] rounded-lg px-2 min-h-[44px] text-sm shrink-0 bg-white"
+                      >
+                        {enabledMethods.map(m => <option key={m} value={m}>{METHOD_LABEL[m]}</option>)}
+                      </select>
+                      <input
+                        type="number" inputMode="decimal" min="0" step="0.01" placeholder="Amount"
+                        value={p.amount}
+                        onChange={e => updateSplitPayment(p.id, 'amount', e.target.value)}
+                        className="border border-[#DDE3DD] rounded-lg px-3 min-h-[44px] flex-1 min-w-0"
+                      />
+                      <button onClick={() => removeSplitPayment(p.id)} className="text-red-500 text-sm w-9 h-9 shrink-0" aria-label="Remove payment">✕</button>
+                    </div>
+                    {p.method === 'MOBILE_MONEY' && (
+                      <input
+                        type="text" autoCapitalize="characters" autoComplete="off" spellCheck={false} maxLength={12}
+                        placeholder="M-Pesa code from the SMS"
+                        value={p.reference_no}
+                        onChange={e => updateSplitPayment(p.id, 'reference_no', normalizeMpesaCode(e.target.value))}
+                        className="w-full min-w-0 border border-[#DDE3DD] rounded-lg px-3 min-h-[44px] font-mono tracking-wider text-sm"
+                      />
+                    )}
                   </div>
                 ))}
-                <button onClick={addSplitPayment} className="text-sm text-emerald-700 font-semibold">+ Add payment</button>
-                <div className={`flex justify-between text-sm font-semibold pt-1 ${Math.abs(splitRemaining) < 0.01 ? 'text-emerald-700' : 'text-red-600'}`}>
+                <button onClick={addSplitPayment} className="text-sm text-[#237A52] font-semibold min-h-[40px]">+ Add payment</button>
+                {splitPayments.some(p => p.method === 'MOBILE_MONEY') && (
+                  <p className="text-[11px] text-[#68756D] leading-snug">
+                    In a split sale an M-Pesa payment is recorded by its code (the buyer has already paid). To send the buyer an M-Pesa prompt, sell with M-Pesa alone.
+                  </p>
+                )}
+                <div className={`flex justify-between text-sm font-semibold pt-1 ${Math.abs(splitRemaining) < 0.01 ? 'text-[#237A52]' : 'text-red-600'}`}>
                   <span>Remaining</span><span>{splitRemaining.toLocaleString()}</span>
                 </div>
               </div>
             )}
 
-            {/* Customer picker. Required for CREDIT (enforced both here and
-                by the DB trigger); optional otherwise so a walk-in cash
-                sale can still be tagged to a customer if useful. */}
+            {/* M-Pesa: a payment mode with two ways to collect it. */}
+            {isMpesaSingle && (
+              <MpesaPayPanel
+                mode={effectiveMpesaMode} onModeChange={setMpesaMode}
+                phone={mpesaPhone || customers.find(c => c.id === selectedCustomerId)?.phone || ''}
+                onPhoneChange={setMpesaPhone}
+                code={mpesaCode} onCodeChange={setMpesaCode}
+                total={total} isOnline={isOnline} stkStatus={stkStatus}
+              />
+            )}
+
+            {/* Customer picker. Required for CREDIT (enforced here and by
+                the DB trigger); optional otherwise. */}
             <div className="mb-3">
               <select
                 value={selectedCustomerId}
                 onChange={e => setSelectedCustomerId(e.target.value)}
-                className={`w-full border rounded px-3 py-2 text-sm ${(splitMode ? splitPayments.some(p => p.method === 'CREDIT') : paymentMethod === 'CREDIT') && !selectedCustomerId ? 'border-red-400' : 'border-gray-200'}`}
+                className={`w-full border rounded-xl px-3 min-h-[48px] text-sm bg-white ${creditPicked && !selectedCustomerId ? 'border-red-400' : 'border-[#DDE3DD]'}`}
               >
-                <option value="">{(splitMode ? splitPayments.some(p => p.method === 'CREDIT') : paymentMethod === 'CREDIT') ? 'Select customer (required)' : 'Customer (optional)'}</option>
+                <option value="">{creditPicked ? 'Select customer (required)' : 'Customer (optional)'}</option>
                 {customers.map(c => (
                   <option key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ''}</option>
                 ))}
               </select>
             </div>
-            {saleError && (
-              <div className="bg-red-50 text-red-700 text-sm rounded px-3 py-2 mb-3">{saleError}</div>
-            )}
+
             {!splitMode && paymentMethod === 'CASH' && (
               <div className="flex gap-2 mb-3">
-                <input type="number" placeholder="Amount received" value={customerAmount} onChange={e => setCustomerAmount(e.target.value)} className="border rounded px-3 py-2 flex-1 min-w-0" />
-                <div className="px-3 py-2 bg-green-100 text-green-700 rounded shrink-0 whitespace-nowrap">Change: {change >= 0 ? change.toLocaleString() : '-'}</div>
+                <input type="number" inputMode="decimal" placeholder="Amount received" value={customerAmount} onChange={e => setCustomerAmount(e.target.value)} className="border border-[#DDE3DD] rounded-xl px-3 min-h-[48px] flex-1 min-w-0" />
+                <div className="px-3 min-h-[48px] flex items-center bg-[#237A52]/10 text-[#1B5138] font-semibold rounded-xl shrink-0 whitespace-nowrap">Change: {change >= 0 ? change.toLocaleString() : '-'}</div>
               </div>
             )}
-            {!splitMode && paymentMethod === 'MOBILE_MONEY' && (
-              <input
-                type="tel" placeholder="07XX XXX XXX (customer's M-Pesa number)"
-                value={mpesaPhone || customers.find(c => c.id === selectedCustomerId)?.phone || ''}
-                onChange={e => setMpesaPhone(e.target.value)}
-                className="w-full border rounded px-3 py-2 mb-3 text-sm"
-              />
+
+            {saleError && (
+              <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{saleError}</div>
             )}
-            <button
-              onClick={(!splitMode && paymentMethod === 'MOBILE_MONEY') ? handleMpesaCheckout : completeSale}
-              disabled={cart.length === 0 || (splitMode && Math.abs(splitRemaining) > 0.01) || (!splitMode && paymentMethod === 'MOBILE_MONEY' && !isOnline)}
-              className="w-full bg-green-600 text-white py-3 rounded font-bold disabled:opacity-50"
-            >
-              {(!splitMode && paymentMethod === 'MOBILE_MONEY') ? 'SEND M-PESA REQUEST' : 'COMPLETE SALE'}
-            </button>
+
+            {/* A prompt that's still live but hidden must stay visible. */}
+            {mpesa.phase === 'pending' && !showMpesaModal && (
+              <button onClick={() => setShowMpesaModal(true)} className="w-full mb-3 flex items-center gap-2 text-left bg-[#C6A15B]/15 border border-[#C6A15B]/40 text-[#7a5f1f] rounded-xl px-3 py-2.5 text-sm font-semibold">
+                <Loader2 size={16} className="animate-spin shrink-0" /> Waiting for the buyer's M-Pesa… tap to open
+              </button>
+            )}
+
+            {/* Sticky so the action is always reachable on a phone. */}
+            <div className="sticky bottom-0 -mx-3 md:-mx-4 px-3 md:px-4 pt-2 pb-2 bg-white border-t border-[#DDE3DD]">
+              <button
+                onClick={isPrompt ? handleMpesaCheckout : completeSale}
+                disabled={!canSubmit}
+                className="w-full min-h-[52px] bg-[#237A52] hover:bg-[#1B5138] text-white rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitLabel}
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Stage 2 -- M-Pesa STK status modal (brief section 36/37).
-          Never says "Paid" until mpesa.phase === 'paid', which only
-          happens on the realtime UPDATE the callback function produces
-          (see useMpesaPayment.js) -- never on the strength of the
-          request having been sent. */}
+      {/* M-Pesa prompt status (brief section 36/37). Never says "paid"
+          until mpesa.phase === 'paid', which only happens on the realtime
+          UPDATE the callback function produces -- see useMpesaPayment.js. */}
       {showMpesaModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-sm shadow-xl p-6 text-center max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-lg mb-1">M-Pesa Payment</h3>
-            <p className="text-sm text-gray-500 mb-4">Amount: <span className="font-semibold text-gray-800">KES {total.toLocaleString()}</span></p>
-
-            {mpesa.phase === 'sending' && (
-              <p className="text-sm text-gray-600 py-4">Sending request…</p>
-            )}
-            {mpesa.phase === 'pending' && (
-              <div className="py-4">
-                <div className="animate-pulse text-amber-600 font-semibold mb-2">Waiting for the customer…</div>
-                <p className="text-sm text-gray-500">M-Pesa request sent. Ask the customer to check their phone.</p>
-                <button onClick={mpesa.refresh} className="mt-3 text-xs text-emerald-700 underline">Check status again</button>
-              </div>
-            )}
-            {mpesa.phase === 'paid' && (
-              <div className="py-4">
-                <div className="text-emerald-700 text-2xl mb-1">✓</div>
-                <p className="font-semibold text-emerald-700">Payment received</p>
-                {mpesa.transaction?.mpesa_receipt_number && (
-                  <p className="text-xs text-gray-400 mt-1">Receipt: {mpesa.transaction.mpesa_receipt_number}</p>
-                )}
-              </div>
-            )}
-            {mpesa.phase === 'failed' && (
-              <div className="py-4">
-                <p className="font-semibold text-red-600 mb-1">
-                  {mpesa.transaction?.status === 'CANCELLED' ? 'Payment cancelled by customer'
-                    : mpesa.transaction?.status === 'TIMED_OUT' ? 'No response — request timed out'
-                    : 'Payment failed'}
-                </p>
-                {mpesa.transaction?.result_desc && <p className="text-xs text-gray-400">{mpesa.transaction.result_desc}</p>}
-                <p className="text-xs text-gray-400 mt-1">The cart has not been cleared — try again or choose another payment method.</p>
-              </div>
-            )}
-            {mpesa.error && <p className="text-sm text-red-600 py-2">{mpesa.error}</p>}
-
-            <button
-              onClick={closeMpesaModal}
-              disabled={mpesa.phase === 'sending'}
-              className="mt-2 w-full bg-gray-100 text-gray-700 py-2 rounded font-semibold disabled:opacity-50"
-            >
-              {mpesa.phase === 'paid' ? 'Done' : mpesa.phase === 'pending' ? 'Cancel / keep cart' : 'Close'}
-            </button>
-          </div>
-        </div>
+        <MpesaPromptModal
+          mpesa={mpesa}
+          total={total}
+          phone={promptPhone}
+          onDone={closeMpesaModal}
+          onHide={() => setShowMpesaModal(false)}
+          onRetry={retryMpesaPrompt}
+          onUseCode={switchToMpesaCode}
+        />
       )}
 
       {/* Phase 14 -- the sale receipt (print/WhatsApp/email). Mounted
@@ -825,20 +989,20 @@ export default function POSPage() {
               value={variableQty}
               onChange={e => setVariableQty(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') confirmVariableQty(); }}
-              className="w-full border rounded px-3 py-2 mb-4 text-lg"
+              className="w-full border border-[#DDE3DD] rounded-lg px-3 py-2.5 mb-4 text-lg"
               placeholder="0.00"
             />
             <div className="flex gap-2">
               <button
                 onClick={() => { setPendingVariableProduct(null); setVariableQty(''); }}
-                className="flex-1 bg-gray-100 text-gray-700 py-2 rounded"
+                className="flex-1 bg-[#F7F6F0] text-[#26352D] py-2 rounded"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmVariableQty}
                 disabled={!variableQty || parseFloat(variableQty) <= 0}
-                className="flex-1 bg-blue-600 text-white py-2 rounded disabled:opacity-50"
+                className="flex-1 bg-[#237A52] text-white py-2 rounded disabled:opacity-50"
               >
                 Add
               </button>
@@ -860,7 +1024,7 @@ export default function POSPage() {
               placeholder="Product Name"
               value={quickCreateForm.name}
               onChange={e => setQuickCreateForm({ ...quickCreateForm, name: e.target.value })}
-              className="w-full border rounded px-3 py-2"
+              className="w-full border border-[#DDE3DD] rounded-lg px-3 py-2.5"
             />
             <input
               required
@@ -868,24 +1032,24 @@ export default function POSPage() {
               placeholder="Selling Price"
               value={quickCreateForm.selling_price}
               onChange={e => setQuickCreateForm({ ...quickCreateForm, selling_price: e.target.value })}
-              className="w-full border rounded px-3 py-2"
+              className="w-full border border-[#DDE3DD] rounded-lg px-3 py-2.5"
             />
             <input
               type="number"
               placeholder="Cost Price (optional)"
               value={quickCreateForm.cost_price}
               onChange={e => setQuickCreateForm({ ...quickCreateForm, cost_price: e.target.value })}
-              className="w-full border rounded px-3 py-2"
+              className="w-full border border-[#DDE3DD] rounded-lg px-3 py-2.5"
             />
             <div className="flex gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setQuickCreateBarcode(null)}
-                className="flex-1 bg-gray-100 text-gray-700 py-2 rounded"
+                className="flex-1 bg-[#F7F6F0] text-[#26352D] py-2 rounded"
               >
                 Cancel
               </button>
-              <button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded">
+              <button type="submit" className="flex-1 bg-[#237A52] text-white py-2 rounded">
                 Save & Add to Sale
               </button>
             </div>
@@ -906,7 +1070,7 @@ export default function POSPage() {
               <input
                 required autoFocus type="number" step="0.01" min="0"
                 value={closeActualCash} onChange={e => setCloseActualCash(e.target.value)}
-                className="w-full border rounded px-3 py-2"
+                className="w-full border border-[#DDE3DD] rounded-lg px-3 py-2.5"
               />
             </div>
             <div>
@@ -914,13 +1078,13 @@ export default function POSPage() {
               <input
                 type="number" step="0.01" min="0"
                 value={closeFloat} onChange={e => setCloseFloat(e.target.value)}
-                className="w-full border rounded px-3 py-2"
+                className="w-full border border-[#DDE3DD] rounded-lg px-3 py-2.5"
                 placeholder="0"
               />
             </div>
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setShowCloseShiftModal(false)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded">Cancel</button>
-              <button type="submit" disabled={closing} className="flex-1 bg-red-600 text-white py-2 rounded disabled:opacity-50">
+              <button type="button" onClick={() => setShowCloseShiftModal(false)} className="flex-1 bg-[#F7F6F0] text-[#26352D] py-2 rounded">Cancel</button>
+              <button type="submit" disabled={closing} className="flex-1 bg-red-600 text-white py-2 rounded-lg disabled:opacity-50">
                 {closing ? 'Closing…' : 'Close Shift'}
               </button>
             </div>

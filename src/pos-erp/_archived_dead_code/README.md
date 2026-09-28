@@ -40,3 +40,6 @@ the full reasoning.
   useProducts.js"). Missing the tenant_id/business_id stamping fix
   that hooks/useProducts.js has. Not imported anywhere; every page
   (POSPage, POSDashboard, ProductsPage) imports from hooks/.
+
+## root/POSDashboard.jsx.dead
+An older copy of the Home screen that sat next to POSApp.jsx. Nothing imported it (POSApp.jsx imports `./pages/POSDashboard`), and it had drifted out of date. Archived during the "My Business" redesign so there is only one Home screen to edit.

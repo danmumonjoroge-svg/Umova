@@ -102,6 +102,11 @@ export async function createOfflineAwareSale(sale, { isOnline }) {
     await decrementCachedStock(item.product_id, item.quantity);
   }
 
+  // Tell the connection pill immediately ("Offline · 3 sales saved")
+  // instead of waiting for its next poll. Purely a UI nudge -- nothing
+  // about the queued sale depends on anyone listening.
+  try { window.dispatchEvent(new Event('pos-outbox-changed')); } catch { /* non-browser env */ }
+
   // A synthetic sale object shaped enough like a real one that the
   // existing receipt/confirmation UI can render it -- but status is
   // 'LOCAL_PENDING', never 'COMPLETED', and sale_number IS the local id

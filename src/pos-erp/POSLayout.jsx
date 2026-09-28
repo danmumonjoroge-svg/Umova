@@ -1,252 +1,118 @@
 // src/pos-erp/POSLayout.jsx
 //
-// Sidebar restructured into collapsible groups (was a flat 19-item list)
-// — Retail/Rentals/Salon/Accounts each collapse into one line until
-// clicked open. Dashboard/Till/Customers/Messages stay top-level: Till
-// because it's the single most-used screen (every sale goes through it —
-// burying it behind a group click adds friction to the most common
-// action), Customers/Messages because they're used across every business
-// type, not specific to one capability group.
+// "My Business" shell -- hybrid navigation (brief sections 3, 4, 5, 15).
 //
-// Groups aren't hidden based on business type — get_pos_profile() doesn't
-// return one (see AUDIT.md Phase 8), so there's no reliable signal to
-// hide "Rentals" for a pure retail shop without also hiding it from a
-// brand-new property business that hasn't created its first unit yet.
-// All groups always show; collapsing (not hiding) is what keeps the
-// sidebar tidy without that problem.
+//   md and up    Forest Green sidebar, always visible. ONE flat line per
+//                module (Home, Sell, Retail, My Money, ...). No expandable
+//                groups -- clicking Retail opens the Retail WORKSPACE (a
+//                full page of cards); the sidebar only says where you are,
+//                the workspace says what you can do.
+//   below md     No permanent sidebar. A fixed bottom bar carries Home,
+//                Sell, Money, People, More. The old off-canvas drawer is
+//                kept as a secondary route to everything (hamburger).
 //
-// RESPONSIVE FIX: the sidebar used to be a permanent w-60 flex sibling —
-// on a ~360-400px phone that's over half the screen gone before any page
-// content renders (confirmed from screenshots: the Till's payment method
-// row and "Close Shift" button were being clipped off the right edge,
-// not actually broken — there just wasn't room left). Below the `md`
-// breakpoint the sidebar is now an off-canvas drawer (fixed, translated
-// off-screen, toggled by a hamburger button in the topbar, with a
-// backdrop and auto-close on navigation); at `md` and up it reverts to
-// the original always-visible static panel. This is the single change
-// that should fix the phone screenshots — the individual pages (Till
-// included) already had reasonable `flex-col md:flex-row` responsive
-// classes of their own, they just never had the width to use them.
+// Everything here reads navigation/navConfig.js -- the sidebar, bottom
+// bar, More screen, topbar title and breadcrumb cannot disagree. Routes
+// are ordinary React Router links, so the browser back button works and
+// nothing is intercepted.
+//
+// History: the previous version had collapsible Retail/Rentals/Salon/
+// Accounts/Admin groups and a slate-950 sidebar, and hid nothing by
+// business type. Capabilities (navigation/CapabilitiesContext.jsx) now
+// decide which of Retail/Rentals/Salon appear; routes are never removed.
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { usePosErpAuth } from "./auth/usePosErpAuth";
 import { useNotifications } from "./hooks/useNotifications";
-// Phase 15: the sidebar's own tiny logo fetch. Deliberately NOT the full
-// useSettings() hook (that also pulls POS settings this layout doesn't
-// need) — just the one field this header actually renders.
 import { settingsService } from "./services/settingsService";
 import POSTopbar from "./POSTopbar";
-import {
-  LayoutDashboard, ShoppingCart, Package, Boxes, Truck, Users, UserRound, Wallet, Receipt,
-  Home, Repeat, Gauge, Scissors, CalendarClock, MessageSquare, Settings, ShieldCheck,
-  LogOut, Store, BarChart3, ChevronDown, ShoppingBag, Building2, Landmark, FileBarChart, X, ClipboardList,
-  HardHat,
-  Smartphone,
-} from "lucide-react";
+import BottomNav from "./components/BottomNav";
+import { CapabilitiesProvider, useCapabilities } from "./navigation/CapabilitiesContext";
+import { resolveLocation, visibleModules } from "./navigation/navConfig";
+import { LogOut, Store, X } from "lucide-react";
 
-// Owner-facing labels (brief §1): plain wording instead of accounting/
-// inventory jargon. Routes/components are untouched — this is a label
-// pass only, nothing here changes what a page does or how it's built.
-// Two items intentionally keep their existing label: "Customers" and
-// "Suppliers" are already plain words, and CustomersPage already has its
-// own "People who owe me" filter/toggle built in (Phase 2) — no separate
-// nav item exists for that, so it isn't relabeled here.
-const TOP_LEVEL = [
-  { to: "/pos/dashboard", label: "Home", icon: LayoutDashboard },
-  { to: "/pos", label: "Sell", icon: ShoppingCart, end: true },
-];
-
-const AFTER_GROUPS = [
-  { to: "/pos/customers", label: "Customers", icon: UserRound },
-  { to: "/pos/messages", label: "Messages", icon: MessageSquare },
-];
-
-// Collapsible groups — one sidebar line each until expanded.
-const GROUPS = [
-  {
-    key: "retail",
-    label: "Retail",
-    icon: ShoppingBag,
-    items: [
-      { to: "/pos/products", label: "My Items", icon: Package },
-      { to: "/pos/inventory", label: "My Stock", icon: Boxes },
-      { to: "/pos/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
-      { to: "/pos/goods-receiving", label: "Receive Stock", icon: Truck },
-      { to: "/pos/suppliers", label: "Suppliers", icon: Users },
-      { to: "/pos/payables", label: "People I Owe", icon: Wallet },
-    ],
-  },
-  {
-    key: "rentals",
-    label: "Rentals",
-    icon: Building2,
-    items: [
-      { to: "/pos/units", label: "Units", icon: Home },
-      { to: "/pos/charges", label: "Charges", icon: Repeat },
-      { to: "/pos/meters", label: "Meters", icon: Gauge },
-    ],
-  },
-  {
-    key: "salon",
-    label: "Salon",
-    icon: Scissors,
-    items: [
-      { to: "/pos/services", label: "Services", icon: Scissors },
-      { to: "/pos/appointments", label: "Appointments", icon: CalendarClock },
-    ],
-  },
-  {
-    key: "accounts",
-    label: "My Accounts",
-    icon: Landmark,
-    items: [
-      { to: "/pos/cash", label: "My Money", icon: Wallet },
-      { to: "/pos/expenses", label: "My Spending", icon: Receipt },
-      { to: "/pos/equipment", label: "My Equipment", icon: HardHat },
-      { to: "/pos/mpesa", label: "M-Pesa", icon: Smartphone },
-      { to: "/pos/reports", label: "My Reports", icon: BarChart3 },
-      { to: "/pos/financials", label: "Financial Statements (Advanced)", icon: FileBarChart },
-    ],
-  },
-  {
-    key: "admin",
-    label: "Admin",
-    icon: Settings,
-    items: [
-      { to: "/pos/settings", label: "Settings", icon: Settings },
-      { to: "/pos/audit", label: "Audit", icon: ShieldCheck },
-    ],
-  },
-];
-
-const ALL_ITEMS = [...TOP_LEVEL, ...AFTER_GROUPS, ...GROUPS.flatMap((g) => g.items)];
-
-export default function POSLayout() {
+function Shell() {
   const { staffName, role, tenant, logout } = usePosErpAuth();
   const location = useLocation();
   const { count: notificationCount } = useNotifications();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { enabled } = useCapabilities();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState(null);
+
   useEffect(() => {
     if (!tenant?.business_id) return;
-    settingsService.getBusinessProfile(tenant.business_id).then(p => setLogoUrl(p?.logo_url || null)).catch(() => {});
+    settingsService.getBusinessProfile(tenant.business_id).then((p) => setLogoUrl(p?.logo_url || null)).catch(() => {});
   }, [tenant?.business_id]);
 
-  const isActive = (to, end) =>
-    end ? location.pathname === to : location.pathname.startsWith(to);
+  // Close the drawer whenever the route changes (only ever visible below md).
+  useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
 
-  // The group containing the current page starts expanded; others start
-  // collapsed. Whichever groups get toggled open by the user stay open
-  // as they navigate within this layout instance (not persisted beyond it).
-  const activeGroupKey = useMemo(
-    () => GROUPS.find((g) => g.items.some((item) => isActive(item.to, item.end)))?.key,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [location.pathname]
-  );
-  const [openGroups, setOpenGroups] = useState(() => new Set(activeGroupKey ? [activeGroupKey] : []));
-  const toggleGroup = (key) => {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  };
+  const loc = resolveLocation(location.pathname);
+  const modules = visibleModules(enabled);
+  const title = loc.page?.label || loc.module?.label
+    || (location.pathname.startsWith("/pos/communication") ? "Notifications" : "My Business");
+  const parent = loc.page && loc.module ? { label: loc.module.label, to: loc.module.to } : null;
 
-  // Closes the mobile drawer whenever the route changes — otherwise
-  // tapping a link would leave the drawer covering the new page. Has no
-  // visible effect on md+ (the drawer state is ignored there via CSS).
-  useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
-
-  const currentPage = ALL_ITEMS.find((item) => isActive(item.to, item.end));
-  const pageTitle = currentPage?.label
-    || (location.pathname.startsWith("/pos/communication") ? "Notifications" : "POS");
-
-  const NavLink = ({ item, indent }) => {
-    const Icon = item.icon;
-    const active = isActive(item.to, item.end);
+  const NavItem = ({ m }) => {
+    const Icon = m.icon;
+    const active = loc.module?.key === m.key;
     return (
       <Link
-        to={item.to}
-        className={`flex items-center gap-3 py-2.5 text-sm transition border-l-4 ${indent ? "pl-9 pr-5" : "px-5"} ${
+        to={m.to}
+        aria-current={active ? "page" : undefined}
+        className={`flex items-center gap-3 px-5 min-h-[44px] text-sm transition border-l-4 ${
           active
-            ? "bg-emerald-800 text-white border-amber-400"
-            : "text-slate-300 hover:bg-slate-900 border-transparent"
+            ? "bg-[#237A52] text-white font-semibold border-[#C6A15B]"
+            : "text-white/75 hover:bg-[#1B5138] hover:text-white border-transparent"
         }`}
       >
-        <Icon size={indent ? 15 : 17} />
-        {item.label}
+        <Icon size={18} />
+        {m.label}
       </Link>
     );
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-slate-50 flex print:h-auto print:overflow-visible">
-      {/* Backdrop — mobile only, only while the drawer is open. Tapping
-          it closes the drawer, same as a nav click would. */}
-      {sidebarOpen && (
-        <div
-          onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 bg-black/40 z-40 md:hidden"
-          aria-hidden="true"
-        />
+    // 100dvh (with h-screen as the fallback for browsers without dvh)
+    // so the phone browser's collapsing URL bar can't push the bottom
+    // bar off-screen.
+    <div className="h-screen overflow-hidden bg-[#F7F6F0] text-[#26352D] flex print:h-auto print:overflow-visible" style={{ height: "100dvh" }}>
+      {drawerOpen && (
+        <div onClick={() => setDrawerOpen(false)} className="fixed inset-0 bg-black/40 z-40 md:hidden" aria-hidden="true" />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-950 text-white flex flex-col shrink-0 print:hidden
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#123C2A] text-white flex flex-col shrink-0 print:hidden
           transform transition-transform duration-200 ease-out
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          ${drawerOpen ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0 md:static md:z-auto md:w-60`}
       >
-        <div className="p-5 flex items-center gap-2 border-b border-slate-800">
+        <div className="p-5 flex items-center gap-2.5 border-b border-white/10">
           {logoUrl ? (
-            <img src={logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
+            <img src={logoUrl} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0 bg-white" />
           ) : (
-            <Store size={20} className="text-amber-400 shrink-0" />
+            <div className="w-9 h-9 rounded-lg bg-[#237A52] flex items-center justify-center shrink-0"><Store size={18} className="text-[#C6A15B]" /></div>
           )}
           <div className="min-w-0 flex-1">
-            <div className="font-bold text-sm truncate">{tenant?.business_name || "POS"}</div>
-            <div className="text-[11px] text-slate-400 font-mono">{tenant?.business_code}</div>
+            <div className="font-bold text-sm truncate">{tenant?.business_name || "My Business"}</div>
+            <div className="text-[11px] text-white/60 font-mono truncate">{tenant?.business_code}</div>
           </div>
-          {/* Close button — mobile only; md+ never shows the drawer state at all */}
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white p-1" aria-label="Close menu">
+          <button onClick={() => setDrawerOpen(false)} className="md:hidden text-white/70 hover:text-white p-2 -mr-2" aria-label="Close menu">
             <X size={18} />
           </button>
         </div>
 
-        <nav className="flex-1 py-3 overflow-y-auto">
-          {TOP_LEVEL.map((item) => <NavLink key={item.label} item={item} />)}
-
-          {GROUPS.map((group) => {
-            const GroupIcon = group.icon;
-            const isOpen = openGroups.has(group.key);
-            const groupHasActive = group.items.some((item) => isActive(item.to, item.end));
-            return (
-              <div key={group.key}>
-                <button
-                  onClick={() => toggleGroup(group.key)}
-                  className={`w-full flex items-center gap-3 px-5 py-2.5 text-sm transition border-l-4 ${
-                    groupHasActive ? "text-white border-amber-400/50" : "text-slate-300 hover:bg-slate-900 border-transparent"
-                  }`}
-                >
-                  <GroupIcon size={17} />
-                  <span className="flex-1 text-left">{group.label}</span>
-                  <ChevronDown size={14} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                </button>
-                {isOpen && group.items.map((item) => <NavLink key={item.label} item={item} indent />)}
-              </div>
-            );
-          })}
-
-          {AFTER_GROUPS.map((item) => <NavLink key={item.label} item={item} />)}
+        <nav className="flex-1 py-3 overflow-y-auto" aria-label="Main">
+          {modules.map((m) => <NavItem key={m.key} m={m} />)}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-white/10" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}>
           <div className="text-sm font-semibold truncate">{staffName || "Staff"}</div>
-          <div className="text-[11px] text-slate-400 capitalize mb-3">{role || "—"}</div>
+          <div className="text-[11px] text-white/60 capitalize mb-3">{role || "—"}</div>
           <button
             onClick={logout}
-            className="w-full flex items-center justify-center gap-2 text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-amber-400 py-2 rounded-xl transition"
+            className="w-full flex items-center justify-center gap-2 text-xs font-semibold bg-[#1B5138] hover:bg-[#237A52] text-white/85 hover:text-white min-h-[40px] rounded-lg transition"
           >
             <LogOut size={14} /> Sign out
           </button>
@@ -255,12 +121,29 @@ export default function POSLayout() {
 
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="print:hidden">
-          <POSTopbar title={pageTitle} notificationCount={notificationCount} onMenuClick={() => setSidebarOpen(true)} />
+          <POSTopbar
+            title={title}
+            parent={parent}
+            notificationCount={notificationCount}
+            onMenuClick={() => setDrawerOpen(true)}
+          />
         </div>
-        <main className="flex-1 min-w-0 overflow-y-auto print:overflow-visible">
+        {/* Bottom padding on phones keeps the last of every page clear of
+            the fixed bottom bar (plus the device's safe-area inset). */}
+        <main className="flex-1 min-w-0 overflow-y-auto pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:pb-0 print:overflow-visible print:pb-0">
           <Outlet />
         </main>
       </div>
+
+      <BottomNav moduleKey={loc.module?.key} />
     </div>
+  );
+}
+
+export default function POSLayout() {
+  return (
+    <CapabilitiesProvider>
+      <Shell />
+    </CapabilitiesProvider>
   );
 }
