@@ -40,7 +40,7 @@ function emptyNewMember() {
   return { name: "", phone: "", national_id: "", role: "member", status: "active" };
 }
 
-export default function MembersDirectory({ chamaId: chamaIdProp }) {
+export default function MembersDirectory({ chamaId: chamaIdProp, onSelectMember, initialStatus }) {
   const { chama, member, hasRole } = useChama();
   const chamaId = chamaIdProp || chama?.id;
   const isOfficial = hasRole(["secretary", "treasurer", "chairperson", "admin"]);
@@ -49,7 +49,7 @@ export default function MembersDirectory({ chamaId: chamaIdProp }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(["all", "active", "pending", "suspended"].includes(initialStatus) ? initialStatus : "all");
 
   const [editing, setEditing] = useState(null); // member row being edited
   const [saving, setSaving] = useState(false);
@@ -63,15 +63,19 @@ export default function MembersDirectory({ chamaId: chamaIdProp }) {
     if (!chamaId) return;
     setLoading(true);
     setError(null);
+    // Officials need the full row (national ID, balances, approval fields).
+    // Everyone else only requests the columns the directory shows them, so a
+    // member's browser never receives colleagues' ID numbers or balances.
+    // (Client-side courtesy only — real enforcement needs RLS; see delivery notes.)
     const { data, error: err } = await supabase
       .from("chama_members")
-      .select("*")
+      .select(isOfficial ? "*" : "id,name,phone,role,status,joined_at")
       .eq("chama_id", chamaId)
       .order("name", { ascending: true });
     if (err) setError(err.message);
     else setMembers(data || []);
     setLoading(false);
-  }, [chamaId]);
+  }, [chamaId, isOfficial]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -231,7 +235,10 @@ export default function MembersDirectory({ chamaId: chamaIdProp }) {
             const meta = STATUS_META[m.status || "active"] || STATUS_META.active;
             const Icon = meta.icon;
             return (
-              <div className={`mdr-card ${meta.tone}`} key={m.id}>
+              <div className={`mdr-card ${meta.tone} ${onSelectMember ? "clickable" : ""}`} key={m.id}
+                   onClick={onSelectMember ? () => onSelectMember(m) : undefined}
+                   onKeyDown={onSelectMember ? (e) => { if (e.key === "Enter" && e.target === e.currentTarget) onSelectMember(m); } : undefined}
+                   role={onSelectMember ? "button" : undefined} tabIndex={onSelectMember ? 0 : undefined}>
                 <div className="mdr-card-top">
                   <div className="mdr-avatar">{(m.name || "?").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase()}</div>
                   <div className="mdr-card-titles">
@@ -256,7 +263,7 @@ export default function MembersDirectory({ chamaId: chamaIdProp }) {
                 )}
 
                 {isOfficial && (
-                  <div className="mdr-actions">
+                  <div className="mdr-actions" onClick={(e) => e.stopPropagation()}>
                     <button className="mdr-edit-btn" onClick={() => openEdit(m)}><Pencil size={12} /> Edit role</button>
                     {m.status === "pending" && (
                       <button className="mdr-approve-btn" onClick={() => approveMember(m)}><UserCheck size={12} /> Approve</button>

@@ -1,226 +1,224 @@
-import React, { useState, useMemo, Suspense } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef, Suspense } from "react";
 import { useChama } from "./ChamaContext";
 import {
-  Wallet, Send, CheckCircle, Settings, Landmark, ScanSearch, Building2,
-  HeartHandshake, CalendarPlus, TrendingUp, Menu, X, LogOut, Coins, Loader2,
-  Users, Gift, Clock, HandCoins, ChevronDown,
+  Home, Wallet, Users, HeartHandshake, MoreHorizontal, Bell, ArrowLeft, Coins, LogOut,
+  Megaphone, FileText, PiggyBank, ChevronDown, Wifi, WifiOff, User,
 } from "lucide-react";
 import "./ChamaDashboardAdvanced.css";
+import "./workspaces/workspaces.css";
+import useOnlineStatus from "./shell/useOnlineStatus";
+import { clearChamaCache } from "./shell/useCachedQuery";
+import { VIEWS, canSee, parseRoute } from "./shell/views";
+import { Spinner, Notice, ViewFrame } from "./shell/ui";
+import { initials, roleLabel } from "./shell/format";
+import LicenseBadge from "./shell/LicenseBadge";
+import { ShieldAlert } from "lucide-react";
 
 // -----------------------------------------------------------------------------
-// ChamaDashboardAdvanced
-// The entire dashboard, built only from the modules in this package —
-// loans/, contributions/, welfare/. No dependency on any original upload.
+// ChamaDashboardAdvanced — the application SHELL only.
 //
-// Sidebar structure: standalone items sit at the top level; "Loans" and
-// "Welfare" are collapsible groups — click the group header to expand it,
-// then pick a specific screen inside (My Loans / Approvals / Rules /
-// Disbursement / Repayments under Loans; Cases / Events / Insights under
-// Welfare). Each leaf item is still individually role-gated exactly as
-// before — grouping only changes how they're presented, not who can see
-// what.
+// Same file name and default export as before, so App.js is unchanged.
+// It owns: navigation (bottom bar on phones, sidebar on tablet/desktop), the
+// top bar, connectivity display, and which workspace is on screen. All
+// business logic still lives in the existing screens, which are composed
+// unchanged into the workspaces (see shell/views.js).
+//
+// Navigation model:
+//   Bottom bar / sidebar answer "Where am I?"  -> Home, Money, Members, Welfare, More
+//   Workspaces answer "What can I do here?"    -> landing page of action cards
+//   No expandable menus anywhere.
 // -----------------------------------------------------------------------------
 
-// Small, always-visible reminder of the chama's own license state — same
-// prepaid-meter framing as the platform manager dashboard, just from the
-// chama's side. Only renders anything when it's actually worth seeing
-// (free mode, or expiry within 14 days); otherwise stays silent so a
-// healthy, fully-paid chama isn't nagged every time someone opens the app.
-function LicenseBadge({ chama }) {
-  if (!chama) return null;
-  if (chama.license_plan === "free") {
-    return <span className="cda-license-badge free"><Gift size={12} /> Free plan</span>;
-  }
-  if (!chama.license_expiry) return null;
-  const d = Math.round((new Date(chama.license_expiry).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000);
-  if (d > 14) return null;
-  if (d < 0) return <span className="cda-license-badge overdue"><Clock size={12} /> Overdue {Math.abs(d)}d</span>;
-  return <span className="cda-license-badge duesoon"><Clock size={12} /> {d === 0 ? "Due today" : `${d}d left`}</span>;
-}
+const HomeWorkspace = React.lazy(() => import("./workspaces/HomeWorkspace"));
+const MoneyWorkspace = React.lazy(() => import("./workspaces/MoneyWorkspace"));
+const LoansWorkspace = React.lazy(() => import("./workspaces/LoansWorkspace"));
+const WelfareWorkspace = React.lazy(() => import("./workspaces/WelfareWorkspace"));
+const MembersWorkspace = React.lazy(() => import("./workspaces/MembersWorkspace"));
+const MemberProfile = React.lazy(() => import("./workspaces/MemberProfile"));
+const MoreWorkspace = React.lazy(() => import("./workspaces/MoreWorkspace"));
 
-const DashboardOverview      = React.lazy(() => import("./DashboardOverview"));
-const MembersDirectory       = React.lazy(() => import("./MembersDirectory"));
-const MemberLoanApplication  = React.lazy(() => import("./loans/MemberLoanApplication"));
-const LoanApprovalQueue      = React.lazy(() => import("./loans/LoanApprovalQueue"));
-const LoanRulesCard          = React.lazy(() => import("./loans/LoanRulesCard"));
-const LoanDisbursementDesk   = React.lazy(() => import("./loans/LoanDisbursementDesk"));
-const LoanRepaymentDesk      = React.lazy(() => import("./loans/LoanRepaymentDesk"));
-const MemberContributionForm = React.lazy(() => import("./contributions/MemberContributionForm"));
-const TreasurerReconciliation = React.lazy(() => import("./contributions/TreasurerReconciliation"));
-const ChamaBankAccounts      = React.lazy(() => import("./contributions/ChamaBankAccounts"));
-const WelfareCaseDesk        = React.lazy(() => import("./welfare/WelfareCaseDesk"));
-const WelfareEventPlanner    = React.lazy(() => import("./welfare/WelfareEventPlanner"));
-const WelfareInsightsReport  = React.lazy(() => import("./welfare/WelfareInsightsReport"));
+const LANDINGS = { home: HomeWorkspace, money: MoneyWorkspace, loans: LoansWorkspace, welfare: WelfareWorkspace, more: MoreWorkspace };
+const TITLES = { home: "Home", money: "Money", loans: "Loans", members: "Members", welfare: "Welfare", more: "More" };
 
-// -----------------------------------------------------------------------------
-// NAV — a mix of standalone items and collapsible groups. Every leaf still
-// carries its own `roles` (null = everyone); a group is only shown at all
-// if at least one of its items passes hasRole().
-// -----------------------------------------------------------------------------
-const NAV = [
-  { type: "item", key: "overview", label: "Overview", icon: TrendingUp, Component: DashboardOverview, roles: null },
-  { type: "item", key: "members", label: "Members", icon: Users, Component: MembersDirectory, roles: null },
-  {
-    type: "group", key: "loans", label: "Loans", icon: Wallet,
-    items: [
-      { key: "my-loan", label: "My Loans", icon: Wallet, Component: MemberLoanApplication, roles: null },
-      { key: "approvals", label: "Approvals", icon: CheckCircle, Component: LoanApprovalQueue, roles: ["secretary", "treasurer", "chairperson"] },
-      { key: "loan-rules", label: "Rules", icon: Settings, Component: LoanRulesCard, roles: ["secretary", "treasurer", "chairperson"] },
-      { key: "disbursement", label: "Disbursement", icon: Landmark, Component: LoanDisbursementDesk, roles: ["treasurer"] },
-      { key: "repayments", label: "Repayments", icon: HandCoins, Component: LoanRepaymentDesk, roles: ["treasurer"] },
-    ],
-  },
-  { type: "item", key: "contribute", label: "Contribute", icon: Send, Component: MemberContributionForm, roles: null },
-  { type: "item", key: "reconciliation", label: "Reconciliation", icon: ScanSearch, Component: TreasurerReconciliation, roles: ["treasurer"] },
-  { type: "item", key: "accounts", label: "Chama Accounts", icon: Building2, Component: ChamaBankAccounts, roles: ["treasurer", "chairperson"] },
-  {
-    type: "group", key: "welfare", label: "Welfare", icon: HeartHandshake,
-    items: [
-      { key: "welfare-cases", label: "Cases", icon: HeartHandshake, Component: WelfareCaseDesk, roles: ["welfare_officer", "secretary", "treasurer", "chairperson"] },
-      { key: "welfare-events", label: "Events", icon: CalendarPlus, Component: WelfareEventPlanner, roles: ["welfare_officer", "secretary", "treasurer", "chairperson"] },
-      { key: "welfare-insights", label: "Insights", icon: TrendingUp, Component: WelfareInsightsReport, roles: ["welfare_officer", "secretary", "treasurer", "chairperson"] },
-    ],
-  },
+// Phone bottom bar: exactly five, as specified. Loans is reached from Money,
+// Home and More on phones (and has its own sidebar entry on larger screens).
+const TABS = [
+  { key: "home", label: "Home", icon: Home },
+  { key: "money", label: "Money", icon: Wallet },
+  { key: "members", label: "Members", icon: Users },
+  { key: "welfare", label: "Welfare", icon: HeartHandshake },
+  { key: "more", label: "More", icon: MoreHorizontal },
+];
+const SIDEBAR = [
+  { key: "home", label: "Home", icon: Home, route: "home" },
+  { key: "money", label: "Money", icon: Wallet, route: "money" },
+  { key: "loans", label: "Loans", icon: PiggyBank, route: "loans" },
+  { key: "members", label: "Members", icon: Users, route: "members" },
+  { key: "welfare", label: "Welfare", icon: HeartHandshake, route: "welfare" },
+  { key: "updates", label: "Updates", icon: Megaphone, route: "more/updates" },
+  { key: "statement", label: "My statement", icon: FileText, route: "money/statement" },
 ];
 
-function flattenLeaves(nav) {
-  const leaves = [];
-  nav.forEach((entry) => {
-    if (entry.type === "item") leaves.push(entry);
-    else entry.items.forEach((i) => leaves.push({ ...i, groupKey: entry.key }));
-  });
-  return leaves;
+class Boundary extends React.Component {
+  state = { err: null };
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidUpdate(prev) { if (prev.resetKey !== this.props.resetKey && this.state.err) this.setState({ err: null }); }
+  render() {
+    if (this.state.err) return <Notice tone="error" icon={ShieldAlert}>Something went wrong showing this screen. Go back and try again.</Notice>;
+    return this.props.children;
+  }
 }
 
-const Loading = () => (
-  <div className="cda-loading"><Loader2 size={22} className="spin" /></div>
-);
+function ConnectionStatus({ online }) {
+  return (
+    <span className={`cm-conn ${online ? "on" : "off"}`} role="status" aria-label={online ? "Connected" : "Offline"}>
+      {online ? <Wifi size={14} /> : <WifiOff size={14} />}<span className="cm-conn-text">{online ? "Online" : "Offline"}</span>
+    </span>
+  );
+}
 
 export default function ChamaDashboardAdvanced() {
   const { chama, member, hasRole, logout } = useChama();
-  const [active, setActive] = useState("overview");
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState(() => new Set());
+  const online = useOnlineStatus();
+  const [route, setRoute] = useState(() => window.history.state?.chamaRoute || "home");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const mainRef = useRef(null);
 
-  // Filter every leaf by role, then drop any group left with zero visible items.
-  const visibleNav = useMemo(() => {
-    return NAV.map((entry) => {
-      if (entry.type === "item") {
-        return !entry.roles || hasRole(entry.roles) ? entry : null;
-      }
-      const items = entry.items.filter((i) => !i.roles || hasRole(i.roles));
-      return items.length > 0 ? { ...entry, items } : null;
-    }).filter(Boolean);
+  // ---- history: hardware/browser Back moves within the app ----
+  useEffect(() => {
+    if (!window.history.state?.chamaRoute) window.history.replaceState({ ...(window.history.state || {}), chamaRoute: route, idx: 0 }, "");
+    const onPop = (e) => setRoute(e.state?.chamaRoute || "home");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [member?.role]);
+  }, []);
 
-  const allLeaves = useMemo(() => flattenLeaves(visibleNav), [visibleNav]);
-  const activeItem = allLeaves.find((i) => i.key === active) || allLeaves[0];
-  const ActiveComponent = activeItem?.Component;
+  const go = useCallback((next) => {
+    setMenuOpen(false);
+    const idx = (window.history.state?.idx || 0) + 1;
+    window.history.pushState({ ...(window.history.state || {}), chamaRoute: next, idx }, "");
+    setRoute(next);
+  }, []);
 
-  const initials = (member?.name || "?")
-    .split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+  const back = useCallback(() => {
+    if ((window.history.state?.idx || 0) > 0) window.history.back();
+    else { const root = parseRoute(route).ws; window.history.replaceState({ ...(window.history.state || {}), chamaRoute: root, idx: 0 }, ""); setRoute(root); }
+  }, [route]);
 
-  const selectLeaf = (key, groupKey) => {
-    setActive(key);
-    setMobileOpen(false);
-    if (groupKey) setOpenGroups((prev) => new Set(prev).add(groupKey));
-  };
+  useEffect(() => { mainRef.current?.scrollTo?.(0, 0); window.scrollTo?.(0, 0); }, [route]);
 
-  const toggleGroup = (key) => {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
+  const doLogout = useCallback(() => { clearChamaCache(); logout(); }, [logout]);
+
+  const parsed = parseRoute(route);
+  const { ws, view, params } = parsed;
+  const isSubView = !!view;
+
+  // Which tab/sidebar entry is "where I am".
+  const activeSide = parsed.key === "money/statement" ? "statement" : parsed.key === "more/updates" ? "updates" : ws;
+  const activeTab = ws === "loans" ? "money" : ws;
+
+  // ---- resolve what to render ----
+  const content = useMemo(() => {
+    if (ws === "members") {
+      if (view && view.startsWith("profile/")) return { title: "Member profile", node: <MemberProfile memberId={view.split("/")[1]} go={go} />, framed: true };
+      return { title: "Members", node: <MembersWorkspace go={go} params={params} />, framed: false };
+    }
+    if (!view) {
+      const Landing = LANDINGS[ws] || HomeWorkspace;
+      return { title: TITLES[ws] || "Home", node: <Landing go={go} onLogout={doLogout} params={params} />, framed: false };
+    }
+    const entry = VIEWS[parsed.key];
+    if (!entry) return { title: "Not found", node: <Notice tone="error" icon={ShieldAlert}>That screen does not exist.</Notice>, framed: true };
+    // hasRole() — the existing permission check — decides. (The screens and
+    // the database enforce it again; this just avoids rendering a dead end.)
+    if (!canSee(hasRole, entry.roles)) return { title: entry.title, node: <Notice tone="error" icon={ShieldAlert}>You do not have access to this part of the Chama.</Notice>, framed: true };
+    const C = entry.C;
+    return { title: entry.title, node: <C chamaId={chama?.id} go={go} params={params} {...(entry.props || {})} />, framed: true };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route, member?.role, chama?.id]);
+
+  const backLabel = ws === "members" ? "Members" : TITLES[ws] || "Back";
 
   return (
-    <div className="cda-shell">
-      {mobileOpen && <div className="cda-overlay" onClick={() => setMobileOpen(false)} />}
-
-      <aside className={`cda-sidebar ${mobileOpen ? "open" : ""}`}>
-        <div className="cda-sidebar-head">
-          <span className="cda-logo"><Coins size={18} /></span>
+    <div className="cm-app">
+      <aside className="cm-sidebar" aria-label="Main navigation">
+        <div className="cm-side-head">
+          <span className="cm-logo"><Coins size={18} /></span>
           <div>
-            <h1>{chama?.name || "Chama ERP"}</h1>
+            <h1>{chama?.name || "My Chama"}</h1>
             <small>{chama?.chama_no}</small>
             <LicenseBadge chama={chama} />
           </div>
-          <button className="cda-close-btn" onClick={() => setMobileOpen(false)}><X size={16} /></button>
         </div>
-
-        <div className="cda-user">
-          <span className="cda-avatar">{initials}</span>
-          <div>
-            <p>{member?.name}</p>
-            <span className="cda-role-badge">{member?.role}</span>
-          </div>
-        </div>
-
-        <nav className="cda-nav">
-          {visibleNav.map((entry) => {
-            if (entry.type === "item") {
-              return (
-                <button
-                  key={entry.key}
-                  className={`cda-nav-item ${active === entry.key ? "active" : ""}`}
-                  onClick={() => selectLeaf(entry.key, null)}
-                >
-                  <entry.icon size={17} />
-                  <span>{entry.label}</span>
-                </button>
-              );
-            }
-
-            const isOpen = openGroups.has(entry.key);
-            const groupHasActive = entry.items.some((i) => i.key === active);
-            return (
-              <div className="cda-nav-group" key={entry.key}>
-                <button
-                  className={`cda-nav-item cda-nav-group-head ${groupHasActive ? "active" : ""}`}
-                  onClick={() => toggleGroup(entry.key)}
-                >
-                  <entry.icon size={17} />
-                  <span>{entry.label}</span>
-                  <ChevronDown size={14} className={`cda-chevron ${isOpen || groupHasActive ? "open" : ""}`} />
-                </button>
-                {(isOpen || groupHasActive) && (
-                  <div className="cda-nav-subitems">
-                    {entry.items.map((item) => (
-                      <button
-                        key={item.key}
-                        className={`cda-nav-subitem ${active === item.key ? "active" : ""}`}
-                        onClick={() => selectLeaf(item.key, entry.key)}
-                      >
-                        <item.icon size={14} />
-                        <span>{item.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <nav className="cm-side-nav">
+          {SIDEBAR.map((s) => (
+            <button key={s.key} className={`cm-side-item ${activeSide === s.key ? "active" : ""}`} onClick={() => go(s.route)} aria-current={activeSide === s.key ? "page" : undefined}>
+              <s.icon size={18} /><span>{s.label}</span>
+            </button>
+          ))}
         </nav>
-
-        <button className="cda-logout" onClick={logout}>
-          <LogOut size={15} /> Log out
-        </button>
+        <div className="cm-side-foot">
+          <button className={`cm-side-item ${activeSide === "more" ? "active" : ""}`} onClick={() => go("more")}><MoreHorizontal size={18} /><span>More</span></button>
+          <button className="cm-side-item" onClick={doLogout}><LogOut size={18} /><span>Log out</span></button>
+        </div>
       </aside>
 
-      <div className="cda-main">
-        <header className="cda-topbar">
-          <button className="cda-menu-btn" onClick={() => setMobileOpen(true)}><Menu size={18} /></button>
-          <h2>{activeItem?.label}</h2>
+      <div className="cm-main">
+        <header className="cm-topbar">
+          {isSubView ? (
+            <button className="cm-icon-btn light cm-top-back" onClick={back} aria-label="Back"><ArrowLeft size={20} /></button>
+          ) : (
+            <span className="cm-logo sm cm-top-logo"><Coins size={16} /></span>
+          )}
+          <div className="cm-top-title">
+            <h1>{isSubView ? content.title : (ws === "home" ? (chama?.name || "Home") : content.title)}</h1>
+          </div>
+          <div className="cm-top-right">
+            <ConnectionStatus online={online} />
+            <button className="cm-icon-btn light" onClick={() => go("more/updates")} aria-label="Updates"><Bell size={19} /></button>
+            <div className="cm-profile-menu">
+              <button className="cm-avatar-btn" onClick={() => setMenuOpen((v) => !v)} aria-label="Your account" aria-expanded={menuOpen}>
+                <span className="cm-avatar">{initials(member?.name)}</span><ChevronDown size={13} className="cm-avatar-chev" />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="cm-menu-scrim" onClick={() => setMenuOpen(false)} />
+                  <div className="cm-menu" role="menu">
+                    <div className="cm-menu-who"><strong>{member?.name}</strong><small>{roleLabel(member?.role)}</small></div>
+                    <button role="menuitem" onClick={() => go(`members/profile/${member?.id}`)}><User size={15} /> My profile</button>
+                    <button role="menuitem" onClick={() => go("money/statement")}><FileText size={15} /> My statement</button>
+                    <button role="menuitem" onClick={doLogout}><LogOut size={15} /> Log out</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </header>
 
-        <main className="cda-content">
-          <Suspense fallback={<Loading />}>
-            {ActiveComponent && <ActiveComponent chamaId={chama?.id} />}
-          </Suspense>
+        {!online && (
+          <div className="cm-offline-banner" role="status">
+            <WifiOff size={14} /> You're offline. You can look at information saved on this phone. Sending contributions, applying for loans and other money actions need a connection — nothing you do offline is saved.
+          </div>
+        )}
+
+        <main className="cm-content" ref={mainRef}>
+          <Boundary resetKey={route}>
+            <Suspense fallback={<Spinner />}>
+              {content.framed
+                ? <ViewFrame title={content.title} onBack={back} backLabel={backLabel}>{content.node}</ViewFrame>
+                : content.node}
+            </Suspense>
+          </Boundary>
         </main>
       </div>
+
+      <nav className="cm-bottomnav" aria-label="Main navigation">
+        {TABS.map((t) => (
+          <button key={t.key} className={activeTab === t.key ? "active" : ""} onClick={() => go(t.key)} aria-current={activeTab === t.key ? "page" : undefined}>
+            <t.icon size={22} /><span>{t.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

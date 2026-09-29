@@ -38,6 +38,7 @@ chama-erp-advanced/
    - `004_register_chama.sql` — self-service "start a new chama" flow.
    - `005_billing.sql` — payment records + prepaid-style automatic license
      extension. See section 5 below.
+   - `007_announcements.sql` — Chama Updates (mobile redesign).
 3. Wire it into `App.js` (see the accompanying updated `App.js` — it now
    imports only `ChamaContext`, `auth/AuthGate`, and
    `ChamaDashboardAdvanced` from this folder; nothing else).
@@ -60,6 +61,8 @@ migration `002` just adds a `user_id` column linking it to the new global
 `chama_users` (phone + bcrypt password hash, verified entirely inside
 Postgres via `pgcrypto` — a password is never compared in JavaScript and a
 hash never reaches the browser).
+
+> **Updated:** the sidebar/collapsible-group shell described in this section was replaced by a mobile-first workspace shell. See `MOBILE_REDESIGN.md`; the role table below still reflects who can reach each screen.
 
 ## 3. The dashboard
 

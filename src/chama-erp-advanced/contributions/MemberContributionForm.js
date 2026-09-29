@@ -31,14 +31,16 @@ const emptyForm = { bank_account_id: "", amount: "", contribution_type: "savings
 
 function formatKES(v) { return `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`; }
 
-export default function MemberContributionForm({ chamaId: chamaIdProp }) {
+export default function MemberContributionForm({ chamaId: chamaIdProp, initialType }) {
   const { chama, member } = useChama();
   const chamaId = chamaIdProp || chama?.id;
 
   const [accounts, setAccounts] = useState([]);
   const [history, setHistory] = useState([]);
+  const [myLoans, setMyLoans] = useState([]); // loans this member can repay (needed for loan_repayment)
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState(emptyForm);
+  const startForm = { ...emptyForm, contribution_type: TYPES.some((t) => t.value === initialType) ? initialType : emptyForm.contribution_type };
+  const [form, setForm] = useState(startForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
@@ -46,10 +48,12 @@ export default function MemberContributionForm({ chamaId: chamaIdProp }) {
   const load = useCallback(async () => {
     if (!chamaId || !member?.id) return;
     setLoading(true);
-    const [accRes, histRes] = await Promise.all([
+    const [accRes, histRes, loanRes] = await Promise.all([
       supabase.from("chama_bank_accounts").select("*").eq("chama_id", chamaId).eq("is_active", true),
       supabase.from("chama_contribution_requests").select("*").eq("chama_id", chamaId).eq("member_id", member.id).order("created_at", { ascending: false }).limit(25),
+      supabase.from("chama_loans").select("id,amount,balance").eq("chama_id", chamaId).eq("member_id", member.id).eq("disbursed", true).eq("status", "active"),
     ]);
+    setMyLoans(loanRes.data || []);
     setAccounts(accRes.data || []);
     setHistory(histRes.data || []);
     setLoading(false);
@@ -63,6 +67,10 @@ export default function MemberContributionForm({ chamaId: chamaIdProp }) {
     if (!form.bank_account_id) return setError("Select which chama account you paid into.");
     if (!form.amount || Number(form.amount) <= 0) return setError("Enter a valid amount.");
     if (form.payment_method !== "CASH" && !form.transaction_ref.trim()) return setError("Enter the transaction reference.");
+    // A loan repayment must say WHICH loan (sql/006 refuses to post one without it).
+    if (form.contribution_type === "loan_repayment" && !form.loan_id) return setError(myLoans.length ? "Choose which loan you are repaying." : "You have no active loan to repay.");
+    // Nothing is queued while offline, so say plainly that nothing was sent.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return setError("You're offline, so this was NOT sent. Connect and try again.");
 
     setSubmitting(true);
     const { error: err } = await supabase.from("chama_contribution_requests").insert([{
@@ -75,6 +83,7 @@ export default function MemberContributionForm({ chamaId: chamaIdProp }) {
       payment_method: form.payment_method,
       transaction_ref: form.transaction_ref || null,
       member_notes: form.member_notes || null,
+      loan_id: form.contribution_type === "loan_repayment" ? form.loan_id : null,
       status: "PENDING",
     }]);
     setSubmitting(false);
@@ -82,7 +91,7 @@ export default function MemberContributionForm({ chamaId: chamaIdProp }) {
 
     setToast("Contribution submitted — the treasurer will verify it against the account.");
     setTimeout(() => setToast(null), 4000);
-    setForm(emptyForm);
+    setForm(startForm);
     load();
   };
 
@@ -119,6 +128,16 @@ export default function MemberContributionForm({ chamaId: chamaIdProp }) {
               {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </label>
+
+          {form.contribution_type === "loan_repayment" && (
+            <label className="mcf-span-2">
+              Which loan are you repaying?
+              <select value={form.loan_id || ""} onChange={(e) => setForm((f) => ({ ...f, loan_id: e.target.value }))} required>
+                <option value="">{myLoans.length ? "Select loan" : "No active loan"}</option>
+                {myLoans.map((l) => <option key={l.id} value={l.id}>{formatKES(l.amount)} loan — {formatKES(l.balance ?? l.amount)} still owed</option>)}
+              </select>
+            </label>
+          )}
 
           <label>
             Date paid

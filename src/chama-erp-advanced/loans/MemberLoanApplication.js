@@ -66,7 +66,7 @@ function normalizeApplication(row) {
   };
 }
 
-export default function MemberLoanApplication({ chamaId: chamaIdProp }) {
+export default function MemberLoanApplication({ chamaId: chamaIdProp, startOpen = false }) {
   const { chama, member } = useChama();
   const chamaId = chamaIdProp || chama?.id;
 
@@ -74,7 +74,7 @@ export default function MemberLoanApplication({ chamaId: chamaIdProp }) {
   const [myApps, setMyApps] = useState([]);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(!!startOpen);
   const [form, setForm] = useState(emptyForm);
   const [guarantors, setGuarantors] = useState([emptyGuarantor()]);
   const [submitting, setSubmitting] = useState(false);
