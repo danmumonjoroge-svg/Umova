@@ -158,7 +158,7 @@ export default function ShareCapital({ memberNo: propMemberNo }) {
     return (
       <div className="flex flex-col items-center justify-center p-24 space-y-4">
         <div className="w-10 h-10 border-4 border-green-800 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-400 font-bold text-[11px] tracking-widest uppercase animate-pulse">Computing Share Balance Vectors...</p>
+        <p className="text-slate-400 font-bold text-[11px] tracking-widest uppercase animate-pulse">Loading your shares...</p>
       </div>
     );
   }
@@ -235,7 +235,7 @@ export default function ShareCapital({ memberNo: propMemberNo }) {
                   : "bg-green-900 hover:bg-green-950 text-white shadow-sm"
               }`}
             >
-              {showStatement ? "Hide Asset Ledger" : "Expose Share Capital Matrix"}
+              {showStatement ? "Hide transactions" : "Show transactions"}
             </button>
           </div>
         </div>

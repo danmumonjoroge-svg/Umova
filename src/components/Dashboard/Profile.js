@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
-import PasskeySettings from "../Auth/PasskeySettings";
 import { 
   User, ShieldCheck, Mail, Phone, FileText, 
   Users, Camera, CheckCircle, Save, X, RefreshCw 
@@ -169,7 +168,7 @@ export default function Profile({ memberNo: propMemberNo }) {
     return (
       <div className="flex flex-col items-center justify-center p-24 space-y-4">
         <div className="w-10 h-10 border-4 border-green-800 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-400 font-bold text-[11px] tracking-widest uppercase animate-pulse">Syncing Registry Credentials...</p>
+        <p className="text-slate-400 font-bold text-[11px] tracking-widest uppercase animate-pulse">Loading your profile...</p>
       </div>
     );
   }
@@ -219,7 +218,7 @@ export default function Profile({ memberNo: propMemberNo }) {
           }`}
         >
           {editMode ? <X size={14} /> : <User size={14} />}
-          {editMode ? "Cancel Revision" : "Modify Registry Profile"}
+          {editMode ? "Cancel" : "Edit Profile"}
         </button>
 
         <div className="absolute -right-12 -bottom-12 text-slate-500/5 pointer-events-none transform scale-150 rotate-45 font-black text-9xl select-none">KYC</div>
@@ -268,7 +267,7 @@ export default function Profile({ memberNo: propMemberNo }) {
         {editMode && (
           <form onSubmit={handleSaveProfile} className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5 main-content-fade">
             <div className="border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-black text-slate-800 tracking-tight uppercase">Registry Revision Ledger Form</h3>
+              <h3 className="text-sm font-black text-slate-800 tracking-tight uppercase">Edit your details</h3>
               <p className="text-xs text-slate-400 font-medium mt-0.5">Updated data undergoes strict verification against structural regulatory systems.</p>
             </div>
 
@@ -283,7 +282,7 @@ export default function Profile({ memberNo: propMemberNo }) {
 
             {/* AVATAR DOCUMENT FILE CAPTURED STRIP */}
             <div className="space-y-2 pt-1">
-              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Modify Identification Image Asset</label>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Change profile photo</label>
               <div className="flex items-center justify-center w-full">
                 <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-200 border-dashed rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100/70 transition duration-150 px-4">
                   <div className="flex flex-col items-center justify-center pt-2 pb-2 text-center">
@@ -309,7 +308,7 @@ export default function Profile({ memberNo: propMemberNo }) {
                 className="flex-1 bg-green-950 hover:bg-green-900 disabled:opacity-60 text-white font-bold text-xs tracking-tight py-3 rounded-xl shadow-sm transition flex items-center justify-center gap-2"
               >
                 {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                {saving ? "Executing Asset Uploads..." : "Commit Registry Revisions (KYC Update)"}
+                {saving ? "Saving..." : "Save changes"}
               </button>
             </div>
           </form>
@@ -320,7 +319,6 @@ export default function Profile({ memberNo: propMemberNo }) {
       {/* Sign-in security — lets the member enrol this device for
           fingerprint login. Without this section nothing in the app ever
           called registerPasskey(), so no account could have a passkey. */}
-      <PasskeySettings />
     </div>
   );
 }

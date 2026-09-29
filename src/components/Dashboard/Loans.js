@@ -28,8 +28,8 @@ export default function Loan() {
   const [ledger,     setLedger]     = useState([]);
   const [allMembers, setAllMembers] = useState([]);
 
-  const [showApply,     setShowApply]     = useState(false);
-  const [showStatement, setShowStatement] = useState(false);
+  const [showApply,     setShowApply]     = useState(() => new URLSearchParams(window.location.search).get("action") === "apply");
+  const [showStatement, setShowStatement] = useState(() => new URLSearchParams(window.location.search).get("action") === "statement");
   const [loading,       setLoading]       = useState(false);
   const [files,         setFiles]         = useState([]);
   const [dataReady,     setDataReady]     = useState(false);

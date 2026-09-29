@@ -12,9 +12,12 @@ import SetPassword     from "./components/Auth/SetPassword";
 import PublicSite      from "./Public/PublicSite";
 import UmovaFinancialPage from "./Public/UmovaFinancialPage";
 
-import DashboardMain from "./components/Dashboard/DashboardMain";
-import DashboardHome from "./components/Dashboard/DashboardHome";
-import Profile       from "./components/Dashboard/Profile";
+import MemberAppShell from "./member-app/MemberAppShell";
+import HomeWorkspace from "./member-app/HomeWorkspace";
+import MoneyWorkspace from "./member-app/MoneyWorkspace";
+import LoansWorkspace from "./member-app/LoansWorkspace";
+import StatementsWorkspace from "./member-app/StatementsWorkspace";
+import { MoreWorkspace, NotificationsWorkspace, SecurityWorkspace, ProfileWorkspace } from "./member-app/MoreWorkspace";
 import Savings       from "./components/Dashboard/Savings";
 import ShareCapital  from "./components/Dashboard/ShareCapital";
 import Loans         from "./components/Dashboard/Loans";
@@ -327,14 +330,20 @@ function App() {
       <Route path="/redirect" element={<PostLoginRedirect />} />
 
       <Route path="/member" element={<MemberGuard />}>
-        <Route element={<DashboardMain />}>
+        <Route element={<MemberAppShell />}>
           <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardHome />} />
-          <Route path="profile" element={<Profile />} />
+          <Route path="dashboard" element={<HomeWorkspace />} />
+          <Route path="money" element={<MoneyWorkspace />} />
           <Route path="savings" element={<Savings />} />
           <Route path="shares" element={<ShareCapital />} />
-          <Route path="loans" element={<Loans />} />
+          <Route path="loans" element={<LoansWorkspace />} />
+          <Route path="loans/manage" element={<Loans />} />
+          <Route path="statements" element={<StatementsWorkspace />} />
           <Route path="statement" element={<Statements />} />
+          <Route path="more" element={<MoreWorkspace />} />
+          <Route path="profile" element={<ProfileWorkspace />} />
+          <Route path="notifications" element={<NotificationsWorkspace />} />
+          <Route path="security" element={<SecurityWorkspace />} />
         </Route>
       </Route>
 

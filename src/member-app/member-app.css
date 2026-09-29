@@ -1,0 +1,62 @@
+/* Umova member app — design tokens + shared classes (shared by SACCO / Chama / My Business shells) */
+.uma{--forest:#123C2A;--emerald:#237A52;--gold:#C6A15B;--ivory:#F7F6F0;--white:#fff;--text:#26352D;--muted:#68756D;--line:#E4E2D6;--warn:#9A6B12;--bad:#A23B2B;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--text);background:var(--ivory);min-height:100vh;min-height:100dvh}
+.uma *{box-sizing:border-box}
+.uma a{color:inherit;text-decoration:none}
+.uma button{font:inherit;cursor:pointer}
+.uma-side{display:none}
+.uma-main{min-width:0;display:flex;flex-direction:column;min-height:100dvh}
+.uma-top{position:sticky;top:0;z-index:20;background:var(--ivory);display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+.uma-brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--forest)}
+.uma-brand img{width:30px;height:30px;object-fit:contain}
+.uma-brand small{display:block;font-weight:500;color:var(--muted);font-size:11px}
+.uma-icon-btn{position:relative;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--white);color:var(--forest);display:grid;place-items:center}
+.uma-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--gold);color:var(--forest);font-size:11px;font-weight:700;display:grid;place-items:center}
+.uma-content{flex:1;padding:16px 16px 96px;width:100%;max-width:1040px;margin:0 auto}
+.uma-h1{font-size:22px;font-weight:700;color:var(--forest);margin:4px 0 2px}
+.uma-sub{color:var(--muted);font-size:14px;margin:0 0 16px}
+.uma-grid{display:grid;gap:12px}
+.uma-card{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:16px}
+.uma-card h3{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--muted)}
+.uma-card--green{background:var(--forest);color:#fff;border-color:var(--forest)}
+.uma-card--green h3{color:#CFE3D8}
+.uma-amt{font-size:26px;font-weight:700;letter-spacing:-.3px;font-variant-numeric:tabular-nums;color:var(--forest)}
+.uma-card--green .uma-amt{color:#fff}
+.uma-note{font-size:13px;color:var(--muted);margin-top:4px}
+.uma-card--green .uma-note{color:#CFE3D8}
+.uma-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--emerald);background:var(--emerald);color:#fff;font-weight:600;font-size:14px}
+.uma-btn--ghost{background:transparent;color:var(--emerald)}
+.uma-btn--gold{background:var(--gold);border-color:var(--gold);color:var(--forest)}
+.uma-btn:disabled{opacity:.5;cursor:default}
+.uma-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.uma-row:last-child{border-bottom:0}
+.uma-row b{font-weight:600}
+.uma-in{color:var(--emerald)} .uma-out{color:var(--bad)}
+.uma-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.uma-pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px;background:#EAF2EC;color:var(--emerald)}
+.uma-pill--warn{background:#F6EBD3;color:var(--warn)}
+.uma-empty{color:var(--muted);font-size:14px;padding:8px 0}
+.uma-tile{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:14px;border-radius:14px;background:var(--white);border:1px solid var(--line);min-height:76px;color:var(--forest);font-weight:600;font-size:14px}
+.uma-panel{position:fixed;top:64px;right:12px;left:12px;max-height:70vh;overflow:auto;z-index:40;background:var(--white);border:1px solid var(--line);border-radius:16px;padding:8px 16px;box-shadow:0 8px 24px rgba(18,60,42,.12)}
+.uma-nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:grid;grid-template-columns:repeat(5,1fr);background:var(--white);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0)}
+.uma-nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:60px;font-size:11px;font-weight:600;color:var(--muted)}
+.uma-nav a.on{color:var(--emerald)}
+.uma-nav a.on svg{color:var(--gold)}
+.uma-secure{font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:4px}
+.uma-scroll{overflow-x:auto}
+@media(min-width:600px){.uma-grid.c2{grid-template-columns:repeat(2,1fr)}.uma-grid.c3{grid-template-columns:repeat(3,1fr)}.uma-panel{left:auto;width:360px}}
+@media(min-width:900px){
+  .uma{display:grid;grid-template-columns:208px 1fr}
+  .uma-side{display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100dvh;background:var(--forest);color:#fff;padding:20px 12px}
+  .uma-side .uma-brand{color:#fff;padding:0 8px 16px}.uma-side .uma-brand small{color:#CFE3D8}
+  .uma-side a,.uma-side button.lnk{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:12px;color:#DCEBE2;font-weight:500;font-size:14px;background:none;border:0;text-align:left;width:100%}
+  .uma-side a.on{background:rgba(198,161,91,.18);color:#fff;box-shadow:inset 3px 0 0 var(--gold)}
+  .uma-side a:hover,.uma-side button.lnk:hover{background:rgba(255,255,255,.08)}
+  .uma-side .sp{flex:1}
+  .uma-nav{display:none}
+  .uma-content{padding:28px 32px 48px}
+  .uma-h1{font-size:26px}
+  .uma-panel{top:68px;right:32px}
+  .uma-top .uma-brand{display:none}
+  .uma-top{justify-content:flex-end;padding:12px 32px}
+}

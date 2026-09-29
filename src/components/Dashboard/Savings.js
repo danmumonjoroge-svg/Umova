@@ -257,7 +257,7 @@ export default function Savings({ memberNo: propMemberNo }) {
                   : "bg-green-900 hover:bg-green-950 text-white shadow-sm"
               }`}
             >
-              {showStatement ? "Hide Ledger Workspace" : "Open Statement Matrix"}
+              {showStatement ? "Hide transactions" : "Show transactions"}
             </button>
           </div>
         </div>
