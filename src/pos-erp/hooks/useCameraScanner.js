@@ -14,11 +14,26 @@ export function useCameraScanner({ onScan, cooldownMs = DEFAULT_DUPLICATE_SCAN_C
   const streamRef = useRef(null);
   const decoderRef = useRef(null);
   const cooldownRef = useRef(new ScanCooldown(cooldownMs));
+  // Bumped by every start() and stop(). A start() that finds the counter has
+  // moved on while it was awaiting (modal closed, camera toggled, React
+  // StrictMode's mount/unmount/mount) is stale and must bail out quietly.
+  const runIdRef = useRef(0);
+  // Always call the latest onScan (start() only runs when `active` flips, so
+  // capturing onScan directly would hold a stale closure).
+  const onScanRef = useRef(onScan);
+  useEffect(() => { onScanRef.current = onScan; }, [onScan]);
   const [status, setStatus] = useState('idle'); // idle | requesting | active | denied | unavailable | error
   const [errorMessage, setErrorMessage] = useState(null);
 
   const stop = useCallback(() => {
-    decoderRef.current?.stop();
+    runIdRef.current += 1; // invalidate any start() still awaiting
+    try {
+      decoderRef.current?.stop();
+    } catch (err) {
+      // Teardown must never throw (it runs during unmount) and must never
+      // stop us releasing the camera below.
+      console.warn('[SCANNER] decoder stop failed:', err?.message || err);
+    }
     decoderRef.current = null;
     if (streamRef.current) {
       stopMediaStream(streamRef.current);
@@ -28,28 +43,68 @@ export function useCameraScanner({ onScan, cooldownMs = DEFAULT_DUPLICATE_SCAN_C
   }, []);
 
   const start = useCallback(async () => {
+    const runId = ++runIdRef.current;
+    const isStale = () => runIdRef.current !== runId;
+
     setStatus('requesting');
     setErrorMessage(null);
+    let stream = null;
     try {
-      const stream = await startCameraStream();
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      stream = await startCameraStream();
+      // Closed/toggled while the permission prompt or camera was opening:
+      // release the camera we just got and stop, without reporting an error.
+      if (isStale() || !videoRef.current) {
+        stopMediaStream(stream);
+        return;
       }
+      streamRef.current = stream;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      if (isStale() || !videoRef.current) {
+        stopMediaStream(stream);
+        if (streamRef.current === stream) streamRef.current = null;
+        return;
+      }
+
       const decoder = await createVideoDecoder(videoRef.current);
+      if (isStale()) {
+        decoder.stop?.();
+        stopMediaStream(stream);
+        if (streamRef.current === stream) streamRef.current = null;
+        return;
+      }
       decoderRef.current = decoder;
-      decoder.start(
+      // decoder.start() is async (ZXing) — await it so its rejection is
+      // caught below instead of surfacing as an unhandled promise rejection.
+      await decoder.start(
         (result) => {
           if (!cooldownRef.current.shouldAccept(result.barcode)) return;
-          onScan?.(result);
+          onScanRef.current?.(result);
         },
-        (err) => {
+        () => {
           // Per-frame decode misses are normal and not surfaced as errors.
         }
       );
+      if (isStale()) {
+        // stop() ran while ZXing was still starting; its controls only exist
+        // now, so shut the decode loop down again.
+        decoder.stop?.();
+        stopMediaStream(stream);
+        if (streamRef.current === stream) streamRef.current = null;
+        return;
+      }
       setStatus('active');
     } catch (err) {
+      if (isStale()) {
+        // Torn down mid-start (e.g. play() interrupted) — not a real failure.
+        if (stream) stopMediaStream(stream);
+        return;
+      }
+      console.error('[SCANNER] camera start failed:', err?.name || '', err?.message || err);
+      if (streamRef.current) {
+        stopMediaStream(streamRef.current);
+        streamRef.current = null;
+      }
       if (err.message === 'PERMISSION_DENIED') {
         setStatus('denied');
         setErrorMessage('Camera permission was denied. Please enable camera access or use another scanner.');
@@ -58,7 +113,7 @@ export function useCameraScanner({ onScan, cooldownMs = DEFAULT_DUPLICATE_SCAN_C
         setErrorMessage('Camera is unavailable.');
       }
     }
-  }, [onScan]);
+  }, []);
 
   useEffect(() => {
     if (active) start();

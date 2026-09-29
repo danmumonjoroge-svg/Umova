@@ -46,6 +46,8 @@ function logScanFailure(stage, err) {
     status: err?.status ?? null,
     code: err?.code ?? null,
     message: err?.message ?? String(err),
+    details: err?.details ?? null, // for FK/unique errors this names the constraint
+    hint: err?.hint ?? null,
   });
 }
 

@@ -32,7 +32,10 @@ async function probeReachable() {
     const timeout = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(`${SUPABASE_URL}/rest/v1/`, { method: 'HEAD', signal: controller.signal });
     clearTimeout(timeout);
-    return res.ok || res.status === 404; // 404 on the bare REST root still proves reachability
+    // ANY HTTP response proves the server is reachable. The bare REST root
+    // answers 401 to unauthenticated requests on current Supabase, and that
+    // must not be read as "offline" (this probe is about reachability, not auth).
+    return res.status < 500;
   } catch {
     return false;
   }

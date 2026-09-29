@@ -94,8 +94,11 @@ async function createZXingDecoder(videoElement) {
       });
     },
     stop() {
-      controls?.stop();
-      reader.reset();
+      // controls.stop() is the supported way to end the decode loop in
+      // current @zxing/browser. BrowserMultiFormatReader.reset() was removed
+      // in newer versions, so only call it where it still exists.
+      try { controls?.stop(); } catch (e) { /* already stopped */ }
+      try { if (typeof reader.reset === 'function') reader.reset(); } catch (e) { /* ignore */ }
     },
   };
 }
