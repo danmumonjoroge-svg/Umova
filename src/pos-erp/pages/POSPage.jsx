@@ -261,6 +261,8 @@ export default function POSPage() {
 
   const { processScan, lastOutcome, recentScans } = useBarcodeScanner({
     userId: staffId,
+    tenantId: tenant?.id,
+    businessId: tenant?.business_id,
     contextType: 'SALE',
     onResolved: handleScanResolved,
     hardwareEnabled: !!activeShift, // only listen for USB/Bluetooth scans once a shift is open

@@ -16,9 +16,10 @@
 // ('active'/'inactive'), same pattern as supplierService.js.
 
 import { posSupabase as supabase } from './posSupabaseClient';
+import { PRODUCT_UNIT_EMBED } from './productFields';
 
 const PRODUCT_FIELDS =
-  '*, category:lb_product_categories(id,name), unit:lb_product_units(id,name,code)';
+  `*, category:lb_product_categories(id,name), ${PRODUCT_UNIT_EMBED}`;
 
 export const productService = {
   async getAll({ categoryId, search, activeOnly = false, page = 1, limit = 50 } = {}) {

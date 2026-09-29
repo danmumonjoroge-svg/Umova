@@ -1915,3 +1915,10 @@ Files: `pages/CustomersPage.jsx`, `pages/SuppliersPage.jsx`.
 
 **Not tested against a live database** — same standing limitation
 throughout this session.
+
+## Scanner Supabase integration fix
+- scannerService.js now uses posSupabase (was main supabaseClient → 401s). All scanner DB calls (stock lookup, scan-event log) use the POS session.
+- Resolver selected `lb_product_units.abbreviation` (nonexistent → PostgREST 400). New shared `services/productFields.js` (`PRODUCT_UNIT_EMBED`, `PRODUCT_SCAN_FIELDS`) uses `code`; productService and productResolverService both build from it.
+- lb_scanner_events inserts now carry tenant_id/business_id from usePosErpAuth().tenant, passed via useBarcodeScanner from POSPage and GoodsReceivingPage. No tenant context → event skipped, never written untenanted.
+- handleScan outcomes: INVALID_BARCODE / NOT_FOUND / INACTIVE / AUTH_ERROR / DATABASE_ERROR (ERROR result + `reason`); raw Supabase text is logged to console only, never shown.
+- Not verified live (no DB/browser access): see open items — lb_scanner_events RLS policy and user_id FK in scanner_schema.sql.

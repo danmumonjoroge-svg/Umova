@@ -13,9 +13,9 @@
 
 import { posSupabase as supabase } from '../services/posSupabaseClient';
 import { normalizeBarcode, isValidBarcode } from '../utils/barcodeUtils';
+import { PRODUCT_SCAN_FIELDS } from './productFields';
 
-const PRODUCT_FIELDS =
-  'id, name, sku, barcode, description, category_id, unit_id, cost_price, selling_price, wholesale_price, selling_mode, track_inventory, allow_negative_stock, reorder_level, is_active, unit:lb_product_units(id, name, abbreviation)';
+const PRODUCT_FIELDS = PRODUCT_SCAN_FIELDS;
 
 /**
  * Resolve a scanned barcode to a product.

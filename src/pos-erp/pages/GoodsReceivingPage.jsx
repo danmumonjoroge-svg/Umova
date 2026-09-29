@@ -32,7 +32,7 @@ import { usePosErpAuth } from '../auth/usePosErpAuth';
 const emptyLineDefaults = { batch_number: '', expiry_date: '' };
 
 export default function GoodsReceivingPage() {
-  const { staffId } = usePosErpAuth();
+  const { staffId, tenant } = usePosErpAuth();
 
   const { suppliers, fetch: refetchSuppliers } = useSuppliers();
   const { products } = useProducts();
@@ -209,6 +209,8 @@ export default function GoodsReceivingPage() {
 
   const { processScan, lastOutcome, recentScans } = useBarcodeScanner({
     userId: staffId,
+    tenantId: tenant?.id,
+    businessId: tenant?.business_id,
     contextType: 'GRN',
     onResolved: handleScanResolved,
     hardwareEnabled: mode === 'PO' ? !!selectedPOId : !!quickSupplierId,

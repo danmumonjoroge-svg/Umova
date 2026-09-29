@@ -5,29 +5,76 @@
 //   - resolving the barcode to a product (via productResolverService)
 //   - attaching current stock info for display (read-only)
 //   - classifying the outcome (RESOLVED / NOT_FOUND / INACTIVE / ERROR)
-//   - optional lightweight scan-event audit logging
+//   - tenant-scoped scan-event audit logging
 //
 // It NEVER writes to lb_inventory or lb_stock_movements. That responsibility
 // belongs to the existing sale/GRN/inventory services — see saleService.js,
 // purchaseService.js and inventoryService.js.
 //
-// Adapted: tenant_id/business_id/branch_id stripped throughout — this app
-// is single-org, single-location (see usePosErpAuth.js). lb_inventory is
-// keyed by product_id alone here, matching saleService.js/inventoryService.js.
+// Every database call here goes through posSupabase (storage key
+// sb-pos-auth-token) so the scanner shares the POS staff session with the
+// rest of the POS services. Never import the main app's supabaseClient.
 
-import { supabase } from '../../supabaseClient';
+import { posSupabase as supabase } from './posSupabaseClient';
 import { resolveBarcode } from './productResolverService';
 import { SCAN_RESULTS } from '../constants/scannerModes';
+
+// Error reasons surfaced to callers (never raw Supabase/PostgREST text).
+export const SCAN_ERROR_REASONS = {
+  INVALID_BARCODE: 'INVALID_BARCODE',
+  AUTH_ERROR: 'AUTH_ERROR',
+  DATABASE_ERROR: 'DATABASE_ERROR',
+};
+
+function isAuthError(err) {
+  const status = err?.status;
+  const code = String(err?.code || '');
+  const msg = String(err?.message || '').toLowerCase();
+  return (
+    status === 401 ||
+    code === 'PGRST301' || // JWT required / invalid
+    code === 'PGRST303' || // JWT claims invalid
+    msg.includes('jwt') ||
+    msg.includes('not authenticated')
+  );
+}
+
+/** Logs enough to identify the failing service — never keys, tokens or URLs. */
+function logScanFailure(stage, err) {
+  console.error(`[SCANNER] ${stage} failed:`, {
+    client: 'posSupabase',
+    status: err?.status ?? null,
+    code: err?.code ?? null,
+    message: err?.message ?? String(err),
+  });
+}
 
 /**
  * Full scan handling pipeline used by every module (POS, GRN, stocktake,
  * transfer, returns). Returns a consistent shape regardless of outcome.
+ *
+ * tenantId / businessId come from usePosErpAuth().tenant (tenant.id and
+ * tenant.business_id) — the same values every other POS service stamps.
  */
-export async function handleScan({ barcode, scannerType, contextType, contextId, userId }) {
+export async function handleScan({
+  barcode,
+  scannerType,
+  contextType,
+  contextId,
+  userId,
+  tenantId,
+  businessId,
+}) {
   let outcome;
   try {
     const resolution = await resolveBarcode({ barcode });
-    if (!resolution.found) {
+    if (resolution.reason === 'INVALID_BARCODE') {
+      outcome = {
+        result: SCAN_RESULTS.ERROR,
+        reason: SCAN_ERROR_REASONS.INVALID_BARCODE,
+        barcode: resolution.barcode,
+      };
+    } else if (!resolution.found) {
       outcome = { result: SCAN_RESULTS.NOT_FOUND, barcode: resolution.barcode };
     } else if (resolution.reason === 'INACTIVE') {
       outcome = { result: SCAN_RESULTS.INACTIVE, barcode: resolution.barcode, product: resolution.product };
@@ -45,11 +92,16 @@ export async function handleScan({ barcode, scannerType, contextType, contextId,
       };
     }
   } catch (err) {
-    outcome = { result: SCAN_RESULTS.ERROR, barcode, error: err.message };
+    logScanFailure('barcode resolution', err);
+    outcome = {
+      result: SCAN_RESULTS.ERROR,
+      reason: isAuthError(err) ? SCAN_ERROR_REASONS.AUTH_ERROR : SCAN_ERROR_REASONS.DATABASE_ERROR,
+      barcode,
+    };
   }
 
   // Fire-and-forget audit log; never let logging failures block the scan.
-  logScanEvent({ userId, barcode, scannerType, contextType, contextId, outcome }).catch(() => {});
+  logScanEvent({ userId, tenantId, businessId, barcode, scannerType, contextType, contextId, outcome }).catch(() => {});
   return outcome;
 }
 
@@ -60,28 +112,36 @@ async function getAvailableStock({ productId }) {
     .select('quantity, average_cost')
     .eq('product_id', productId)
     .maybeSingle();
-  if (error) return null;
+  if (error) {
+    // Stock is display-only: don't fail the scan, but don't hide the cause.
+    logScanFailure('stock lookup', error);
+    return null;
+  }
   return data ? { quantity: data.quantity, averageCost: data.average_cost } : { quantity: 0, averageCost: 0 };
 }
 
 /**
- * Optional lightweight audit trail of scan events. Only stores barcode
- * metadata — never camera frames/images. Fails silently if the
- * lb_scanner_events table hasn't been migrated in yet, so this feature
- * degrades gracefully in older environments.
+ * Lightweight audit trail of scan events (barcode metadata only — never
+ * camera frames). lb_scanner_events requires tenant_id and business_id
+ * (NOT NULL, tenant-scoped RLS), so an event is only written when the POS
+ * tenant context is present. Without it the event is skipped rather than
+ * written untenanted. Failures are logged, never thrown.
  */
-async function logScanEvent({ userId, barcode, scannerType, contextType, contextId, outcome }) {
-  try {
-    await supabase.from('lb_scanner_events').insert({
-      user_id: userId || null,
-      barcode,
-      format: outcome?.format || null,
-      scanner_type: scannerType || 'MANUAL',
-      context_type: contextType || null,
-      context_id: contextId || null,
-      result: outcome?.result || 'ERROR',
-    });
-  } catch (e) {
-    // Table may not exist yet, or RLS may reject — this is best-effort only.
+async function logScanEvent({ userId, tenantId, businessId, barcode, scannerType, contextType, contextId, outcome }) {
+  if (!tenantId || !businessId) {
+    console.warn('[SCANNER] scan event not logged: missing tenant/business context.');
+    return;
   }
+  const { error } = await supabase.from('lb_scanner_events').insert({
+    tenant_id: tenantId,
+    business_id: businessId,
+    user_id: userId || null,
+    barcode,
+    format: outcome?.format || null,
+    scanner_type: scannerType || 'MANUAL',
+    context_type: contextType || null,
+    context_id: contextId || null,
+    result: outcome?.result || 'ERROR',
+  });
+  if (error) logScanFailure('scan event log', error);
 }

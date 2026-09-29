@@ -21,6 +21,8 @@ import { SCANNER_TYPES, DEFAULT_DUPLICATE_SCAN_COOLDOWN_MS, SCAN_RESULTS } from 
 /**
  * @param {object} params
  * @param {string} [params.userId] - staff id (from usePosErpAuth().staffId) to stamp on the scan-event audit log
+ * @param {string} [params.tenantId] - usePosErpAuth().tenant?.id, required for scan-event audit rows
+ * @param {string} [params.businessId] - usePosErpAuth().tenant?.business_id
  * @param {string} params.contextType - one of SCAN_CONTEXTS
  * @param {string} [params.contextId]
  * @param {(outcome: object) => void} params.onResolved - called for every scan outcome (found or not)
@@ -28,6 +30,8 @@ import { SCANNER_TYPES, DEFAULT_DUPLICATE_SCAN_COOLDOWN_MS, SCAN_RESULTS } from 
  */
 export function useBarcodeScanner({
   userId,
+  tenantId,
+  businessId,
   contextType,
   contextId,
   onResolved,
@@ -50,6 +54,8 @@ export function useBarcodeScanner({
         contextType,
         contextId,
         userId,
+        tenantId,
+        businessId,
       });
       setIsProcessing(false);
       setLastOutcome(outcome);
@@ -62,7 +68,7 @@ export function useBarcodeScanner({
       onResolved?.(outcome);
       return outcome;
     },
-    [contextType, contextId, userId, onResolved]
+    [contextType, contextId, userId, tenantId, businessId, onResolved]
   );
 
   const scanManual = useCallback((barcode) => processScan(barcode, SCANNER_TYPES.MANUAL), [processScan]);
