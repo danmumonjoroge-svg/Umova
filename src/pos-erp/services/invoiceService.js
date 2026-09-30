@@ -8,6 +8,21 @@ export const INVOICE_STATUS_LABEL = {
   DRAFT: 'Draft', ISSUED: 'Issued', PARTIALLY_PAID: 'Partially Paid', PAID: 'Paid', OVERDUE: 'Overdue', CANCELLED: 'Cancelled',
 };
 
+/** Public logo URL -> PNG data URL (jsPDF can't take webp/svg or a remote URL). Returns null on any failure: an invoice without a logo beats no invoice. */
+async function loadLogo(url) {
+  if (!url) return null;
+  try {
+    const blob = await (await fetch(url)).blob();
+    const objUrl = URL.createObjectURL(blob);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = objUrl; });
+    const scale = Math.min(1, 400 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(objUrl);
+    return { dataUrl: c.toDataURL('image/png'), width: c.width, height: c.height };
+  } catch { return null; }
+}
+
 export const invoiceService = {
   async getAll({ businessId, period } = {}) {
     let q = supabase.from('lb_rent_invoice_summary').select('*').order('period', { ascending: false }).order('invoice_number', { ascending: false });
@@ -30,7 +45,7 @@ export const invoiceService = {
   async getDetail(id) {
     const { data: inv, error } = await supabase.from('lb_rent_invoice_summary').select('*').eq('id', id).single();
     if (error) throw error;
-    const [lines, pays, cust, unit, biz, mp] = await Promise.all([
+    const [lines, pays, cust, unit, biz, mp, ps] = await Promise.all([
       supabase.from('lb_recurring_charge_invoices').select('id, amount, paid_amount, status, due_date, charge:lb_recurring_charges(charge_name)')
         .eq('rent_invoice_id', id).order('created_at'),
       supabase.from('lb_rent_invoice_payments').select('*').eq('rent_invoice_id', id).order('created_at'),
@@ -38,11 +53,14 @@ export const invoiceService = {
       inv.unit_id ? supabase.from('lb_units').select('id, unit_number').eq('id', inv.unit_id).single() : { data: null },
       supabase.from('lb_businesses').select('*').eq('id', inv.business_id).single(),
       supabase.from('lb_mpesa_config').select('shortcode, is_active, environment, has_consumer_key, has_consumer_secret, has_passkey').eq('business_id', inv.business_id).maybeSingle(),
+      supabase.from('lb_pos_settings').select('settings').eq('business_id', inv.business_id).maybeSingle(),
     ]);
+    const logo = await loadLogo(biz.data?.logo_url);
     return {
       invoice: inv,
       lines: (lines.data || []).filter((l) => !['WAIVED', 'CANCELLED'].includes(l.status)),
       payments: pays.data || [], customer: cust.data, unit: unit.data, business: biz.data, mpesa: mp.data || null,
+      logo, payInfo: ps.data?.settings?.invoice_payment || {},
     };
   },
 

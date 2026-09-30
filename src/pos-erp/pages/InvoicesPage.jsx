@@ -108,11 +108,19 @@ function InvoiceDetail({ id, tenant, staffId, onClose }) {
   const promptReady = !!(mpesa?.is_active && mpesa.shortcode && mpesa.has_consumer_key && mpesa.has_consumer_secret && mpesa.has_passkey);
   const run = async (fn) => { setWorking(true); setErr(''); setNote(''); try { await fn(); } catch (e) { setErr(e.message || String(e)); } setWorking(false); };
 
+  const payHint = () => {
+    const p = d.payInfo || {}, bits = [];
+    if (p.paybill) bits.push(`M-Pesa Paybill ${p.paybill}, account ${(p.paybill_account || '').trim() || inv.invoice_number}`);
+    if (p.till) bits.push(`Till ${p.till}`);
+    if (!p.paybill && !p.till && mpesa?.shortcode) bits.push(`M-Pesa ${mpesa.shortcode}, account ${inv.invoice_number}`);
+    if (p.bank_account_number) bits.push(`${p.bank_name || 'Bank'} a/c ${p.bank_account_number}${p.bank_account_name ? ` (${p.bank_account_name})` : ''}`);
+    return bits.length ? `Pay via ${bits.join(' or ')}.` : '';
+  };
   const vars = () => ({
     customer_name: customer?.name, business_name: d.business?.name, invoice_number: inv.invoice_number,
     period: new Date(inv.period).toLocaleDateString('en-KE', { month: 'long', year: 'numeric' }),
     amount: Number(inv.total_amount).toLocaleString('en-KE'), outstanding: (Number(inv.balance_due) + Number(inv.previous_balance)).toLocaleString('en-KE'),
-    due_date: day(inv.due_date), payment_hint: mpesa?.shortcode ? `Pay via M-Pesa ${mpesa.shortcode}, account ${inv.invoice_number}.` : '',
+    due_date: day(inv.due_date), payment_hint: payHint(),
   });
   const tpl = (channel) => templates.find((t) => t.message_type === 'INVOICE' && t.channel === channel);
   const base = { tenantId: tenant.id, businessId: tenant.business_id, customer, variables: null, referenceType: 'rent_invoice', referenceId: inv.id, createdBy: staffId };

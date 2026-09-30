@@ -243,6 +243,23 @@ export default function SettingsPage() {
           </label>
         </div>
 
+        <h2 className="font-bold text-slate-800 pt-2">How tenants pay (shown on invoices)</h2>
+        <p className="text-xs text-slate-500 -mt-2">Fill in only what you use. This appears in the “How to pay” box on every invoice PDF and in invoice messages.</p>
+        {(() => {
+          const ip = settingsForm.invoice_payment || {};
+          const set = (k) => (e) => setSettingsForm({ ...settingsForm, invoice_payment: { ...ip, [k]: e.target.value } });
+          const f = (k, ph) => <input placeholder={ph} value={ip[k] || ''} onChange={set(k)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />;
+          return (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">{f('paybill', 'M-Pesa Paybill number')}{f('paybill_account', 'Paybill account (blank = invoice number)')}</div>
+              {f('till', 'M-Pesa Till number (Buy Goods)')}
+              <div className="grid grid-cols-2 gap-2">{f('bank_name', 'Bank name')}{f('bank_branch', 'Branch')}</div>
+              <div className="grid grid-cols-2 gap-2">{f('bank_account_name', 'Account name')}{f('bank_account_number', 'Account number')}</div>
+              <textarea placeholder="Anything else, e.g. “Pay by the 5th. Send the M-Pesa code after paying.”" value={ip.other || ''} onChange={set('other')} rows={2} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+            </div>
+          );
+        })()}
+
         <h2 className="font-bold text-slate-800 pt-2">Receipt</h2>
         <input placeholder="Receipt header (e.g. business tagline)" value={receiptHeader} onChange={e => setReceiptHeader(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2" />
         <input placeholder="Receipt footer (e.g. 'Thank you for shopping with us')" value={receiptFooter} onChange={e => setReceiptFooter(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2" />

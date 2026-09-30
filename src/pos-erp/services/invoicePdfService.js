@@ -5,19 +5,44 @@ import { jsPDF } from 'jspdf';
 
 const money = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { maximumFractionDigits: 2 })}`;
 const day = (d) => (d ? new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+/** [label, value] rows for the HOW TO PAY block. Only what the owner has actually entered; a label of '' = free text. */
+export function paymentLines({ payInfo = {}, mpesa, invoice, business }) {
+  const p = payInfo || {}, rows = [];
+  if (p.paybill) rows.push(['M-Pesa Paybill', `${p.paybill}   ·   Account: ${(p.paybill_account || '').trim() || invoice.invoice_number}`]);
+  if (p.till) rows.push(['M-Pesa Till (Buy Goods)', String(p.till)]);
+  if (!p.paybill && !p.till && mpesa?.shortcode) rows.push(['M-Pesa', `${mpesa.shortcode}   ·   Account: ${invoice.invoice_number}`]);
+  if (p.bank_name || p.bank_account_number) {
+    rows.push(['Bank', [p.bank_name, p.bank_branch].filter(Boolean).join(' — ') || '—']);
+    if (p.bank_account_name) rows.push(['Account name', p.bank_account_name]);
+    if (p.bank_account_number) rows.push(['Account number', p.bank_account_number]);
+    rows.push(['Reference', invoice.invoice_number]);
+  }
+  if (p.other) rows.push(['', p.other]);
+  if (invoice.notes) rows.push(['', invoice.notes]);
+  if (business?.phone) rows.push(['Questions', business.phone]);
+  if (!rows.some(([k]) => k && k !== 'Questions') && !p.other) rows.unshift(['', 'Please contact us for payment details.']);
+  return rows;
+}
+
 const monthName = (d) => new Date(d).toLocaleDateString('en-KE', { month: 'long', year: 'numeric' });
 
-export function buildInvoicePdf({ invoice, lines, payments, customer, unit, business, mpesa }) {
+export function buildInvoicePdf({ invoice, lines, payments, customer, unit, business, mpesa, logo, payInfo }) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const W = 210, M = 16; let y = 18;
   const green = [18, 60, 42], gold = [198, 161, 91], grey = [104, 117, 109];
   const text = (t, x, yy, o = {}) => { doc.setFont('helvetica', o.bold ? 'bold' : 'normal'); doc.setFontSize(o.size || 10); doc.setTextColor(...(o.color || [38, 53, 45])); doc.text(String(t), x, yy, { align: o.align || 'left' }); };
   const ensure = (need) => { if (y + need > 280) { doc.addPage(); y = 18; } };
 
-  // header
-  text(business?.name || 'Business', M, y, { bold: true, size: 16, color: green });
+  // header (logo is optional — skipped silently if the business has none or it could not be loaded)
+  let tx = M; const top = y - 6;
+  if (logo?.dataUrl) {
+    const h = 18, w = Math.min(44, h * (logo.width / logo.height));
+    try { doc.addImage(logo.dataUrl, 'PNG', M, top, w, h); tx = M + w + 5; y = top + 6; } catch { /* draw without logo */ }
+  }
+  text(business?.name || 'Business', tx, y, { bold: true, size: 16, color: green });
   text('INVOICE', W - M, y, { bold: true, size: 16, color: green, align: 'right' }); y += 6;
-  [business?.address, [business?.phone, business?.email].filter(Boolean).join('  ·  ')].filter(Boolean).forEach((l) => { text(l, M, y, { size: 9, color: grey }); y += 4.5; });
+  [business?.address, [business?.phone, business?.email].filter(Boolean).join('  ·  ')].filter(Boolean).forEach((l) => { text(l, tx, y, { size: 9, color: grey }); y += 4.5; });
+  if (logo?.dataUrl) y = Math.max(y, top + 20);
   let ry = 24;
   [['Invoice no.', invoice.invoice_number], ['Invoice date', day(invoice.issue_date)], ['Due date', day(invoice.due_date)], ['Period', monthName(invoice.period)]].forEach(([k, v]) => {
     text(k, W - M - 44, ry, { size: 9, color: grey }); text(v, W - M, ry, { size: 9, bold: true, align: 'right' }); ry += 5;
@@ -67,13 +92,13 @@ export function buildInvoicePdf({ invoice, lines, payments, customer, unit, busi
   }
 
   // payment instructions — only what is actually configured
-  ensure(24); text('HOW TO PAY', M, y, { size: 8, bold: true, color: grey }); y += 5;
-  const how = [];
-  if (mpesa?.shortcode) how.push(`M-Pesa: Paybill/Till ${mpesa.shortcode}, account ${invoice.invoice_number}`);
-  if (business?.phone) how.push(`Questions: ${business.phone}`);
-  if (invoice.notes) how.push(invoice.notes);
-  if (!how.length) how.push('Please contact the landlord for payment details.');
-  how.forEach((l) => { doc.setFontSize(9); doc.splitTextToSize(l, W - 2 * M).forEach((ln) => { ensure(5); text(ln, M, y, { size: 9 }); y += 4.5; }); });
+  const how = paymentLines({ payInfo, mpesa, invoice, business });
+  ensure(14 + how.length * 5); text('HOW TO PAY', M, y, { size: 8, bold: true, color: grey }); y += 5;
+  how.forEach(([k, v]) => {
+    ensure(6);
+    if (k) { text(k, M, y, { size: 9, bold: true }); text(v, M + 42, y, { size: 9 }); y += 5; }
+    else doc.splitTextToSize(v, W - 2 * M).forEach((ln) => { ensure(5); text(ln, M, y, { size: 9 }); y += 4.5; });
+  });
   text('Thank you.', M, 289, { size: 9, color: grey });
 
   const filename = `${invoice.invoice_number}.pdf`;
