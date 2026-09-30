@@ -69,10 +69,30 @@ serve(async (req) => {
     });
 
     const body = await req.json();
-    const { businessId, tenantId, phone, amount, cartSnapshot, customerId, shiftId, requestedBy } = body;
+    const { businessId, tenantId, phone, cartSnapshot, customerId, shiftId, requestedBy, rentInvoiceId } = body;
+    let { amount } = body;
 
-    if (!businessId || !tenantId || !phone || !amount || !cartSnapshot?.length) {
-      return new Response(JSON.stringify({ error: "businessId, tenantId, phone, amount, and cartSnapshot are required." }), { status: 400 });
+    if (!businessId || !tenantId || !phone || !amount || (!cartSnapshot?.length && !rentInvoiceId)) {
+      return new Response(JSON.stringify({ error: "businessId, tenantId, phone, amount, and a cart or an invoice are required." }), { status: 400 });
+    }
+
+    // Rent invoice: the amount is checked against the DATABASE, never trusted from the browser.
+    let invoiceNumber = "";
+    if (rentInvoiceId) {
+      const { data: inv } = await supabase.from("lb_rent_invoice_summary")
+        .select("id, invoice_number, customer_id, display_status, balance_due, business_id")
+        .eq("id", rentInvoiceId).eq("business_id", businessId).maybeSingle();
+      if (!inv) return new Response(JSON.stringify({ error: "Invoice not found for this business." }), { status: 404 });
+      if (!["ISSUED", "PARTIALLY_PAID", "OVERDUE"].includes(inv.display_status)) {
+        return new Response(JSON.stringify({ error: `This invoice is ${inv.display_status} and cannot take an M-Pesa payment.` }), { status: 409 });
+      }
+      amount = Math.round(Number(amount));
+      if (!(amount >= 1) || amount > Number(inv.balance_due) + 0.5) {
+        return new Response(JSON.stringify({ error: `Amount must be between KES 1 and the invoice balance (KES ${inv.balance_due}).` }), { status: 400 });
+      }
+      const { data: live } = await supabase.from("lb_mpesa_transactions").select("id").eq("rent_invoice_id", rentInvoiceId).eq("status", "PENDING").limit(1);
+      if (live?.length) return new Response(JSON.stringify({ error: "A payment prompt for this invoice is already waiting on the customer's phone." }), { status: 409 });
+      invoiceNumber = inv.invoice_number;
     }
 
     // Phone must already be normalised 2547XXXXXXXX by the caller
@@ -132,8 +152,8 @@ serve(async (req) => {
         PartyB: config.shortcode,
         PhoneNumber: phone,
         CallBackURL: CALLBACK_URL,
-        AccountReference: "Umova",
-        TransactionDesc: "Umova sale payment",
+        AccountReference: invoiceNumber ? invoiceNumber.slice(-12) : "Umova",
+        TransactionDesc: invoiceNumber ? `Rent ${invoiceNumber}`.slice(0, 13) : "Umova sale payment",
       }),
     });
 
@@ -158,7 +178,8 @@ serve(async (req) => {
         customer_id: customerId ?? null,
         phone,
         amount: Number(amount),
-        cart_snapshot: cartSnapshot,
+        cart_snapshot: cartSnapshot?.length ? cartSnapshot : null,
+        rent_invoice_id: rentInvoiceId ?? null,
         merchant_request_id: stkData.MerchantRequestID,
         checkout_request_id: stkData.CheckoutRequestID,
         status: "PENDING",

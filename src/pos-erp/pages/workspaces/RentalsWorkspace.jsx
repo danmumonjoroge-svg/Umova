@@ -1,6 +1,6 @@
 // src/pos-erp/pages/workspaces/RentalsWorkspace.jsx
 import React from 'react';
-import { Home, Repeat, Gauge } from 'lucide-react';
+import { Home, Repeat, Gauge, FileText, Wrench } from 'lucide-react';
 import { useUnits } from '../../hooks/useProperty';
 import { WorkspacePage, CardGrid, ActionCard } from '../../components/workspace/WorkspaceKit';
 
@@ -26,6 +26,16 @@ export default function RentalsWorkspace() {
           to="/pos/meters" icon={Gauge} title="Meters"
           description="Water and electricity readings for each unit."
           action="Open Meters"
+        />
+        <ActionCard
+          to="/pos/invoices" icon={FileText} title="My Invoices"
+          description="Send each tenant a clear invoice and get paid."
+          action="Open Invoices"
+        />
+        <ActionCard
+          to="/pos/maintenance" icon={Wrench} title="My Maintenance"
+          description="Repairs and jobs for your units, and what they cost."
+          action="Open Maintenance"
         />
       </CardGrid>
     </WorkspacePage>

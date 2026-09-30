@@ -20,7 +20,7 @@
 
 import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package, Boxes, Truck, Users, UserRound,
-  Wallet, Receipt, Building2, Home, Repeat, Gauge, Scissors, CalendarClock, MessageSquare,
+  Wallet, Receipt, Building2, Home, Repeat, Gauge, FileText, Wrench, Scissors, CalendarClock, MessageSquare,
   Settings, ShieldCheck, Landmark, Smartphone, BarChart3, FileBarChart, HardHat, ClipboardList,
   Bell, MoreHorizontal,
 } from 'lucide-react';
@@ -59,11 +59,13 @@ export const MODULES = [
   },
   {
     key: 'rentals', label: 'Rentals', icon: Building2, to: '/pos/rentals', capability: 'rentals',
-    blurb: 'Units, rent charges and meters',
+    blurb: 'Units, rent, meters, invoices and maintenance',
     children: [
       { to: '/pos/units', label: 'Units', icon: Home },
       { to: '/pos/charges', label: 'Rent & Charges', icon: Repeat },
       { to: '/pos/meters', label: 'Meters', icon: Gauge },
+      { to: '/pos/invoices', label: 'My Invoices', icon: FileText },
+      { to: '/pos/maintenance', label: 'My Maintenance', icon: Wrench },
     ],
   },
   {

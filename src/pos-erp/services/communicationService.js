@@ -29,6 +29,10 @@ const DEFAULT_TEMPLATES = [
   { message_type: 'PAYMENT_RECEIVED', channel: 'SMS', body: 'Payment of {{amount}} received. Thank you, {{customer_name}}! New balance: {{balance}}.' },
   { message_type: 'PAYMENT_DUE', channel: 'SMS', body: 'Hi {{customer_name}}, a payment of {{amount}} is due on {{due_date}}.' },
   { message_type: 'PAYMENT_OVERDUE', channel: 'SMS', body: '{{customer_name}}, your account with {{business_name}} has an outstanding balance of {{balance}}. Please settle at your earliest convenience.' },
+  // Invoices (phase17). No link variable: the app has no secure public invoice link, so none is invented.
+  { message_type: 'INVOICE', channel: 'SMS', body: 'Hello {{customer_name}}, your {{period}} invoice {{invoice_number}} is KES {{amount}}. Amount outstanding: KES {{outstanding}}. Due {{due_date}}. {{payment_hint}} Thank you, {{business_name}}.' },
+  { message_type: 'INVOICE', channel: 'WHATSAPP', body: 'Hi {{customer_name}}, here is your {{period}} invoice {{invoice_number}} from {{business_name}}.\nAmount: KES {{amount}}\nOutstanding: KES {{outstanding}}\nDue: {{due_date}}\n{{payment_hint}}' },
+  { message_type: 'INVOICE', channel: 'EMAIL', subject: 'Invoice {{invoice_number}} — {{period}}', body: 'Hello {{customer_name}},\n\nYour {{period}} invoice {{invoice_number}} is KES {{amount}} (outstanding KES {{outstanding}}), due {{due_date}}.\n{{payment_hint}}\n\nThank you,\n{{business_name}}' },
   { message_type: 'RECEIPT', channel: 'SMS', body: 'Receipt {{receipt_number}} for {{amount}} — thank you for shopping with {{business_name}}.' },
   { message_type: 'STATEMENT', channel: 'SMS', body: 'Hi {{customer_name}}, your current balance with {{business_name}} is {{balance}}.' },
   { message_type: 'APPOINTMENT_REMINDER', channel: 'SMS', body: 'Reminder: your appointment at {{business_name}} is at {{appointment_time}}.' },

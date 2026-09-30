@@ -34,13 +34,13 @@ export function useMpesaPayment() {
     setPhase('idle'); setTransaction(null); setError('');
   }, [cleanup]);
 
-  const send = useCallback(async ({ phone, amount, cartSnapshot, customerId, shiftId }) => {
+  const send = useCallback(async ({ phone, amount, cartSnapshot, customerId, shiftId, rentInvoiceId }) => {
     setError('');
     setPhase('sending');
     try {
       const txn = await mpesaService.requestPayment({
         tenantId: tenant?.id, businessId: tenant?.business_id, phone, amount, cartSnapshot,
-        customerId, shiftId, requestedBy: staffId,
+        customerId, shiftId, rentInvoiceId, requestedBy: staffId,
       });
       setTransaction(txn);
       setPhase('pending');

@@ -54,14 +54,14 @@ export const mpesaService = {
    * check connectivity before offering this button at all, and this is
    * the backstop if that check was stale.
    */
-  async requestPayment({ tenantId, businessId, phone, amount, cartSnapshot, customerId, shiftId, requestedBy }) {
+  async requestPayment({ tenantId, businessId, phone, amount, cartSnapshot, customerId, shiftId, requestedBy, rentInvoiceId }) {
     const normalizedPhone = normalizePhoneForWhatsApp(phone);
     if (!normalizedPhone) {
       throw new Error(`"${phone}" doesn't look like a Kenyan mobile number. Use a number like 0712345678.`);
     }
 
     const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
-      body: { tenantId, businessId, phone: normalizedPhone, amount, cartSnapshot, customerId, shiftId, requestedBy },
+      body: { tenantId, businessId, phone: normalizedPhone, amount, cartSnapshot, customerId, shiftId, requestedBy, rentInvoiceId },
     });
     if (error) throw error;
     if (data?.error) throw new Error(data.error);

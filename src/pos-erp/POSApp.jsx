@@ -23,6 +23,8 @@ import CashPage from "./pages/CashPage";
 import UnitsPage from "./pages/UnitsPage";
 import RecurringChargesPage from "./pages/RecurringChargesPage";
 import MetersPage from "./pages/MetersPage";
+import InvoicesPage from './pages/InvoicesPage';
+import MaintenancePage from './pages/MaintenancePage';
 import ServicesPage from "./pages/ServicesPage";
 import AppointmentsPage from "./pages/AppointmentsPage";
 import GoodsReceivingPage from "./pages/GoodsReceivingPage";
@@ -85,6 +87,8 @@ const PosRoutes = () => (
       <Route path="units" element={<UnitsPage />} />
       <Route path="charges" element={<RecurringChargesPage />} />
       <Route path="meters" element={<MetersPage />} />
+      <Route path="invoices" element={<InvoicesPage />} />
+      <Route path="maintenance" element={<MaintenancePage />} />
       <Route path="services" element={<ServicesPage />} />
       <Route path="appointments" element={<AppointmentsPage />} />
       <Route path="communication" element={<CommunicationPage />} />
