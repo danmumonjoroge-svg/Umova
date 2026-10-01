@@ -109,6 +109,7 @@ export default function FinancialReportsPage() {
               <StatementRow label="Revenue" value={income.revenue} bold />
               <StatementRow label="Cost of Goods Sold" value={-income.cogs} indent />
               <StatementRow label="Gross Profit" value={income.grossProfit} bold divider />
+              {income.rentIncome > 0 && <StatementRow label="Rent &amp; charges billed" value={income.rentIncome} />}
               {income.expensesByCategory.map(e => (
                 <StatementRow key={e.category} label={e.category} value={-e.amount} indent />
               ))}

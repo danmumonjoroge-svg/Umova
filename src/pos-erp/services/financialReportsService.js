@@ -99,12 +99,27 @@ export const financialReportsService = {
       totalExpenses += Number(e.amount);
     }
 
+    // Rent & charges income (phase17 follow-up): what was BILLED to tenants in the period — the same moment the
+    // tenant's balance goes up. Billed, not collected, so it matches how sales revenue above is counted (credit sales
+    // count when sold). Waived/cancelled lines are excluded. Zero for businesses with no rent charges, so nothing
+    // changes for a plain retail shop.
+    let rentQuery = supabase
+      .from('lb_recurring_charge_invoices')
+      .select('amount, status')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', `${fromDate}T00:00:00`)
+      .lt('created_at', `${toDate}T23:59:59.999`);
+    if (businessId) rentQuery = rentQuery.eq('business_id', businessId);
+    const { data: rentRows, error: rentError } = await rentQuery;
+    if (rentError) throw rentError;
+    const rentIncome = (rentRows || []).filter((r) => !['WAIVED', 'CANCELLED'].includes(r.status)).reduce((sum, r) => sum + Number(r.amount), 0);
+
     const grossProfit = revenue - cogs;
-    const netIncome = grossProfit - totalExpenses;
+    const netIncome = grossProfit + rentIncome - totalExpenses;
 
     return {
       fromDate, toDate,
-      revenue, cogs, grossProfit,
+      revenue, cogs, grossProfit, rentIncome,
       expensesByCategory: Object.entries(expensesByCategory).map(([category, amount]) => ({ category, amount })),
       totalExpenses, netIncome,
     };

@@ -2,7 +2,7 @@
 // Costs are posted to the existing expenses (lb_expenses via record_expense) when a job is completed,
 // so they reduce profit exactly like anything entered under My Spending.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Wrench, Loader2, Plus, X } from 'lucide-react';
+import { Wrench, Loader2, Plus, X, Camera } from 'lucide-react';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useUnits } from '../hooks/useProperty';
 import { maintenanceService, CATEGORIES, PRIORITIES, STATUS_LABEL, label } from '../services/maintenanceService';
@@ -123,7 +123,18 @@ function NewJob({ units, tenant, staffId, onClose }) {
     <button disabled={busy} onClick={submit} className="w-full bg-emerald-700 text-white font-semibold py-2 rounded-lg disabled:opacity-50">Save job</button></Modal>);
 }
 
-function JobDetail({ job, staffId, onClose }) {
+function JobDetail({ job: initialJob, staffId, onClose }) {
+  const { tenant } = usePosErpAuth();
+  const [job, setJob] = useState(initialJob);
+  const [urls, setUrls] = useState({});
+  const [changed, setChanged] = useState(false);
+  useEffect(() => { maintenanceService.signedUrls(job.attachment_urls).then(setUrls).catch(() => {}); }, [job.attachment_urls]);
+  const addPhotos = (e) => go(async () => {
+    const files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
+    const next = await maintenanceService.addPhotos({ businessId: tenant.business_id, job, files });
+    setJob({ ...job, attachment_urls: next }); setChanged(true);
+  }, false);
+  const dropPhoto = (path) => go(async () => { const next = await maintenanceService.removePhoto({ job, path }); setJob({ ...job, attachment_urls: next }); setChanged(true); }, false);
   const [assignee, setAssignee] = useState(job.assigned_to || '');
   const [c, setC] = useState({ labour: job.labour_cost || '', materials: job.materials_cost || '', other: job.other_cost || '', pay: 'CASH', billing: 'BUSINESS', date: new Date().toISOString().slice(0, 10), notes: job.notes || '' });
   const [completing, setCompleting] = useState(false); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
@@ -132,11 +143,18 @@ function JobDetail({ job, staffId, onClose }) {
   const go = async (fn, close = true) => { setBusy(true); setErr(''); try { await fn(); if (close) onClose(true); } catch (e) { setErr(e.message); } setBusy(false); };
   const step = (s) => go(() => maintenanceService.setStatus(job.id, s, s === 'ASSIGNED' ? assignee : null));
 
-  return (<Modal title={`${job.reference_no} · Unit ${job.unit?.unit_number}`} onClose={onClose}>
+  return (<Modal title={`${job.reference_no} · Unit ${job.unit?.unit_number}`} onClose={(c) => onClose(c || changed)}>
     <p className="text-sm text-slate-700">{label(job.category)} — {job.description}</p>
     <p className="text-xs text-slate-500">Reported {day(job.reported_date)} · {label(job.priority)} priority · {STATUS_LABEL[job.status]}{job.customer?.name ? ` · Tenant: ${job.customer.name}` : ''}{job.assigned_to ? ` · Assigned to ${job.assigned_to}` : ''}</p>
     {job.status === 'COMPLETED' && <div className="text-sm border border-slate-200 rounded-xl p-3">Labour {kes(job.labour_cost)} + Materials {kes(job.materials_cost)} + Other {kes(job.other_cost)} = <b>{kes(job.total_cost)}</b>
       <div className="text-xs text-slate-500 mt-1">{job.expense_id ? 'Recorded under My Spending.' : 'No cost.'}{job.billing_choice === 'TENANT' ? ' Also charged to the tenant.' : ''}</div></div>}
+    <div>
+      <div className="flex flex-wrap gap-2">{(job.attachment_urls || []).map((p) => (
+        <div key={p} className="relative w-16 h-16 rounded-lg overflow-hidden bg-slate-100">
+          {urls[p] && <a href={urls[p]} target="_blank" rel="noreferrer"><img src={urls[p]} alt="" className="w-full h-full object-cover" /></a>}
+          {job.status !== 'CANCELLED' && <button onClick={() => dropPhoto(p)} className="absolute top-0 right-0 bg-black/60 text-white rounded-bl px-1 text-xs" aria-label="Remove photo">×</button>}</div>))}</div>
+      {job.status !== 'CANCELLED' && <label className="inline-flex items-center gap-1.5 text-sm text-emerald-700 cursor-pointer mt-2"><Camera size={15} /> Add photos<input type="file" accept="image/*" multiple capture="environment" onChange={addPhotos} className="hidden" /></label>}
+    </div>
     {err && <p className="text-sm text-red-600">{err}</p>}
     {!done && !completing && (<div className="space-y-2">
       <input value={assignee} onChange={(e) => setAssignee(e.target.value)} className={inp} placeholder="Technician / contractor" />

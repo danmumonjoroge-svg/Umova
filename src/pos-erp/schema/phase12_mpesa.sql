@@ -190,7 +190,7 @@ BEGIN
   -- payment").
   IF p_result_code <> 0 THEN
     UPDATE lb_mpesa_transactions
-    SET status = CASE WHEN p_result_code = 1032 THEN 'CANCELLED' ELSE 'FAILED' END
+    SET status = (CASE WHEN p_result_code = 1032 THEN 'CANCELLED' ELSE 'FAILED' END)::lb_mpesa_status
     WHERE id = v_txn.id;
     RETURN jsonb_build_object('already_processed', false, 'status', 'FAILED', 'sale_id', NULL);
   END IF;

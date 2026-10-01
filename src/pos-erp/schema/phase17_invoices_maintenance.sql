@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS lb_rent_invoice_payments (
   tenant_id uuid NOT NULL,
   business_id uuid NOT NULL,
   rent_invoice_id uuid NOT NULL REFERENCES lb_rent_invoices(id),
+  receipt_number text,                                      -- RCT-2026-0001, gap-free, one per payment
   amount numeric(15,2) NOT NULL CHECK (amount > 0),
   payment_method text NOT NULL,
   source text NOT NULL CHECK (source IN ('MANUAL','MPESA_MANUAL','MPESA_PROMPT')),
@@ -84,6 +85,7 @@ CREATE TABLE IF NOT EXISTS lb_rent_invoice_payments (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_lb_rip_invoice ON lb_rent_invoice_payments (rent_invoice_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_lb_rip_receipt_no ON lb_rent_invoice_payments (business_id, receipt_number) WHERE receipt_number IS NOT NULL;
 -- the same M-Pesa code / same STK request can never be recorded twice
 CREATE UNIQUE INDEX IF NOT EXISTS uq_lb_rip_mpesa_code ON lb_rent_invoice_payments (business_id, reference_no)
   WHERE payment_method = 'MOBILE_MONEY' AND reference_no IS NOT NULL;
@@ -139,6 +141,16 @@ BEGIN
     SELECT id, status INTO v_inv, v_inv_status FROM lb_rent_invoices
       WHERE business_id = p_business_id AND customer_id = v_unit.customer_id AND unit_id = v_unit.id AND period = v_period AND status <> 'CANCELLED';
     IF v_inv IS NULL THEN
+      -- Don't burn an invoice number (they must stay gap-free) on a unit that has nothing to bill this month.
+      SELECT (SELECT count(*) FROM lb_recurring_charge_invoices
+                WHERE business_id = p_business_id AND customer_id = v_unit.customer_id AND unit_id = v_unit.id
+                  AND period >= v_period AND period < v_next AND rent_invoice_id IS NULL AND status NOT IN ('WAIVED','CANCELLED'))
+           + (SELECT count(*) FROM lb_recurring_charges c
+                WHERE c.business_id = p_business_id AND c.customer_id = v_unit.customer_id AND c.unit_id = v_unit.id
+                  AND c.status = 'ACTIVE' AND c.frequency = 'MONTHLY' AND c.start_date < v_next AND (c.end_date IS NULL OR c.end_date >= v_period)
+                  AND NOT EXISTS (SELECT 1 FROM lb_recurring_charge_invoices x WHERE x.recurring_charge_id = c.id AND x.period = v_period))
+        INTO v_lines;
+      IF v_lines = 0 THEN v_empty := v_empty + 1; CONTINUE; END IF;
       INSERT INTO lb_rent_invoices (tenant_id, business_id, customer_id, unit_id, invoice_number, period, due_date, created_by)
       VALUES (v_tid, p_business_id, v_unit.customer_id, v_unit.id, next_doc_number(p_business_id, 'INV'), v_period, v_period, p_created_by)
       RETURNING id INTO v_inv;
@@ -165,7 +177,7 @@ BEGIN
 
       SELECT COUNT(*) INTO v_lines FROM lb_recurring_charge_invoices WHERE rent_invoice_id = v_inv;
       IF v_lines = 0 THEN
-        DELETE FROM lb_rent_invoices WHERE id = v_inv; v_empty := v_empty + 1; v_new := GREATEST(v_new - 1, 0);
+        RAISE EXCEPTION 'Invoice % ended up with no charges; nothing was saved.', v_inv; -- rolls the whole run back, numbers included
       ELSE
         UPDATE lb_rent_invoices SET due_date = (SELECT MIN(due_date) FROM lb_recurring_charge_invoices WHERE rent_invoice_id = v_inv) WHERE id = v_inv;
       END IF;
@@ -202,7 +214,7 @@ CREATE OR REPLACE FUNCTION record_rent_invoice_payment(
   p_source text DEFAULT 'MANUAL', p_mpesa_transaction_id uuid DEFAULT NULL
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE
-  v_inv lb_rent_invoices%ROWTYPE; v_balance numeric; v_left numeric; v_line RECORD; v_apply numeric; v_paid numeric;
+  v_inv lb_rent_invoices%ROWTYPE; v_balance numeric; v_left numeric; v_line RECORD; v_apply numeric; v_paid numeric; v_rct text;
 BEGIN
   SELECT * INTO v_inv FROM lb_rent_invoices WHERE id = p_invoice_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Invoice not found.'; END IF;
@@ -238,12 +250,13 @@ BEGIN
     END IF;
   END LOOP;
 
-  INSERT INTO lb_rent_invoice_payments (tenant_id, business_id, rent_invoice_id, amount, payment_method, source, reference_no, mpesa_transaction_id, notes, created_by)
-  VALUES (v_inv.tenant_id, v_inv.business_id, p_invoice_id, p_amount, p_payment_method, p_source, p_reference_no, p_mpesa_transaction_id, p_notes, p_created_by);
+  v_rct := next_doc_number(v_inv.business_id, 'RCT');
+  INSERT INTO lb_rent_invoice_payments (tenant_id, business_id, rent_invoice_id, receipt_number, amount, payment_method, source, reference_no, mpesa_transaction_id, notes, created_by)
+  VALUES (v_inv.tenant_id, v_inv.business_id, p_invoice_id, v_rct, p_amount, p_payment_method, p_source, p_reference_no, p_mpesa_transaction_id, p_notes, p_created_by);
 
   SELECT COALESCE(SUM(paid_amount),0), COALESCE(SUM(amount),0) - COALESCE(SUM(paid_amount),0) INTO v_paid, v_balance
   FROM lb_recurring_charge_invoices WHERE rent_invoice_id = p_invoice_id AND status NOT IN ('WAIVED','CANCELLED');
-  RETURN jsonb_build_object('paid_amount', v_paid, 'balance_due', v_balance, 'fully_paid', v_balance <= 0);
+  RETURN jsonb_build_object('paid_amount', v_paid, 'balance_due', v_balance, 'fully_paid', v_balance <= 0, 'receipt_number', v_rct);
 END $$;
 
 -- ---------- M-Pesa: let an STK request be FOR an invoice ----------
@@ -396,7 +409,7 @@ BEGIN
   -- payment").
   IF p_result_code <> 0 THEN
     UPDATE lb_mpesa_transactions
-    SET status = CASE WHEN p_result_code = 1032 THEN 'CANCELLED' ELSE 'FAILED' END
+    SET status = (CASE WHEN p_result_code = 1032 THEN 'CANCELLED' ELSE 'FAILED' END)::lb_mpesa_status
     WHERE id = v_txn.id;
     RETURN jsonb_build_object('already_processed', false, 'status', 'FAILED', 'sale_id', NULL);
   END IF;

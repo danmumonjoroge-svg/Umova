@@ -105,6 +105,31 @@ export function buildInvoicePdf({ invoice, lines, payments, customer, unit, busi
   return { doc, filename, blob: () => doc.output('blob') };
 }
 
+/** One-page receipt for a single recorded payment. Says plainly whether M-Pesa was confirmed by Safaricom or entered by the owner. */
+export function buildReceiptPdf({ invoice, customer, unit, business, logo }, payment) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a5' });
+  const W = 148, M = 12; let y = 16;
+  const green = [18, 60, 42], grey = [104, 117, 109];
+  const text = (t, x, yy, o = {}) => { doc.setFont('helvetica', o.bold ? 'bold' : 'normal'); doc.setFontSize(o.size || 10); doc.setTextColor(...(o.color || [38, 53, 45])); doc.text(String(t), x, yy, { align: o.align || 'left' }); };
+  let tx = M;
+  if (logo?.dataUrl) { const h = 14, w = Math.min(34, h * (logo.width / logo.height)); try { doc.addImage(logo.dataUrl, 'PNG', M, y - 6, w, h); tx = M + w + 4; } catch { /* no logo */ } }
+  text(business?.name || 'Business', tx, y, { bold: true, size: 13, color: green });
+  text('RECEIPT', W - M, y, { bold: true, size: 13, color: green, align: 'right' }); y += 5;
+  [business?.phone, business?.email].filter(Boolean).forEach((l) => { text(l, tx, y, { size: 8, color: grey }); y += 4; });
+  y = Math.max(y, 28) + 4; doc.setDrawColor(198, 161, 91); doc.line(M, y, W - M, y); y += 7;
+  const how = payment.source === 'MPESA_PROMPT' ? 'M-Pesa (confirmed by Safaricom)' : payment.source === 'MPESA_MANUAL' ? 'M-Pesa (recorded by the landlord)' : String(payment.payment_method || '').replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+  [['Receipt no.', payment.receipt_number || '—'], ['Date', day(payment.created_at)], ['Received from', customer?.name || '—'], ['Unit', unit?.unit_number || '—'],
+   ['For invoice', `${invoice.invoice_number} (${monthName(invoice.period)})`], ['Paid by', how], ['Reference', payment.reference_no || '—']].forEach(([k, v]) => {
+    text(k, M, y, { size: 9, color: grey }); text(v, M + 34, y, { size: 9, bold: k === 'Receipt no.' }); y += 6;
+  });
+  y += 2; doc.setFillColor(247, 246, 240); doc.rect(M, y, W - 2 * M, 12, 'F');
+  text('Amount received', M + 3, y + 7.5, { bold: true }); text(money(payment.amount), W - M - 3, y + 7.5, { bold: true, size: 12, color: green, align: 'right' }); y += 18;
+  text(`Invoice balance after this payment: ${money(invoice.balance_due)}`, M, y, { size: 9, color: grey });
+  text('Thank you.', M, 138, { size: 9, color: grey });
+  return { doc, filename: `${payment.receipt_number || 'receipt'}.pdf` };
+}
+export const downloadReceiptPdf = (detail, payment) => { const { doc, filename } = buildReceiptPdf(detail, payment); doc.save(filename); };
+
 export const downloadInvoicePdf = (detail) => { const { doc, filename } = buildInvoicePdf(detail); doc.save(filename); };
 
 /** Prints the real PDF through a hidden iframe (browser print dialog; "Save as PDF" also lives there). */

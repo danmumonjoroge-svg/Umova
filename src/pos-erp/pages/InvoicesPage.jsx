@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileText, Loader2, X, Download, Printer, MessageCircle, Mail, MessageSquare, Smartphone } from 'lucide-react';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { invoiceService, INVOICE_STATUS_LABEL } from '../services/invoiceService';
-import { downloadInvoicePdf, printInvoicePdf, sharePdf } from '../services/invoicePdfService';
+import { downloadInvoicePdf, printInvoicePdf, sharePdf, downloadReceiptPdf } from '../services/invoicePdfService';
 import { templateService, communicationLogService, whatsappService, renderTemplate } from '../services/communicationService';
 import { mpesaService } from '../services/mpesaService';
 import { useMpesaPayment } from '../hooks/useMpesaPayment';
@@ -177,7 +177,7 @@ function InvoiceDetail({ id, tenant, staffId, onClose }) {
         <div className="flex justify-between px-3 py-2 font-bold"><span>Amount due</span><span>{kes(inv.balance_due)}</span></div>
       </div>
       {d.payments.length > 0 && <div className="text-xs text-slate-600 mb-3 space-y-1">{d.payments.map((p) => (
-        <div key={p.id} className="flex justify-between"><span>{day(p.created_at)} · {p.source === 'MPESA_PROMPT' ? 'M-Pesa (confirmed by Safaricom)' : p.source === 'MPESA_MANUAL' ? 'M-Pesa (entered manually)' : String(p.payment_method).toLowerCase()}{p.reference_no ? ` · ${p.reference_no}` : ''}</span><span>{kes(p.amount)}</span></div>))}</div>}
+        <div key={p.id} className="flex justify-between"><span>{day(p.created_at)} · {p.source === 'MPESA_PROMPT' ? 'M-Pesa (confirmed by Safaricom)' : p.source === 'MPESA_MANUAL' ? 'M-Pesa (entered manually)' : String(p.payment_method).toLowerCase()}{p.reference_no ? ` · ${p.reference_no}` : ''}</span><span>{kes(p.amount)} <button onClick={() => downloadReceiptPdf(d, p)} className="ml-1 underline text-emerald-700">Receipt {p.receipt_number || ''}</button></span></div>))}</div>}
 
       {err && <div className="mb-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">{err}</div>}
       {note && <div className="mb-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3">{note}</div>}

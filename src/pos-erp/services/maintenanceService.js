@@ -33,6 +33,39 @@ export const maintenanceService = {
     return data;
   },
 
+  // Photos live in the private `maintenance-photos` bucket (phase17b). attachment_urls stores the storage PATHS,
+  // not URLs — a URL would expire; paths are turned into short-lived signed links when shown.
+  async addPhotos({ businessId, job, files }) {
+    const paths = [];
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) throw new Error(`${file.name} is not an image.`);
+      if (file.size > 8 * 1024 * 1024) throw new Error(`${file.name} is larger than 8 MB.`);
+      const safe = file.name.replace(/[^\w.-]+/g, '_');
+      const path = `${businessId}/${job.id}/${crypto.randomUUID()}-${safe}`;
+      const { error } = await supabase.storage.from('maintenance-photos').upload(path, file, { contentType: file.type });
+      if (error) throw error;
+      paths.push(path);
+    }
+    const next = [...(job.attachment_urls || []), ...paths];
+    const { error } = await supabase.from('lb_maintenance_requests').update({ attachment_urls: next, updated_at: new Date().toISOString() }).eq('id', job.id);
+    if (error) throw error;
+    return next;
+  },
+  async removePhoto({ job, path }) {
+    const { error: sErr } = await supabase.storage.from('maintenance-photos').remove([path]);
+    if (sErr) throw sErr;
+    const next = (job.attachment_urls || []).filter((p) => p !== path);
+    const { error } = await supabase.from('lb_maintenance_requests').update({ attachment_urls: next }).eq('id', job.id);
+    if (error) throw error;
+    return next;
+  },
+  async signedUrls(paths = []) {
+    if (!paths.length) return {};
+    const { data, error } = await supabase.storage.from('maintenance-photos').createSignedUrls(paths, 3600);
+    if (error) throw error;
+    return Object.fromEntries((data || []).filter((d) => d.signedUrl).map((d) => [d.path, d.signedUrl]));
+  },
+
   async setStatus(id, status, assignedTo) {
     const { error } = await supabase.rpc('set_maintenance_status', { p_id: id, p_status: status, p_assigned_to: assignedTo ?? null });
     if (error) throw error;
