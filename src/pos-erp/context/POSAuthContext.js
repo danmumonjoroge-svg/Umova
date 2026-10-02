@@ -17,6 +17,7 @@ import React, {
   createContext, useContext, useState, useEffect, useRef, useCallback,
 } from "react";
 import { posSupabase } from "../services/posSupabaseClient";
+import { posPasskeys } from "../auth/posPasskeys";
 
 const POSAuthContext = createContext(null);
 
@@ -170,6 +171,19 @@ export function POSAuthProvider({ children }) {
     return { ok: true };
   }, [validate]);
 
+  // Fingerprint sign-in. Same gates as a password login: once the session exists, validate() runs get_pos_profile(),
+  // which is what rejects pending / rejected / suspended businesses and forces a password change if flagged.
+  const loginWithPasskey = useCallback(async () => {
+    try {
+      const r = await posPasskeys.loginWithPasskey();
+      if (!r.usedPasskey) return { ok: false, reason: r.cancelled ? "CANCELLED" : "NO_PASSKEY" };
+      await validate();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: "PASSKEY_ERROR", detail: err.message };
+    }
+  }, [validate]);
+
   const signup = useCallback(async (payload) => {
     const { data, error } = await posSupabase.rpc("register_pos_tenant", payload);
     if (error || !data?.ok) {
@@ -211,6 +225,7 @@ export function POSAuthProvider({ children }) {
     isManager: staff?.role === "manager",
     isCashier: staff?.role === "cashier",
     login,
+    loginWithPasskey,
     signup,
     logout,
     validateSession: validate,

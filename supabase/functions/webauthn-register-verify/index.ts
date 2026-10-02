@@ -1,79 +1,60 @@
-// supabase/functions/webauthn-register-verify/index.ts
+// webauthn-register-verify — the second half of enrolment. This function did not exist before; without it the
+// "Set up on this device" button could never finish and no account could ever hold a passkey.
 //
-// Verifies the browser's attestationResponse against the challenge we
-// stored in webauthn-register-options, then stores the new passkey.
+// The account is taken from the CHALLENGE row (server-issued, single-use), never from the request body.
+// For Supabase accounts the bearer token must additionally belong to that same user.
 
 import { serve } from "https://deno.land/std@0.203.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyRegistrationResponse } from "https://esm.sh/@simplewebauthn/server@14";
-import { encode as b64uEncode } from "https://deno.land/std@0.203.0/encoding/base64url.ts";
+import { handler, consumeChallenge, challengeFromClientData, b64uEncode } from "../_shared/webauthn.ts";
 
-const RP_ID = Deno.env.get("WEBAUTHN_RP_ID")!;
-const ORIGIN = Deno.env.get("WEBAUTHN_ORIGIN")!; // e.g. "https://umova.app"
+serve(handler(async ({ req, rp, db, json, fail }) => {
+  const { attestationResponse, nickname } = await req.json().catch(() => ({}));
+  if (!attestationResponse?.response?.clientDataJSON) return fail("Missing fields", 400);
 
-serve(async (req) => {
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+  const expectedChallenge = challengeFromClientData(attestationResponse.response.clientDataJSON);
+  if (!expectedChallenge) return fail("Malformed response.", 400);
 
-  const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-  if (!token) return new Response("Missing auth token", { status: 401 });
+  const ch = await consumeChallenge(db, expectedChallenge, "registration");
+  if (!ch || !ch.user_id) return fail("This request expired — please try again.", 400);
+  if (ch.rp_id && ch.rp_id !== rp.rpId) return fail("Wrong site for this request.", 400);
 
-  const { attestationResponse, nickname } = await req.json();
+  if (ch.kind === "supabase") {
+    const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const { data: { user } } = token ? await db.auth.getUser(token) : { data: { user: null } };
+    if (!user || user.id !== ch.user_id) return fail("Invalid session", 401);
+  }
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
-  const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
-  if (userErr || !user) return new Response("Invalid session", { status: 401 });
-
-  const { data: challengeRow } = await supabase
-    .from("webauthn_challenges")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("type", "registration")
-    .gt("expires_at", new Date().toISOString())
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!challengeRow) return new Response("Challenge expired — please try again.", { status: 400 });
-
-  let verification;
+  let v;
   try {
-    verification = await verifyRegistrationResponse({
+    v = await verifyRegistrationResponse({
       response: attestationResponse,
-      expectedChallenge: challengeRow.challenge,
-      expectedOrigin: ORIGIN,
-      expectedRPID: RP_ID,
+      expectedChallenge,
+      expectedOrigin: rp.origin,
+      expectedRPID: rp.rpId,
+      requireUserVerification: true,
     });
-  } catch (err) {
-    return new Response(`Verification failed: ${err.message}`, { status: 400 });
+  } catch (e) {
+    return fail(`Could not verify this device: ${(e as Error).message}`, 400);
   }
+  if (!v.verified || !v.registrationInfo) return fail("This device could not be verified.", 400);
 
-  if (!verification.verified || !verification.registrationInfo) {
-    return new Response("Passkey could not be verified.", { status: 400 });
-  }
-
-  // As of @simplewebauthn/server v11+, these live under `credential`, and
-  // `credential.id` already arrives as a base64url string (no manual
-  // encoding needed) — only the public key is still raw bytes.
-  const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
-
-  await supabase.from("webauthn_credentials").insert({
-    user_id: user.id,
-    credential_id: credential.id,
-    public_key: b64uEncode(credential.publicKey),
+  const { credential, credentialDeviceType, credentialBackedUp } = v.registrationInfo;
+  const { error } = await db.from("webauthn_credentials").insert({
+    kind: ch.kind,
+    user_id: ch.user_id,
+    credential_id: credential.id,                       // base64url string
+    public_key: b64uEncode(credential.publicKey),       // base64url — auth-verify decodes it the same way
     counter: credential.counter,
+    transports: credential.transports ?? attestationResponse.response.transports ?? null,
     device_type: credentialDeviceType,
     backed_up: credentialBackedUp,
-    transports: credential.transports ?? attestationResponse.response?.transports ?? [],
-    nickname: nickname || "Passkey",
+    nickname: typeof nickname === "string" ? nickname.trim().slice(0, 60) || null : null,
+    rp_id: rp.rpId,
   });
-
-  await supabase.from("webauthn_challenges").delete().eq("id", challengeRow.id);
-
-  return new Response(JSON.stringify({ ok: true }), {
-    headers: { "Content-Type": "application/json" },
-  });
-});
+  if (error) {
+    if (String(error.code) === "23505") return fail("This device is already set up.", 409);
+    throw error;
+  }
+  return json({ ok: true });
+}));

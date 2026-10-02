@@ -15,8 +15,9 @@
 // real server-side failure behind a canned message again.
 
 import React, { useState } from "react";
-import { Loader2, Store } from "lucide-react";
+import { Loader2, Store, Fingerprint } from "lucide-react";
 import { usePOSAuth } from "../context/POSAuthContext";
+import { posPasskeys } from "./posPasskeys";
 
 const REASON_MESSAGES = {
   BUSINESS_NOT_FOUND: "No business found with that code.",
@@ -28,7 +29,8 @@ const REASON_MESSAGES = {
 };
 
 export default function POSLogin({ onGoToSignup, logoutNotice }) {
-  const { login } = usePOSAuth();
+  const { login, loginWithPasskey } = usePOSAuth();
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
 
   const [businessCode, setBusinessCode] = useState("");
   const [username, setUsername] = useState("");
@@ -58,6 +60,18 @@ export default function POSLogin({ onGoToSignup, logoutNotice }) {
       );
     }
     setSubmitting(false);
+  };
+
+  const fingerprint = async () => {
+    setPasskeyBusy(true);
+    setError("");
+    const r = await loginWithPasskey();
+    if (!r.ok && r.reason === "NO_PASSKEY") {
+      setError("No fingerprint is set up on this device yet. Sign in with your password once, then turn it on in Settings.");
+    } else if (!r.ok && r.reason === "PASSKEY_ERROR") {
+      setError(r.detail || "Fingerprint sign-in failed. Use your password instead.");
+    }
+    setPasskeyBusy(false);
   };
 
   return (
@@ -122,6 +136,18 @@ export default function POSLogin({ onGoToSignup, logoutNotice }) {
           {submitting && <Loader2 className="animate-spin" size={16} />}
           {submitting ? "Signing in…" : "Sign in"}
         </button>
+
+        {posPasskeys.supported() && (
+          <button
+            type="button"
+            onClick={fingerprint}
+            disabled={submitting || passkeyBusy}
+            className="w-full mt-3 border border-emerald-800 text-emerald-800 hover:bg-emerald-50 font-semibold py-3 px-6 rounded-2xl transition disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {passkeyBusy ? <Loader2 className="animate-spin" size={16} /> : <Fingerprint size={18} />}
+            {passkeyBusy ? "Checking…" : "Sign in with fingerprint"}
+          </button>
+        )}
 
         <p className="text-center text-xs text-slate-400 mt-5">
           New business?{" "}

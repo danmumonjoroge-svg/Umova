@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useChama } from "../ChamaContext";
-import { Phone, Lock, LogIn, Loader2, AlertCircle, Coins } from "lucide-react";
+import { Phone, Lock, LogIn, Loader2, AlertCircle, Coins, Fingerprint } from "lucide-react";
+import { chamaPasskeys } from "./chamaPasskeys";
 import "./LoginPhone.css";
 
 // -----------------------------------------------------------------------------
@@ -12,7 +13,7 @@ import "./LoginPhone.css";
 // -----------------------------------------------------------------------------
 
 export default function LoginPhone({ onRegisterClick, onNewChamaClick }) {
-  const { loginWithPhone, authBusy, authError } = useChama();
+  const { loginWithPhone, loginWithPasskey, authBusy, authError } = useChama();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
 
@@ -70,6 +71,12 @@ export default function LoginPhone({ onRegisterClick, onNewChamaClick }) {
             {authBusy ? "Signing in..." : "Log in"}
           </button>
         </form>
+
+        {chamaPasskeys.supported() && (
+          <button type="button" className="lgp-passkey" onClick={loginWithPasskey} disabled={authBusy}>
+            <Fingerprint size={16} /> Log in with fingerprint
+          </button>
+        )}
 
         <div className="lgp-links">
           {onRegisterClick && (

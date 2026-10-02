@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "../supabaseClient";
+import { chamaPasskeys } from "./auth/chamaPasskeys";
 
 // =============================================================================
 // ChamaContext — now auth-aware
@@ -82,19 +83,9 @@ export function ChamaProvider({ children }) {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ user: nextUser, chama: nextChama, member: nextMember, createdAt: Date.now() }));
   };
 
-  // ---- Step 1: phone + password ----
-  const loginWithPhone = useCallback(async (phone, password) => {
-    setAuthBusy(true);
-    setAuthError(null);
-    try {
-      const { data: authRows, error: authErr } = await supabase.rpc("authenticate_user", {
-        p_phone: phone.trim(),
-        p_password: password,
-      });
-      if (authErr) throw authErr;
-      const authedUser = Array.isArray(authRows) ? authRows[0] : authRows;
-      if (!authedUser) throw new Error("Incorrect phone number or password");
-
+  // Everything that happens AFTER the person has proved who they are — by password (authenticate_user)
+  // or by fingerprint (webauthn-auth-verify returns the same { user_id, full_name, phone_number } shape).
+  const finishLogin = async (authedUser) => {
       const { data: memberRows, error: memErr } = await supabase.rpc("get_user_memberships", {
         p_user_id: authedUser.user_id,
       });
@@ -115,8 +106,44 @@ export function ChamaProvider({ children }) {
         setMemberships(list);
         setAuthStage("select_chama");
       }
+  };
+
+  // ---- Step 1: phone + password ----
+  const loginWithPhone = useCallback(async (phone, password) => {
+    setAuthBusy(true);
+    setAuthError(null);
+    try {
+      const { data: authRows, error: authErr } = await supabase.rpc("authenticate_user", {
+        p_phone: phone.trim(),
+        p_password: password,
+      });
+      if (authErr) throw authErr;
+      const authedUser = Array.isArray(authRows) ? authRows[0] : authRows;
+      if (!authedUser) throw new Error("Incorrect phone number or password");
+
+      await finishLogin(authedUser);
     } catch (err) {
       setAuthError(err.message || "Login failed");
+      setAuthStage("phone");
+    } finally {
+      setAuthBusy(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---- Step 1 (alternative): fingerprint ----
+  const loginWithPasskey = useCallback(async () => {
+    setAuthBusy(true);
+    setAuthError(null);
+    try {
+      const r = await chamaPasskeys.loginWithPasskey();
+      if (!r.usedPasskey) {
+        if (!r.cancelled) setAuthError("No fingerprint is set up on this device yet. Log in with your password once, then turn it on under More.");
+        return;
+      }
+      await finishLogin(r.user);
+    } catch (err) {
+      setAuthError(err.message || "Fingerprint sign-in failed. Use your password instead.");
       setAuthStage("phone");
     } finally {
       setAuthBusy(false);
@@ -227,7 +254,7 @@ export function ChamaProvider({ children }) {
   const value = {
     // auth flow
     authStage, user, memberships, authError, licenseError, authBusy,
-    loginWithPhone, chooseMembership, backToChamaList, logout, registerUser,
+    loginWithPhone, loginWithPasskey, chooseMembership, backToChamaList, logout, registerUser,
     // active session
     chama, member, loading, setLoading,
     hasRole, api,

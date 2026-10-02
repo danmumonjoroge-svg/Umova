@@ -1,64 +1,58 @@
-// supabase/functions/webauthn-register-options/index.ts
+// webauthn-register-options — start adding a fingerprint/passkey to an account the person has ALREADY signed in to.
 //
-// Called by an ALREADY LOGGED IN user who wants to add a passkey
-// (Face ID / Fingerprint / Windows Hello) to their account. Requires a
-// valid Supabase access token in the Authorization header — you cannot
-// register a passkey for an account you haven't already password-logged
-// into once.
+//   kind "supabase" (SACCO app, My Business/POS): requires the user's Supabase access token.
+//   kind "chama": Chama has no Supabase session, so the person re-enters phone + password here.
+//                 Enrolling a biometric is as sensitive as changing the password; it must not
+//                 work off a browser that merely stayed logged in.
 
 import { serve } from "https://deno.land/std@0.203.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateRegistrationOptions } from "https://esm.sh/@simplewebauthn/server@14";
+import { handler, storeChallenge, authenticateChamaUser, MAX_PASSKEYS_PER_USER } from "../_shared/webauthn.ts";
 
-const RP_NAME = "Umova";
-const RP_ID = Deno.env.get("WEBAUTHN_RP_ID")!; // e.g. "umova.app" — no scheme, no port
+serve(handler(async ({ req, rp, db, json, fail }) => {
+  const body = await req.json().catch(() => ({}));
+  const kind = body?.kind === "chama" ? "chama" : "supabase";
+  const label = typeof body?.label === "string" ? body.label.trim().slice(0, 64) : "";
 
-serve(async (req) => {
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+  let userId: string; let userName: string; let displayName: string; let email: string | null = null;
 
-  const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-  if (!token) return new Response("Missing auth token", { status: 401 });
+  if (kind === "supabase") {
+    const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    if (!token) return fail("Missing auth token", 401);
+    const { data: { user }, error } = await db.auth.getUser(token);
+    if (error || !user) return fail("Invalid session", 401);
+    userId = user.id; email = user.email ?? null;
+    // `label` lets apps with synthetic emails (My Business logins) show a human name in the OS passkey picker.
+    userName = label || user.email || user.id;
+    displayName = label || user.email || user.id;
+  } else {
+    const who = await authenticateChamaUser(db, body?.phone, body?.password);
+    if (!who) return fail("Incorrect phone number or password", 401);
+    userId = who.user_id; userName = who.phone_number; displayName = who.full_name || who.phone_number;
+  }
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
-  const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
-  if (userErr || !user) return new Response("Invalid session", { status: 401 });
-
-  // Existing passkeys, so the authenticator can skip ones already registered.
-  const { data: existing } = await supabase
-    .from("webauthn_credentials")
-    .select("credential_id, transports")
-    .eq("user_id", user.id);
+  const { data: existing } = await db.from("webauthn_credentials")
+    .select("credential_id, transports").eq("kind", kind).eq("user_id", userId);
+  if ((existing?.length ?? 0) >= MAX_PASSKEYS_PER_USER) {
+    return fail(`You already have ${MAX_PASSKEYS_PER_USER} devices set up. Remove one first.`, 409);
+  }
 
   const options = await generateRegistrationOptions({
-    rpName: RP_NAME,
-    rpID: RP_ID,
-    userID: new TextEncoder().encode(user.id),
-    userName: user.email ?? user.id,
+    rpName: "Umova",
+    rpID: rp.rpId,
+    userID: new TextEncoder().encode(userId),
+    userName,
+    userDisplayName: displayName,
     attestationType: "none",
     authenticatorSelection: {
-      residentKey: "preferred",
-      userVerification: "preferred",
-      authenticatorAttachment: "platform", // Face ID / Touch ID / Windows Hello
+      residentKey: "required",        // discoverable: sign-in with nothing typed
+      requireResidentKey: true,
+      userVerification: "required",   // the fingerprint/face check IS the credential
+      authenticatorAttachment: "platform",
     },
-    excludeCredentials: (existing ?? []).map((c) => ({
-      id: c.credential_id,
-      type: "public-key",
-      transports: c.transports ?? undefined,
-    })),
+    excludeCredentials: (existing ?? []).map((c) => ({ id: c.credential_id, transports: c.transports ?? undefined })),
   });
 
-  await supabase.from("webauthn_challenges").insert({
-    user_id: user.id,
-    email: user.email,
-    challenge: options.challenge,
-    type: "registration",
-  });
-
-  return new Response(JSON.stringify(options), {
-    headers: { "Content-Type": "application/json" },
-  });
-});
+  await storeChallenge(db, { kind, user_id: userId, email, challenge: options.challenge, type: "registration", rp_id: rp.rpId });
+  return json(options);
+}));

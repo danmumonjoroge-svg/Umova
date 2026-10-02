@@ -4,6 +4,7 @@ import { Megaphone, FileText, User, Repeat, LogOut, Wallet } from "lucide-react"
 import { initials, roleLabel } from "../shell/format";
 import { ActionCard, CardGrid, WorkspaceHeader, Pill } from "../shell/ui";
 import LicenseBadge from "../shell/LicenseBadge";
+import ChamaPasskeySettings from "../auth/ChamaPasskeySettings";
 
 // "More" holds the things you use now and then — never a dump of every
 // database operation.
@@ -28,7 +29,8 @@ export default function MoreWorkspace({ go, onLogout }) {
         <ActionCard icon={Wallet} title="Loans" sub="Apply, repay, rules" action="Open" onClick={() => go("loans")} />
         {memberships?.length > 1 && <ActionCard icon={Repeat} title="Switch Chama" sub="You belong to more than one" action="Switch" onClick={backToChamaList} />}
       </CardGrid>
-      <button className="cm-btn danger block" onClick={onLogout}><LogOut size={15} /> Log out</button>
+      <ChamaPasskeySettings />
+      <button className="cm-btn danger block" onClick={onLogout} style={{ marginTop: 12 }}><LogOut size={15} /> Log out</button>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { settingsService } from '../services/settingsService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useCapabilities } from '../navigation/CapabilitiesContext';
 import { CAPABILITIES, ALL_CAPABILITY_KEYS } from '../navigation/navConfig';
+import POSPasskeySettings from '../auth/POSPasskeySettings';
 
 const ALL_PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK', 'CREDIT', 'VOUCHER', 'OTHER'];
 
@@ -147,6 +148,8 @@ export default function SettingsPage() {
       {saveMsg && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl p-3">{saveMsg}</div>}
 
       {/* Business Profile */}
+      <POSPasskeySettings />
+
       <form onSubmit={submitProfile} className="bg-white border border-slate-200 rounded-2xl p-6 space-y-3">
         <h2 className="font-bold text-slate-800">Business Profile</h2>
 
