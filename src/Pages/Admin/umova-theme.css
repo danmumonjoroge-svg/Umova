@@ -1,0 +1,275 @@
+/* ==========================================================================
+   UMOVA ADMIN — shared design tokens + component primitives
+   Forest Green + Emerald + Savanna Gold + Warm Ivory.
+   Import once (AdminLayout.js does this). Every Admin page should use these
+   variables instead of inventing its own colours.
+   ========================================================================== */
+
+:root {
+  --umova-forest: #123C2A;
+  --umova-dark: #0B2F21;
+  --umova-emerald: #237A52;
+  --umova-green: #2F8F62;
+  --umova-gold: #C6A15B;
+  --umova-gold-light: #D4B66A;
+  --umova-ivory: #F7F6F0;
+  --umova-soft-green: #EEF4EF;
+  --umova-white: #FFFFFF;
+  --umova-text: #26352D;
+  --umova-muted: #68756D;
+  --umova-border: #DCE5DE;
+
+  --umova-success: #237A52;
+  --umova-warning: #C6A15B;
+  --umova-danger: #B94A48;
+
+  --umova-radius: 12px;
+  --umova-radius-sm: 8px;
+  --umova-shadow: 0 1px 2px rgba(18, 60, 42, 0.06), 0 4px 14px rgba(18, 60, 42, 0.05);
+  --umova-touch: 44px;
+
+  --umova-bottom-nav-h: 64px;
+  --umova-topbar-h: 56px;
+}
+
+/* ---------- Page header ---------- */
+.ua-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.ua-page-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--umova-forest);
+  line-height: 1.2;
+}
+.ua-page-header p {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--umova-muted);
+}
+.ua-page-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Cards ---------- */
+.ua-card {
+  background: var(--umova-white);
+  border: 1px solid var(--umova-border);
+  border-radius: var(--umova-radius);
+  box-shadow: var(--umova-shadow);
+  padding: 18px;
+  min-width: 0;
+}
+.ua-card + .ua-card { margin-top: 16px; }
+.ua-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.ua-card-head h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--umova-forest);
+}
+.ua-card-head .ua-card-sub { font-size: 12px; color: var(--umova-muted); }
+
+/* ---------- KPI cards ---------- */
+.ua-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.ua-kpi {
+  background: var(--umova-white);
+  border: 1px solid var(--umova-border);
+  border-left: 3px solid var(--umova-gold);
+  border-radius: var(--umova-radius);
+  padding: 14px 16px;
+  min-width: 0;
+}
+.ua-kpi-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--umova-muted);
+  text-transform: uppercase;
+}
+.ua-kpi-value {
+  margin-top: 6px;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--umova-forest);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.ua-kpi-foot { margin-top: 4px; font-size: 12px; color: var(--umova-muted); }
+.ua-kpi-foot.up { color: var(--umova-success); }
+.ua-kpi-foot.down { color: var(--umova-danger); }
+
+/* ---------- Buttons ---------- */
+.ua-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--umova-touch);
+  padding: 0 18px;
+  border-radius: var(--umova-radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ua-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.ua-btn-primary { background: var(--umova-emerald); color: #fff; }
+.ua-btn-primary:hover:not(:disabled) { background: var(--umova-forest); }
+.ua-btn-secondary {
+  background: var(--umova-white);
+  color: var(--umova-forest);
+  border-color: var(--umova-border);
+}
+.ua-btn-secondary:hover:not(:disabled) { background: var(--umova-soft-green); }
+.ua-btn-danger { background: var(--umova-danger); color: #fff; }
+.ua-btn-block { width: 100%; }
+
+/* ---------- Status badges ---------- */
+.ua-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ua-badge-success { background: #E3F1E9; color: var(--umova-emerald); }
+.ua-badge-warning { background: #F6EEDB; color: #8A6D2B; }
+.ua-badge-danger  { background: #F5E2E1; color: var(--umova-danger); }
+.ua-badge-neutral { background: var(--umova-soft-green); color: var(--umova-muted); }
+
+/* ---------- Forms: one column on phones, two on tablet+ ---------- */
+.ua-form { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.ua-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ua-field label { font-size: 13px; font-weight: 600; color: var(--umova-text); }
+.ua-field input,
+.ua-field select,
+.ua-field textarea {
+  width: 100%;
+  min-height: var(--umova-touch);
+  padding: 10px 12px;
+  border: 1px solid var(--umova-border);
+  border-radius: var(--umova-radius-sm);
+  background: var(--umova-white);
+  color: var(--umova-text);
+  font-size: 16px; /* >=16px stops iOS zooming on focus */
+}
+.ua-field input:focus,
+.ua-field select:focus,
+.ua-field textarea:focus {
+  outline: none;
+  border-color: var(--umova-emerald);
+  box-shadow: 0 0 0 3px rgba(35, 122, 82, 0.15);
+}
+@media (min-width: 768px) {
+  .ua-form.cols-2 { grid-template-columns: 1fr 1fr; }
+  .ua-field.span-2 { grid-column: span 2; }
+}
+
+/* ---------- Responsive tables ----------
+   Desktop: normal table. Phones: add data-label="Column" to each <td> and the
+   rows become stacked cards — no page-level horizontal scroll.            */
+.ua-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ua-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ua-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--umova-muted);
+  background: var(--umova-soft-green);
+  border-bottom: 1px solid var(--umova-border);
+}
+.ua-table td { padding: 12px; border-bottom: 1px solid var(--umova-border); color: var(--umova-text); }
+.ua-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 767px) {
+  .ua-table.stack thead { display: none; }
+  .ua-table.stack,
+  .ua-table.stack tbody,
+  .ua-table.stack tr,
+  .ua-table.stack td { display: block; width: 100%; }
+  .ua-table.stack tr {
+    background: var(--umova-white);
+    border: 1px solid var(--umova-border);
+    border-radius: var(--umova-radius);
+    padding: 8px 12px;
+    margin-bottom: 10px;
+  }
+  .ua-table.stack td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 0;
+    text-align: right;
+  }
+  .ua-table.stack td::before {
+    content: attr(data-label);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--umova-muted);
+    text-align: left;
+  }
+}
+
+/* ---------- Empty / loading ---------- */
+.ua-empty, .ua-loading {
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--umova-muted);
+  font-size: 14px;
+}
+.ua-empty strong { display: block; color: var(--umova-forest); font-size: 15px; margin-bottom: 4px; }
+.ua-spinner {
+  width: 28px; height: 28px; margin: 0 auto 10px;
+  border: 3px solid var(--umova-border);
+  border-top-color: var(--umova-emerald);
+  border-radius: 50%;
+  animation: ua-spin 0.8s linear infinite;
+}
+@keyframes ua-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Confirm dialog ---------- */
+.ua-dialog-backdrop {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(11, 47, 33, 0.5);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.ua-dialog {
+  width: 100%; max-width: 420px;
+  background: var(--umova-white);
+  border-radius: var(--umova-radius);
+  padding: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+.ua-dialog h3 { color: var(--umova-forest); font-size: 17px; margin-bottom: 8px; }
+.ua-dialog p { color: var(--umova-text); font-size: 14px; line-height: 1.5; }
+.ua-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+
+/* ---------- Legacy compatibility ----------
+   Older pages still use .btn-blue / .btn-green etc. Re-skin them to Umova
+   emerald so no blue primary actions remain, until each page is migrated. */
+.admin-container .btn-blue,
+.admin-container .btn-primary { background: var(--umova-emerald) !important; border-color: var(--umova-emerald) !important; color: #fff !important; }
+.admin-container .btn-blue:hover,
+.admin-container .btn-primary:hover { background: var(--umova-forest) !important; }
+.admin-container .btn-green { background: var(--umova-emerald) !important; color: #fff !important; }
