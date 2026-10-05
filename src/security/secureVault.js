@@ -1,55 +1,171 @@
-// src/security/secureVault.js
-//
-// Two kinds of storage, deliberately separate:
-//   vault*  -> the per-service "device secret" in the OS Keystore/Keychain (via the biometric plugin's credential store).
-//              Never localStorage. Never the database in raw form (the server keeps only a SHA-256 hash).
-//   pref*   -> NON-secret flags only (random device id, "biometric enabled", "asked recently").
-//              @capacitor/preferences. Safe to lose; losing it just means "ask the user to set up again".
-//
-// iOS NOTE: Keychain items survive app uninstall. On reinstall the Preferences flags are gone, so a leftover
-// vault entry is never trusted (enable() deletes any stale entry before writing a new one).
+import { Preferences } from "@capacitor/preferences";
+import { Capacitor } from "@capacitor/core";
+import {
+  setCredentials,
+  getSecureCredentials,
+  deleteCredentials,
+} from "@capgo/capacitor-native-biometric";
 
-import { isNativeApp } from "./nativeBiometric";
+const NAMESPACE = "umova-secure-vault-v1";
 
-const NS = "app.umova.trust.";
-let _bio, _prefs;
-const bio = async () => (_bio ||= (await import("capacitor-native-biometric")).NativeBiometric);
-const prefs = async () => (_prefs ||= (await import("@capacitor/preferences")).Preferences);
+const isNativeApp = () => Capacitor.isNativePlatform();
 
-// ---- secrets -------------------------------------------------------------
+const getServerKey = (service) => {
+  return `${NAMESPACE}:${service}`;
+};
+
+/**
+ * Store a secret for a trusted device.
+ *
+ * On native Android/iOS:
+ * - The secret is stored using the native biometric-protected credential store.
+ * - BIOMETRY_CURRENT_SET means the credential becomes invalid if the
+ *   enrolled biometric set changes.
+ *
+ * On web:
+ * - We do NOT pretend browser storage is equivalent to native secure storage.
+ * - This vault is intended primarily for the native mobile app.
+ */
 export async function vaultSet(service, deviceId, secret) {
-  if (!isNativeApp()) throw new Error("Secure vault is only available in the mobile app.");
-  const p = await bio();
-  await p.setCredentials({ username: deviceId, password: secret, server: NS + service });
-}
-
-export async function vaultGet(service) {
-  if (!isNativeApp()) return null;
-  try {
-    const p = await bio();
-    const c = await p.getCredentials({ server: NS + service });
-    return c?.password ? { deviceId: c.username, secret: c.password } : null;
-  } catch {
-    return null; // missing, or the OS invalidated the key
+  if (!service || !deviceId || !secret) {
+    throw new Error("Missing secure vault information.");
   }
+
+  if (!isNativeApp()) {
+    throw new Error("Secure vault is only available on the native app.");
+  }
+
+  const server = getServerKey(service);
+
+  await setCredentials({
+    username: deviceId,
+    password: secret,
+    server,
+    accessControl: "BIOMETRY_CURRENT_SET",
+    authValidityDuration: 0,
+    title: "Protect Umova",
+    description: "Biometric authentication is required to access your trusted device.",
+    negativeButtonText: "Cancel",
+  });
+
+  // Non-secret metadata only.
+  await Preferences.set({
+    key: `${NAMESPACE}:enabled:${service}`,
+    value: "true",
+  });
+
+  await Preferences.set({
+    key: `${NAMESPACE}:device:${service}`,
+    value: deviceId,
+  });
 }
 
+/**
+ * Retrieve the protected trusted-device secret.
+ *
+ * This call itself triggers the phone's biometric authentication.
+ * We intentionally use getSecureCredentials() rather than first calling
+ * verifyIdentity() and then reading an unprotected credential.
+ */
+export async function vaultGet(service, reason = "Authenticate to continue") {
+  if (!service) {
+    throw new Error("Missing secure vault service.");
+  }
+
+  if (!isNativeApp()) {
+    throw new Error("Secure vault is only available on the native app.");
+  }
+
+  const server = getServerKey(service);
+
+  const result = await getSecureCredentials({
+    server,
+    reason,
+    title: "Unlock Umova",
+    description: reason,
+    negativeButtonText: "Cancel",
+  });
+
+  if (!result || !result.username || !result.password) {
+    throw new Error("No protected credentials were found.");
+  }
+
+  return {
+    deviceId: result.username,
+    secret: result.password,
+  };
+}
+
+/**
+ * Delete the biometric-protected trusted-device secret.
+ */
 export async function vaultDelete(service) {
-  if (!isNativeApp()) return;
-  try { const p = await bio(); await p.deleteCredentials({ server: NS + service }); } catch { /* already gone */ }
+  if (!service) return;
+
+  if (isNativeApp()) {
+    const server = getServerKey(service);
+
+    try {
+      await deleteCredentials({
+        server,
+      });
+    } catch (error) {
+      // It is safe to continue if the credential does not already exist.
+      console.warn("Secure vault delete warning:", error);
+    }
+  }
+
+  await Preferences.remove({
+    key: `${NAMESPACE}:enabled:${service}`,
+  });
+
+  await Preferences.remove({
+    key: `${NAMESPACE}:device:${service}`,
+  });
 }
 
-// ---- non-secret flags ----------------------------------------------------
-export async function prefGet(key) {
-  if (!isNativeApp()) return null;
-  const { value } = await (await prefs()).get({ key });
-  return value ?? null;
+/**
+ * Check whether this service has a locally enabled trusted device.
+ *
+ * This does NOT authenticate the user.
+ * It only checks non-secret local metadata.
+ */
+export async function vaultIsEnabled(service) {
+  if (!service) return false;
+
+  if (!isNativeApp()) {
+    return false;
+  }
+
+  const { value } = await Preferences.get({
+    key: `${NAMESPACE}:enabled:${service}`,
+  });
+
+  return value === "true";
 }
-export async function prefSet(key, value) {
-  if (!isNativeApp()) return;
-  await (await prefs()).set({ key, value: String(value) });
+
+/**
+ * Get the locally stored device ID.
+ *
+ * Device ID is not the secret, so it may safely live in Preferences.
+ */
+export async function vaultGetDeviceId(service) {
+  if (!service) return null;
+
+  if (!isNativeApp()) {
+    return null;
+  }
+
+  const { value } = await Preferences.get({
+    key: `${NAMESPACE}:device:${service}`,
+  });
+
+  return value || null;
 }
-export async function prefRemove(key) {
-  if (!isNativeApp()) return;
-  await (await prefs()).remove({ key });
+
+/**
+ * Clear all vault information for a service.
+ */
+export async function vaultClear(service) {
+  await vaultDelete(service);
 }

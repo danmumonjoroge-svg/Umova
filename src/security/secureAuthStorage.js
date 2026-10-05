@@ -1,48 +1,169 @@
-// src/security/secureAuthStorage.js
-//
-// Supabase session storage for the MOBILE app only: tokens go into Android EncryptedSharedPreferences /
-// iOS Keychain instead of plain localStorage. On the web this returns undefined, so supabase-js keeps
-// using localStorage exactly as today (browser/desktop login is unchanged).
-//
-// Use it where each Supabase client is created (src/supabaseClient.js and pos-erp/services/posSupabaseClient.js):
-//
-//   import { createAuthStorage } from "./security/secureAuthStorage";
-//   export const supabase = createClient(URL, KEY, {
-//     auth: { storage: createAuthStorage(), persistSession: true, autoRefreshToken: true },
-//   });
-//
-// (keep each client's existing storageKey option; the POS client must keep its separate key.)
-//
-// Plugin: @aparajita/capacitor-secure-storage. One-time migration: an existing session found in localStorage
-// is moved into secure storage and the plaintext copy removed.
-
 import { Capacitor } from "@capacitor/core";
+import {
+  SecureStorage,
+} from "@aparajita/capacitor-secure-storage";
 
-export function createAuthStorage() {
-  let native = false;
-  try { native = Capacitor.isNativePlatform(); } catch { /* not in Capacitor */ }
-  if (!native) return undefined;
+/**
+ * Secure storage adapter for Supabase Auth.
+ *
+ * On Android/iOS:
+ *   Uses @aparajita/capacitor-secure-storage.
+ *
+ * On web:
+ *   Falls back to window.sessionStorage.
+ *
+ * Supabase expects a storage object with:
+ *   getItem()
+ *   setItem()
+ *   removeItem()
+ */
+const isNativeApp = () => {
+  return Capacitor.isNativePlatform();
+};
 
-  let _ss;
-  const ss = async () => (_ss ||= (await import("@aparajita/capacitor-secure-storage")).SecureStorage);
+/**
+ * Web storage fallback.
+ */
+function getWebStorage() {
+  if (typeof window === "undefined") {
+    return null;
+  }
 
-  return {
-    async getItem(key) {
-      const s = await ss();
-      const v = await s.get(key).catch(() => null);
-      if (v != null) return typeof v === "string" ? v : JSON.stringify(v);
-      const legacy = window.localStorage.getItem(key); // migrate once
-      if (legacy != null) {
-        await s.set(key, legacy);
-        window.localStorage.removeItem(key);
-        return legacy;
-      }
-      return null;
-    },
-    async setItem(key, value) { await (await ss()).set(key, value); },
-    async removeItem(key) {
-      await (await ss()).remove(key).catch(() => {});
-      window.localStorage.removeItem(key);
-    },
-  };
+  return window.sessionStorage;
 }
+
+/**
+ * Get an item from secure storage.
+ */
+async function getItem(key) {
+  try {
+    /**
+     * Browser:
+     * Keep the existing sessionStorage behaviour.
+     */
+    if (!isNativeApp()) {
+      return getWebStorage()?.getItem(key) ?? null;
+    }
+
+    /**
+     * Native:
+     * Read from Android/iOS secure storage.
+     */
+    const result = await SecureStorage.get({
+      key,
+    });
+
+    if (
+      result === null ||
+      result === undefined
+    ) {
+      return null;
+    }
+
+    /**
+     * The plugin returns the stored value.
+     */
+    if (
+      typeof result === "object" &&
+      "value" in result
+    ) {
+      return result.value ?? null;
+    }
+
+    return result;
+  } catch (error) {
+    /**
+     * Supabase may request a key that does not exist.
+     * Treat that as an empty value rather than crashing
+     * the application.
+     */
+    console.warn(
+      "Secure auth storage get warning:",
+      error
+    );
+
+    return null;
+  }
+}
+
+/**
+ * Store an item.
+ */
+async function setItem(key, value) {
+  /**
+   * Browser:
+   * Continue using sessionStorage.
+   */
+  if (!isNativeApp()) {
+    const storage = getWebStorage();
+
+    if (!storage) {
+      throw new Error(
+        "Browser sessionStorage is unavailable."
+      );
+    }
+
+    storage.setItem(key, value);
+    return;
+  }
+
+  /**
+   * Native:
+   * Store the Supabase session in encrypted native storage.
+   *
+   * The secure-storage plugin supports string, number,
+   * boolean, arrays and objects, but Supabase gives us
+   * a string, so we preserve it exactly.
+   */
+  await SecureStorage.set({
+    key,
+    value,
+  });
+}
+
+/**
+ * Remove an item.
+ */
+async function removeItem(key) {
+  /**
+   * Browser.
+   */
+  if (!isNativeApp()) {
+    const storage = getWebStorage();
+
+    if (storage) {
+      storage.removeItem(key);
+    }
+
+    return;
+  }
+
+  /**
+   * Native.
+   */
+  try {
+    await SecureStorage.remove({
+      key,
+    });
+  } catch (error) {
+    /**
+     * Removing a key that doesn't exist should not
+     * prevent logout or application startup.
+     */
+    console.warn(
+      "Secure auth storage remove warning:",
+      error
+    );
+  }
+}
+
+/**
+ * Supabase-compatible storage adapter.
+ */
+export const secureAuthStorage = {
+  getItem,
+  setItem,
+  removeItem,
+};
+
+export default secureAuthStorage;

@@ -1,114 +1,312 @@
-// src/security/nativeBiometric.js
-//
-// The ONLY file that talks to the OS biometric prompt. The OS verifies the fingerprint/face;
-// we only ever receive success/failure. No biometric data is read, stored or transmitted.
-//
-// Plugin: capacitor-native-biometric (loaded lazily so the plain web build never touches it).
-// If you swap plugins later, this file and secureVault.js are the only two that change.
-
 import { Capacitor } from "@capacitor/core";
 
-export const isNativeApp = () => {
-  try { return Capacitor.isNativePlatform(); } catch { return false; }
-};
+const PLUGIN_NAME = "@capgo/capacitor-native-biometric";
 
-export const BioStatus = Object.freeze({
-  OK: "ok",
-  UNAVAILABLE: "unavailable",     // no hardware / no screen lock
-  NOT_ENROLLED: "not_enrolled",   // hardware present, nothing enrolled
-  CANCELLED: "cancelled",         // user dismissed the prompt
-  FALLBACK: "fallback",           // user tapped "use password/PIN" in the prompt
-  LOCKED_OUT: "locked_out",       // too many failed attempts (temporary or permanent)
-  FAILED: "failed",               // not recognised
-  INVALIDATED: "invalidated",     // biometric set changed / key gone -> must re-enrol
-  UNKNOWN: "unknown",
-});
-
-// capacitor-native-biometric's numeric errorCode values. VERIFY against the README of the
-// version you install; anything not listed safely falls through to the message heuristics below.
-const CODE_MAP = {
-  1: BioStatus.UNAVAILABLE,   // BIOMETRICS_UNAVAILABLE
-  2: BioStatus.LOCKED_OUT,    // USER_LOCKOUT
-  3: BioStatus.NOT_ENROLLED,  // BIOMETRICS_NOT_ENROLLED
-  4: BioStatus.LOCKED_OUT,    // USER_TEMPORARY_LOCKOUT
-  10: BioStatus.FAILED,       // AUTHENTICATION_FAILED
-  11: BioStatus.CANCELLED,    // APP_CANCEL
-  14: BioStatus.UNAVAILABLE,  // PASSCODE_NOT_SET (no device screen lock)
-  15: BioStatus.CANCELLED,    // SYSTEM_CANCEL
-  16: BioStatus.CANCELLED,    // USER_CANCEL
-  17: BioStatus.FALLBACK,     // USER_FALLBACK
-};
-
-export function mapBioError(e) {
-  const code = Number(e?.code ?? e?.errorCode);
-  if (CODE_MAP[code]) return CODE_MAP[code];
-  const msg = String(e?.message || e || "");
-  if (/invalidat|permanently/i.test(msg)) return BioStatus.INVALIDATED;
-  if (/cancel/i.test(msg)) return BioStatus.CANCELLED;
-  if (/lock/i.test(msg)) return BioStatus.LOCKED_OUT;
-  if (/not.?enrolled|no biometric|none enrolled/i.test(msg)) return BioStatus.NOT_ENROLLED;
-  if (/unavailable|not available|no hardware/i.test(msg)) return BioStatus.UNAVAILABLE;
-  return BioStatus.UNKNOWN;
-}
-
-/** Plain-language text for each status, shared by every screen so wording stays consistent. */
-export function bioMessage(status) {
-  switch (status) {
-    case BioStatus.UNAVAILABLE:  return "This phone doesn't support fingerprint or face unlock, or has no screen lock set.";
-    case BioStatus.NOT_ENROLLED: return "No fingerprint or face is set up on this phone yet. Add one in your phone's Settings, then try again.";
-    case BioStatus.LOCKED_OUT:   return "Too many attempts. Use your password, or try again shortly.";
-    case BioStatus.FAILED:       return "Not recognised. Try again or use your password.";
-    case BioStatus.INVALIDATED:  return "Your phone's fingerprints or face data changed. For your safety, sign in with your password and turn fingerprint sign-in on again.";
-    case BioStatus.CANCELLED:
-    case BioStatus.FALLBACK:     return "";
-    default:                     return "Fingerprint sign-in isn't working right now. Use your password.";
+/**
+ * Load the biometric plugin only on native platforms.
+ *
+ * This prevents the web version of Umova from trying to load
+ * native Android/iOS biometric functionality.
+ */
+async function getBiometricPlugin() {
+  if (!Capacitor.isNativePlatform()) {
+    return null;
   }
-}
 
-let _plugin;
-async function plugin() {
-  if (!_plugin) _plugin = (await import("capacitor-native-biometric")).NativeBiometric;
-  return _plugin;
+  return await import(PLUGIN_NAME);
 }
 
 /**
- * What can this device do right now?
- * -> { native, available, biometric, deviceCredentialOnly, type, status }
- *   biometric            : fingerprint/face is enrolled and usable
- *   deviceCredentialOnly : no biometric, but the phone has a PIN/pattern (we do NOT treat this as biometric login)
+ * Convert native biometric errors into something the rest
+ * of the application can understand consistently.
  */
-export async function checkBiometry() {
-  if (!isNativeApp()) return { native: false, available: false, biometric: false, deviceCredentialOnly: false, status: BioStatus.UNAVAILABLE };
-  try {
-    const p = await plugin();
-    const bio = await p.isAvailable({ useFallback: false });
-    if (bio?.isAvailable) {
-      return { native: true, available: true, biometric: true, deviceCredentialOnly: false, type: bio.biometryType, status: BioStatus.OK };
-    }
-    const any = await p.isAvailable({ useFallback: true });
+function normalizeBiometricError(error) {
+  const code =
+    Number(
+      error?.code ??
+        error?.errorCode ??
+        error?.details?.code ??
+        error?.details?.errorCode
+    ) || 0;
+
+  const message =
+    error?.message ||
+    error?.error ||
+    error?.details?.message ||
+    "Biometric authentication failed.";
+
+  const errorInfo = {
+    code,
+    message,
+    raw: error,
+  };
+
+  switch (code) {
+    case 1:
+      errorInfo.reason = "unavailable";
+      errorInfo.userMessage =
+        "Biometric authentication is not available on this device.";
+      break;
+
+    case 2:
+      errorInfo.reason = "lockout";
+      errorInfo.userMessage =
+        "Biometric authentication is temporarily locked. Use your device PIN or password, then try again.";
+      break;
+
+    case 3:
+      errorInfo.reason = "not_enrolled";
+      errorInfo.userMessage =
+        "No fingerprint or other biometric is enrolled on this device.";
+      break;
+
+    case 4:
+      errorInfo.reason = "temporary_lockout";
+      errorInfo.userMessage =
+        "Biometric authentication is temporarily unavailable. Please try again later.";
+      break;
+
+    case 10:
+      errorInfo.reason = "failed";
+      errorInfo.userMessage =
+        "The biometric was not recognized. Please try again.";
+      break;
+
+    case 11:
+      errorInfo.reason = "app_cancel";
+      errorInfo.userMessage = "Biometric authentication was cancelled.";
+      break;
+
+    case 12:
+      errorInfo.reason = "invalid_context";
+      errorInfo.userMessage =
+        "Biometric authentication could not be started.";
+      break;
+
+    case 13:
+      errorInfo.reason = "not_interactive";
+      errorInfo.userMessage =
+        "Biometric authentication cannot be used right now.";
+      break;
+
+    case 14:
+      errorInfo.reason = "passcode_not_set";
+      errorInfo.userMessage =
+        "Please set a screen lock PIN, password, or pattern on your device first.";
+      break;
+
+    case 15:
+      errorInfo.reason = "system_cancel";
+      errorInfo.userMessage =
+        "The system cancelled biometric authentication.";
+      break;
+
+    case 16:
+      errorInfo.reason = "user_cancel";
+      errorInfo.userMessage =
+        "Biometric authentication was cancelled.";
+      break;
+
+    case 17:
+      errorInfo.reason = "user_fallback";
+      errorInfo.userMessage =
+        "Biometric authentication was cancelled.";
+      break;
+
+    case 21:
+      errorInfo.reason = "no_protected_credentials";
+      errorInfo.userMessage =
+        "No protected biometric credentials were found on this device.";
+      break;
+
+    default:
+      errorInfo.reason = "unknown";
+      errorInfo.userMessage =
+        message || "Biometric authentication failed.";
+      break;
+  }
+
+  return errorInfo;
+}
+
+/**
+ * Check whether biometric authentication is available.
+ */
+export async function isBiometricAvailable() {
+  if (!Capacitor.isNativePlatform()) {
     return {
-      native: true, available: false, biometric: false,
-      deviceCredentialOnly: !!any?.isAvailable,
-      status: mapBioError({ code: bio?.errorCode }) === BioStatus.UNKNOWN ? BioStatus.UNAVAILABLE : mapBioError({ code: bio?.errorCode }),
+      available: false,
+      native: false,
+      reason: "not_native",
     };
-  } catch (e) {
-    return { native: true, available: false, biometric: false, deviceCredentialOnly: false, status: mapBioError(e) };
+  }
+
+  try {
+    const plugin = await getBiometricPlugin();
+
+    if (!plugin?.NativeBiometric) {
+      return {
+        available: false,
+        native: true,
+        reason: "plugin_unavailable",
+      };
+    }
+
+    const result = await plugin.NativeBiometric.isAvailable();
+
+    return {
+      available: Boolean(result?.isAvailable),
+      native: true,
+      biometryType: result?.biometryType ?? null,
+      deviceIsSecure: Boolean(result?.deviceIsSecure),
+      strongBiometryIsAvailable: Boolean(
+        result?.strongBiometryIsAvailable
+      ),
+      errorCode: result?.errorCode ?? null,
+      raw: result,
+    };
+  } catch (error) {
+    const normalized = normalizeBiometricError(error);
+
+    return {
+      available: false,
+      native: true,
+      reason: normalized.reason,
+      error: normalized,
+    };
   }
 }
 
 /**
- * Show the OS prompt.
- * allowDeviceCredential=true  -> phone PIN/pattern is accepted as an alternative (fine for app unlock)
- * allowDeviceCredential=false -> biometric only (use for sensitive actions: a phone PIN is easy to shoulder-surf)
- * -> { ok:true } | { ok:false, status: BioStatus.* }
+ * Perform a standalone biometric authentication.
+ *
+ * This is useful for operations that need an explicit biometric check.
+ *
+ * IMPORTANT:
+ * This function does NOT grant permissions or user roles.
+ * Supabase authentication and server-side authorization remain
+ * authoritative.
  */
-export async function authenticate({ reason = "Unlock Umova", title = "Umova", allowDeviceCredential = true } = {}) {
-  if (!isNativeApp()) return { ok: false, status: BioStatus.UNAVAILABLE };
+export async function authenticate(
+  reason = "Authenticate to continue"
+) {
+  if (!Capacitor.isNativePlatform()) {
+    return {
+      ok: false,
+      native: false,
+      reason: "not_native",
+    };
+  }
+
   try {
-    const p = await plugin();
-    await p.verifyIdentity({ reason, title, useFallback: allowDeviceCredential, maxAttempts: 3 });
-    return { ok: true, status: BioStatus.OK };
-  } catch (e) {
-    return { ok: false, status: mapBioError(e) };
+    const plugin = await getBiometricPlugin();
+
+    if (!plugin?.NativeBiometric) {
+      return {
+        ok: false,
+        native: true,
+        reason: "plugin_unavailable",
+      };
+    }
+
+    const availability =
+      await plugin.NativeBiometric.isAvailable();
+
+    if (!availability?.isAvailable) {
+      const normalized = normalizeBiometricError({
+        code: availability?.errorCode,
+        message:
+          "Biometric authentication is not available.",
+      });
+
+      return {
+        ok: false,
+        native: true,
+        reason: normalized.reason,
+        error: normalized,
+      };
+    }
+
+    await plugin.NativeBiometric.verifyIdentity({
+      reason,
+      title: "Unlock Umova",
+      subtitle: "Confirm your identity",
+      description: reason,
+      negativeButtonText: "Cancel",
+      maxAttempts: 3,
+    });
+
+    return {
+      ok: true,
+      native: true,
+    };
+  } catch (error) {
+    const normalized = normalizeBiometricError(error);
+
+    return {
+      ok: false,
+      native: true,
+      reason: normalized.reason,
+      error: normalized,
+    };
   }
 }
+
+/**
+ * Determine whether a biometric error represents a normal
+ * cancellation by the user.
+ */
+export function isBiometricCancellation(error) {
+  const normalized =
+    error?.reason
+      ? error
+      : normalizeBiometricError(error);
+
+  return [
+    "user_cancel",
+    "app_cancel",
+    "system_cancel",
+    "user_fallback",
+  ].includes(normalized.reason);
+}
+
+/**
+ * Determine whether the device is temporarily locked out
+ * from biometric authentication.
+ */
+export function isBiometricLockout(error) {
+  const normalized =
+    error?.reason
+      ? error
+      : normalizeBiometricError(error);
+
+  return [
+    "lockout",
+    "temporary_lockout",
+  ].includes(normalized.reason);
+}
+
+/**
+ * Determine whether biometric authentication is unavailable
+ * because the device has no enrolled biometric or secure
+ * screen lock.
+ */
+export function isBiometricUnavailable(error) {
+  const normalized =
+    error?.reason
+      ? error
+      : normalizeBiometricError(error);
+
+  return [
+    "unavailable",
+    "not_enrolled",
+    "passcode_not_set",
+    "plugin_unavailable",
+    "not_native",
+  ].includes(normalized.reason);
+}
+
+/**
+ * Expose the normalized error converter for the security layer.
+ */
+export { normalizeBiometricError };

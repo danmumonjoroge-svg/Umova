@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^8.0.1",
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
+    "@capacitor/preferences": "^8.0.1",
+    "@capgo/capacitor-native-biometric": "^8.6.11",
     "@hello-pangea/dnd": "^18.0.1",
     "@simplewebauthn/browser": "^14.0.0",
     "@supabase/supabase-js": "^2.99.2",
