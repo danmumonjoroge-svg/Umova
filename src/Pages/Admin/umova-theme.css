@@ -273,3 +273,60 @@
 .admin-container .btn-blue:hover,
 .admin-container .btn-primary:hover { background: var(--umova-forest) !important; }
 .admin-container .btn-green { background: var(--umova-emerald) !important; color: #fff !important; }
+
+/* ---------- Workspace hubs (module landing pages) ---------- */
+.ua-hub-sub { margin: 0 0 14px; font-size: 13px; color: var(--umova-muted); }
+.ua-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (min-width: 640px)  { .ua-hub-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .ua-hub-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.ua-hub-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 118px;
+  padding: 14px;
+  background: var(--umova-white);
+  border: 1px solid var(--umova-border);
+  border-radius: 16px;
+  box-shadow: var(--umova-shadow);
+  color: var(--umova-forest);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.ua-hub-card:active { transform: scale(0.98); border-color: var(--umova-gold); }
+.ua-hub-card strong { font-size: 15px; line-height: 1.25; }
+.ua-hub-card small { font-size: 12px; line-height: 1.35; color: var(--umova-muted); }
+
+.ua-hub-ico {
+  width: 42px; height: 42px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+  background: var(--umova-soft-green);
+  color: var(--umova-emerald);
+  margin-bottom: 6px;
+}
+.ua-hub-list { display: flex; flex-direction: column; gap: 10px; }
+.ua-hub-row {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; min-height: 64px; padding: 10px 14px;
+  background: var(--umova-white);
+  border: 1px solid var(--umova-border);
+  border-radius: 16px;
+  color: var(--umova-forest);
+  text-decoration: none; text-align: left; font: inherit; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ua-hub-row .ua-hub-ico { margin-bottom: 0; }
+.ua-hub-row:active { border-color: var(--umova-gold); }
+.ua-hub-txt { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ua-hub-txt strong { font-size: 15px; }
+.ua-hub-txt small { font-size: 12px; color: var(--umova-muted); }
+.ua-hub-chev { color: var(--umova-muted); flex-shrink: 0; }
+.ua-hub-signout { color: var(--umova-danger); }
+.ua-hub-signout .ua-hub-ico { background: #F5E2E1; color: var(--umova-danger); }

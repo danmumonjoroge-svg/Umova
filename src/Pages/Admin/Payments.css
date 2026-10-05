@@ -1,0 +1,156 @@
+/* Payments — every class is "pay-" prefixed; nothing here is global.
+   Phone-first: one column, 16px inputs, 44px+ targets, sticky action bar. */
+.pay, .pay * { box-sizing: border-box; }
+.pay { color: var(--umova-text); }
+
+.pay-tabs {
+  display: flex; gap: 4px; padding: 4px; margin-bottom: 12px;
+  background: var(--umova-soft-green); border-radius: 12px;
+}
+.pay-tabs button {
+  flex: 1; min-height: 44px; border: 0; border-radius: 9px; background: transparent;
+  font-size: 14px; font-weight: 600; color: var(--umova-muted); cursor: pointer;
+}
+.pay-tabs button.on { background: var(--umova-white); color: var(--umova-forest); box-shadow: 0 1px 3px rgba(18,60,42,.12); }
+
+.pay-banner {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  margin-bottom: 12px; padding: 12px 14px; border-radius: 12px; font-size: 14px; line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.pay-banner.ok  { background: #E3F1E9; color: #17583a; border: 1px solid #b9dcc8; }
+.pay-banner.bad { background: #F5E2E1; color: #8c2f2d; border: 1px solid #e3b9b7; }
+.pay-banner button { border: 0; background: transparent; color: inherit; width: 32px; height: 32px; cursor: pointer; flex-shrink: 0; }
+
+.pay-layout { display: block; }
+.pay-pane { display: none; }
+.pay-pane.show { display: block; }
+
+.pay-card {
+  background: var(--umova-white); border: 1px solid var(--umova-border);
+  border-radius: 16px; box-shadow: var(--umova-shadow); padding: 16px;
+}
+.pay-h { margin: 0 0 14px; font-size: 16px; font-weight: 700; color: var(--umova-forest); }
+
+.pay-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; min-width: 0; }
+.pay-field > label { font-size: 13px; font-weight: 600; color: var(--umova-text); }
+.pay-field input, .pay-field select, .pay-search {
+  font-family: inherit;
+  width: 100%; min-height: 48px; padding: 10px 12px;
+  border: 1px solid var(--umova-border); border-radius: 12px; background: var(--umova-white);
+  font-size: 16px; color: var(--umova-text); /* 16px: stops iOS zoom-on-focus */
+}
+.pay-field input:focus, .pay-field select:focus, .pay-search:focus {
+  outline: none; border-color: var(--umova-emerald); box-shadow: 0 0 0 3px rgba(35,122,82,.15);
+}
+.pay-two { display: grid; grid-template-columns: 1fr; gap: 0; }
+.pay-hint { font-size: 12px; color: var(--umova-muted); }
+.pay-hint.bad { color: var(--umova-danger); }
+
+/* member picker */
+.pay-chip {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 56px; padding: 8px 12px; border-radius: 12px;
+  background: var(--umova-soft-green); border: 1px solid var(--umova-border);
+}
+.pay-chip > div { display: flex; flex-direction: column; min-width: 0; }
+.pay-chip strong, .pay-chip small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pay-chip small { color: var(--umova-muted); font-size: 12px; }
+.pay-chip button {
+  min-height: 40px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent;
+  color: var(--umova-emerald); font-weight: 700; font-size: 14px; cursor: pointer;
+}
+.pay-matches { list-style: none; margin: 4px 0 0; padding: 0; border: 1px solid var(--umova-border); border-radius: 12px; overflow: hidden; }
+.pay-matches li + li { border-top: 1px solid var(--umova-border); }
+.pay-matches button {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; min-height: 52px; padding: 8px 12px; border: 0; background: var(--umova-white);
+  text-align: left; font-size: 15px; color: var(--umova-text); cursor: pointer;
+}
+.pay-matches button:active { background: var(--umova-soft-green); }
+.pay-matches small { color: var(--umova-muted); font-size: 12px; flex-shrink: 0; }
+
+/* segmented method */
+.pay-seg { display: flex; gap: 6px; }
+.pay-seg button {
+  flex: 1; min-height: 48px; border: 1px solid var(--umova-border); border-radius: 12px;
+  background: var(--umova-white); color: var(--umova-text); font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.pay-seg button.on { background: var(--umova-forest); border-color: var(--umova-forest); color: #fff; }
+
+/* allocation rows: card-in-card on phone */
+.pay-alloc {
+  position: relative; display: grid; grid-template-columns: 1fr; gap: 8px;
+  padding: 12px; margin-bottom: 10px; border: 1px solid var(--umova-border);
+  border-radius: 14px; background: var(--umova-ivory);
+}
+.pay-alloc.pay-alloc:has(.pay-x) { padding-right: 52px; }
+.pay-amt { position: relative; }
+.pay-amt span {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  font-size: 13px; font-weight: 700; color: var(--umova-muted); pointer-events: none;
+}
+.pay-amt input { padding-left: 52px; font-variant-numeric: tabular-nums; }
+.pay-x {
+  position: absolute; top: 8px; right: 8px; width: 40px; height: 40px;
+  border: 0; border-radius: 10px; background: transparent; color: var(--umova-danger); font-size: 16px; cursor: pointer;
+}
+.pay-add {
+  min-height: 48px; border: 1.5px dashed var(--umova-emerald); border-radius: 12px; background: transparent;
+  color: var(--umova-emerald); font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.pay-add:disabled { opacity: .5; }
+
+/* sticky action bar — sits at the bottom of the scrolling page, directly above the tab bar */
+.pay-bar {
+  position: sticky; bottom: 0; z-index: 5;
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px;
+  margin: 14px -14px -20px; padding: 12px 14px;
+  background: var(--umova-white); border-top: 1px solid var(--umova-border);
+  box-shadow: 0 -4px 14px rgba(18,60,42,.08);
+}
+.pay-bar-total { display: flex; flex-direction: column; }
+.pay-bar-total small { font-size: 12px; color: var(--umova-muted); }
+.pay-bar-total strong { font-size: 20px; color: var(--umova-forest); font-variant-numeric: tabular-nums; }
+.pay-post {
+  min-height: 52px; padding: 0 22px; border: 0; border-radius: 14px;
+  background: var(--umova-emerald); color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.pay-post:disabled { background: #b7c9bd; cursor: not-allowed; }
+.pay-bar-hint { grid-column: 1 / -1; font-size: 12px; color: var(--umova-muted); }
+
+/* history */
+.pay-hhead { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.pay-hhead .pay-h { margin: 0; }
+.pay-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.pay-item { padding: 12px; border: 1px solid var(--umova-border); border-radius: 14px; background: var(--umova-white); }
+.pay-item-top { display: flex; justify-content: space-between; gap: 10px; }
+.pay-item-main { display: flex; flex-direction: column; min-width: 0; }
+.pay-item-main strong { font-size: 15px; overflow-wrap: anywhere; }
+.pay-item-main small { font-size: 12px; color: var(--umova-muted); overflow-wrap: anywhere; }
+.pay-item-amt { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.pay-item-amt strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.pay-item-actions { display: flex; gap: 8px; margin-top: 10px; }
+.pay-item-actions button {
+  flex: 1; min-height: 44px; border: 1px solid var(--umova-border); border-radius: 10px;
+  background: var(--umova-white); color: var(--umova-forest); font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.pay-item-actions button.primary { background: var(--umova-emerald); border-color: var(--umova-emerald); color: #fff; }
+
+/* ---------- tablet+: side by side, no tabs, bar is part of the card ---------- */
+@media (min-width: 768px) {
+  .pay-tabs { display: none; }
+  .pay-pane { display: block; }
+  .pay-history-pane { margin-top: 16px; }
+  .pay-two { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .pay-hhead { flex-direction: row; align-items: center; justify-content: space-between; }
+  .pay-search { max-width: 280px; }
+  .pay-alloc { grid-template-columns: 1fr 1fr; }
+  .pay-alloc.pay-alloc:has(.pay-x) { padding-right: 56px; }
+  .pay-bar { margin: 0; position: static; border: 0; box-shadow: none; padding: 14px 4px 0; background: transparent; }
+}
+@media (min-width: 1024px) {
+  .pay-layout { display: grid; grid-template-columns: minmax(380px, 460px) 1fr; gap: 18px; align-items: start; }
+  .pay-history-pane { margin-top: 0; }
+  .pay-card { padding: 20px; }
+}

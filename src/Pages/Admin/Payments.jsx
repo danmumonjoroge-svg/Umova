@@ -4,42 +4,46 @@ import { generateReceiptPDF } from "../../utils/generateReceiptPDF";
 import logo from "../../asset/logo/umovalogo.png";
 import { postJournal } from "../../services/journalAPI";
 import { getSystemAccount } from "../../services/chartOfAccountsAPI";
+import { ConfirmDialog, StatusBadge, EmptyState, LoadingState } from "./AdminUI";
+import "./Payments.css";
 
-// Loaded from chart_of_accounts (system_account_key) at mount instead of
-// hardcoded — see SYSTEM_ACCOUNT_KEYS below and the useEffect that
-// resolves them. Keeping the { code, name } shape the existing dropdown
-// already expects.
+// Account choices come from chart_of_accounts via system_account_key (no
+// hard-coded ids).
 const SYSTEM_ACCOUNT_KEYS = [
   { key: "CASH", name: "Cash" },
   { key: "MEMBER_SAVINGS", name: "Savings" },
-  { key: "LOAN_RECEIVABLE", name: "Loans" },
+  { key: "LOAN_RECEIVABLE", name: "Loan repayment" },
   { key: "INTEREST_INCOME", name: "Interest" },
-  { key: "SHARE_CAPITAL", name: "Share Capital" },
+  { key: "SHARE_CAPITAL", name: "Share capital" },
 ];
+const ALLOCATION_KEYS = SYSTEM_ACCOUNT_KEYS.filter((k) => k.key !== "CASH");
+const MODES = ["M-Pesa", "Cash", "Bank"];
 
-const num = (v) => (v === "" || v === null || isNaN(v) ? 0 : Number(v));
+// money in integer cents so 0.1 + 0.2 never produces a phantom difference
+const cents = (v) => (v === "" || v == null || isNaN(v) ? 0 : Math.round(Number(v) * 100));
+const kes = (c) => (c / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const today = () => new Date().toISOString().slice(0, 10);
 
 export default function Payments() {
   const [members, setMembers] = useState([]);
   const [ledger, setLedger] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
 
+  const [tab, setTab] = useState("new"); // phone only; desktop shows both
   const [memberNo, setMemberNo] = useState("");
-  const [memberName, setMemberName] = useState("");
-
+  const [memberQuery, setMemberQuery] = useState("");
   const [receiptCode, setReceiptCode] = useState("");
   const [mode, setMode] = useState("M-Pesa");
+  const [transactionDate, setTransactionDate] = useState(today());
+  const [allocations, setAllocations] = useState([{ account: "", amount: "" }]);
 
-  const [transactionDate, setTransactionDate] = useState("");
-
-  const [allocations, setAllocations] = useState([
-    { account: "", amount: "" },
-  ]);
-
-  const [loading, setLoading] = useState(false);
-  const [accountIds, setAccountIds] = useState(null); // { CASH: id, MEMBER_SAVINGS: id, ... }
+  const [posting, setPosting] = useState(false);
+  const [result, setResult] = useState(null); // { ok, text }
+  const [accountIds, setAccountIds] = useState(null);
   const [accountsLoading, setAccountsLoading] = useState(true);
+  const [historySearch, setHistorySearch] = useState("");
+  const [confirm, setConfirm] = useState(null); // group being approved
 
-  // ================= LOAD =================
   useEffect(() => {
     fetchMembers();
     fetchLedger();
@@ -50,133 +54,157 @@ export default function Payments() {
     setAccountsLoading(true);
     try {
       const resolved = {};
-      for (const { key } of SYSTEM_ACCOUNT_KEYS) {
-        resolved[key] = await getSystemAccount(key);
-      }
+      for (const { key } of SYSTEM_ACCOUNT_KEYS) resolved[key] = await getSystemAccount(key);
       setAccountIds(resolved);
-      // Default allocation now that we know MEMBER_SAVINGS's real id.
       setAllocations([{ account: resolved.MEMBER_SAVINGS, amount: "" }]);
     } catch (err) {
       console.error("Failed to resolve system accounts", err);
-      alert(`Failed to load Chart of Accounts mapping: ${err.message || err}`);
+      setResult({ ok: false, text: `Chart of Accounts mapping failed to load: ${err.message || err}` });
     } finally {
       setAccountsLoading(false);
     }
   };
 
-
   const fetchMembers = async () => {
-    const { data } = await supabase.from("members").select("*");
+    const { data } = await supabase.from("members").select("id, member_no, name");
     setMembers(data || []);
   };
 
   const fetchLedger = async () => {
+    setHistoryLoading(true);
     const { data } = await supabase
       .from("general_ledger")
       .select("*")
-      .order("date", { ascending: false });
-
+      .order("date", { ascending: false })
+      .order("cod", { ascending: false })
+      .limit(300);
     setLedger(data || []);
+    setHistoryLoading(false);
   };
 
-  // ================= MEMBER =================
-  const selectMember = (no) => {
-    setMemberNo(no);
-    const m = members.find((x) => x.member_no === no);
-    setMemberName(m?.name || "");
-  };
+  // ---------- member picker ----------
+  const selectedMember = useMemo(() => members.find((m) => m.member_no === memberNo) || null, [members, memberNo]);
+  const matches = useMemo(() => {
+    const q = memberQuery.trim().toLowerCase();
+    if (!q || selectedMember) return [];
+    return members
+      .filter((m) => `${m.member_no} ${m.name || ""}`.toLowerCase().includes(q))
+      .slice(0, 6);
+  }, [members, memberQuery, selectedMember]);
 
-  // ================= ALLOCATIONS =================
-  const updateAllocation = (i, field, value) => {
-    const copy = [...allocations];
-    copy[i][field] = value;
-    setAllocations(copy);
-  };
+  // ---------- allocations ----------
+  const updateAllocation = (i, field, value) =>
+    setAllocations((rows) => rows.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)));
+  const addRow = () =>
+    setAllocations((rows) => [...rows, { account: accountIds?.MEMBER_SAVINGS || "", amount: "" }]);
+  const removeRow = (i) =>
+    setAllocations((rows) => {
+      const next = rows.filter((_, idx) => idx !== i);
+      return next.length ? next : [{ account: accountIds?.MEMBER_SAVINGS || "", amount: "" }];
+    });
 
-  const addRow = () => {
-    setAllocations([...allocations, { account: accountIds?.MEMBER_SAVINGS || "", amount: "" }]);
-  };
+  const totalCents = useMemo(() => allocations.reduce((s, a) => s + cents(a.amount), 0), [allocations]);
 
-  const removeRow = (i) => {
-    const copy = allocations.filter((_, idx) => idx !== i);
-    setAllocations(copy.length ? copy : [{ account: accountIds?.MEMBER_SAVINGS || "", amount: "" }]);
-  };
-
-  const total = useMemo(
-    () => allocations.reduce((s, a) => s + num(a.amount), 0),
-    [allocations]
-  );
-
-  // ================= VALIDATION =================
-  const validate = () => {
-    if (!memberNo) return "Select member";
-    if (!receiptCode) return "Enter receipt code";
-    if (!transactionDate) return "Enter transaction date";
-    if (total <= 0) return "Amount must be greater than 0";
-
-    const sumAlloc = allocations.reduce((s, a) => s + num(a.amount), 0);
-    if (sumAlloc !== total) return "Allocation must equal total";
-
+  // ---------- validation (first problem becomes the hint under the button) ----------
+  const problem = useMemo(() => {
+    if (!memberNo) return "Select a member";
+    if (!receiptCode.trim()) return "Enter the receipt / reference";
+    if (!transactionDate) return "Pick the payment date";
+    if (allocations.some((a) => cents(a.amount) < 0)) return "Amounts cannot be negative";
+    if (totalCents <= 0) return "Enter an amount to allocate";
+    if (allocations.some((a) => cents(a.amount) > 0 && !a.account)) return "Choose an account for each amount";
+    if (!accountIds) return "Loading accounts…";
     return null;
+  }, [memberNo, receiptCode, transactionDate, allocations, totalCents, accountIds]);
+
+  const duplicateCode = useMemo(() => {
+    const c = receiptCode.trim();
+    return !!c && ledger.some((l) => (l.reference_no || l.journal_no || l.reference) === c);
+  }, [receiptCode, ledger]);
+
+  const resetForm = () => {
+    setMemberNo(""); setMemberQuery(""); setReceiptCode(""); setTransactionDate(today());
+    setAllocations([{ account: accountIds?.MEMBER_SAVINGS || "", amount: "" }]);
   };
 
-  // ================= POST PAYMENT =================
+  // ---------- post ----------
   const submitPayment = async () => {
-    const errorMsg = validate();
-    if (errorMsg) return alert(errorMsg);
+    if (problem || posting) return;
+    if (duplicateCode) { setResult({ ok: false, text: `Payment not posted: reference "${receiptCode.trim()}" has already been used.` }); return; }
 
-    if (!accountIds) {
-      alert("Chart of Accounts mapping hasn't loaded yet — please wait a moment and try again.");
-      return;
-    }
-
-    setLoading(true);
-
+    setPosting(true);
+    setResult(null);
     try {
-      // Routed through the central posting engine instead of writing
-      // general_ledger directly. This also fixes a pre-existing bug: the
-      // old code wrote the cash debit and each allocation credit as
-      // separate incomplete rows (debit_account_id set with
-      // credit_account_id null, and vice versa), which isn't a valid
-      // double-entry line anywhere else in the app. This is one balanced
-      // journal: a single debit to cash for the full amount, and one
-      // credit line per allocation.
-      await postJournal({
+      const lines = [
+        { account_id: Number(accountIds.CASH), debit: totalCents / 100, credit: 0 },
+        ...allocations
+          .filter((a) => cents(a.amount) > 0)
+          .map((a) => ({ account_id: Number(a.account), debit: 0, credit: cents(a.amount) / 100 })),
+      ];
+      const res = await postJournal({
         member_no: memberNo,
-        reference: receiptCode,
+        reference: receiptCode.trim(),
         date: transactionDate,
         description: `Payment received (${mode})`,
-        lines: [
-          { account_id: accountIds.CASH, debit: total, credit: 0 },
-          ...allocations.map((a) => ({
-            account_id: Number(a.account),
-            debit: 0,
-            credit: num(a.amount),
-          })),
-        ],
+        lines,
       });
-
-      alert("✅ Payment posted successfully");
-
-      setMemberNo("");
-      setMemberName("");
-      setReceiptCode("");
-      setTransactionDate("");
-      setAllocations([{ account: accountIds.MEMBER_SAVINGS, amount: "" }]);
-
+      // postJournal only resolves when the server accepted the journal (and,
+      // with the v2 journalAPI, after reading the rows back).
+      setResult({ ok: true, text: `Payment posted · ${res?.reference || receiptCode.trim()} · KES ${kes(totalCents)}` });
+      resetForm();
       fetchLedger();
     } catch (e) {
-      alert(e.message);
+      setResult({ ok: false, text: `Payment not posted: ${e.message || e}` });
+    } finally {
+      setPosting(false);
     }
-
-    setLoading(false);
   };
 
-  // ================= LOGO =================
+  // ---------- history: one card per journal ----------
+  const history = useMemo(() => {
+    const map = new Map();
+    ledger.forEach((l) => {
+      const ref = l.reference_no || l.journal_no || l.reference || `row-${l.cod}`;
+      let g = map.get(ref);
+      if (!g) {
+        g = { ref, date: l.date, member_no: null, name: null, amountC: 0, statuses: new Set(), rows: [] };
+        map.set(ref, g);
+      }
+      g.rows.push(l);
+      g.member_no = g.member_no || l.member_no;
+      g.name = g.name || l.name;
+      g.statuses.add(l.status || "PENDING");
+      // credits side = the money that landed; two-sided rows count once
+      if (l.credit_account_id != null) g.amountC += Math.round(Number(l.amount || 0) * 100);
+    });
+    return [...map.values()].map((g) => ({
+      ...g,
+      status: g.statuses.size === 1 ? [...g.statuses][0] : "MIXED",
+    }));
+  }, [ledger]);
+
+  const filteredHistory = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    const list = q
+      ? history.filter((h) => `${h.ref} ${h.member_no || ""} ${h.name || ""}`.toLowerCase().includes(q))
+      : history;
+    return list.slice(0, 100);
+  }, [history, historySearch]);
+
+  const orRef = (ref) => `journal_no.eq."${ref}",reference_no.eq."${ref}",reference.eq."${ref}"`;
+
+  const approve = async () => {
+    const g = confirm;
+    setConfirm(null);
+    if (!g) return;
+    const { error } = await supabase.from("general_ledger").update({ status: "APPROVED" }).or(orRef(g.ref));
+    setResult(error ? { ok: false, text: `Not approved: ${error.message}` } : { ok: true, text: `Approved ${g.ref}` });
+    fetchLedger();
+  };
+
   const getBase64 = async (imgPath) => {
     const res = await fetch(imgPath);
     const blob = await res.blob();
-
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
@@ -184,280 +212,188 @@ export default function Payments() {
     });
   };
 
-  // ================= DOWNLOAD =================
-  const downloadReceipt = async (row) => {
+  const downloadReceipt = async (g) => {
     try {
-      const { data } = await supabase
-        .from("general_ledger")
-        .select("*")
-        .eq("reference", row.reference);
-
+      const { data, error } = await supabase.from("general_ledger").select("*").or(orRef(g.ref));
+      if (error) throw error;
       const logoBase64 = await getBase64(logo);
-
-      await generateReceiptPDF(data, row.reference, logoBase64);
+      await generateReceiptPDF(data, g.ref, logoBase64);
     } catch (err) {
-      alert("Download failed");
+      setResult({ ok: false, text: `Receipt download failed: ${err.message || err}` });
     }
   };
 
-  // ================= APPROVE =================
-  const approve = async (row) => {
-    await supabase
-      .from("general_ledger")
-      .update({ status: "APPROVED" })
-      .eq("reference", row.reference);
-
-    fetchLedger();
-    alert("✅ Approved");
-  };
+  const statusTone = (s) => (s === "APPROVED" ? "success" : s === "POSTED" ? "neutral" : "warning");
 
   return (
-    <div className="payments">
-
-      {/* HEADER */}
-      <div className="header">
-        <h2>💳 Payments Terminal</h2>
-        <p>Core Banking Dashboard</p>
+    <div className="pay">
+      <div className="pay-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === "new"} className={tab === "new" ? "on" : ""} onClick={() => setTab("new")}>
+          New payment
+        </button>
+        <button role="tab" aria-selected={tab === "history"} className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>
+          History
+        </button>
       </div>
 
-      <div className="grid">
+      {result && (
+        <div className={`pay-banner ${result.ok ? "ok" : "bad"}`} role="status">
+          <span>{result.text}</span>
+          <button type="button" onClick={() => setResult(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
 
-        {/* ================= PAYMENT CARD ================= */}
-        <div className="card payment-card">
+      <div className="pay-layout">
+        {/* ============ NEW PAYMENT ============ */}
+        <section className={`pay-pane pay-form-pane ${tab === "new" ? "show" : ""}`}>
+          <div className="pay-card">
+            <h2 className="pay-h">Receive payment</h2>
 
-          <h3>New Payment</h3>
+            <div className="pay-field">
+              <label htmlFor="pay-member">Member</label>
+              {selectedMember ? (
+                <div className="pay-chip">
+                  <div>
+                    <strong>{selectedMember.name || selectedMember.member_no}</strong>
+                    <small>{selectedMember.member_no}</small>
+                  </div>
+                  <button type="button" onClick={() => { setMemberNo(""); setMemberQuery(""); }}>Change</button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    id="pay-member" type="search" autoComplete="off" inputMode="search"
+                    placeholder="Search name or member no."
+                    value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)}
+                  />
+                  {matches.length > 0 && (
+                    <ul className="pay-matches">
+                      {matches.map((m) => (
+                        <li key={m.id}>
+                          <button type="button" onClick={() => { setMemberNo(m.member_no); setMemberQuery(""); }}>
+                            <strong>{m.name || "—"}</strong><small>{m.member_no}</small>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {memberQuery.trim() && matches.length === 0 && <small className="pay-hint">No member matches “{memberQuery}”.</small>}
+                </>
+              )}
+            </div>
 
-          <div className="form-grid-3">
+            <div className="pay-two">
+              <div className="pay-field">
+                <label htmlFor="pay-ref">Receipt / reference</label>
+                <input id="pay-ref" value={receiptCode} onChange={(e) => setReceiptCode(e.target.value)}
+                  placeholder="e.g. M-Pesa code" autoCapitalize="characters" autoComplete="off" />
+                {duplicateCode && <small className="pay-hint bad">This reference was already used.</small>}
+              </div>
+              <div className="pay-field">
+                <label htmlFor="pay-date">Date</label>
+                <input id="pay-date" type="date" value={transactionDate} max={today()} onChange={(e) => setTransactionDate(e.target.value)} />
+              </div>
+            </div>
 
-            <div>
-              <label>Member</label>
-              <select value={memberNo} onChange={(e) => selectMember(e.target.value)}>
-                <option value="">Select Member</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.member_no}>
-                    {m.member_no} - {m.name}
-                  </option>
+            <div className="pay-field">
+              <label id="pay-mode-l">Payment method</label>
+              <div className="pay-seg" role="radiogroup" aria-labelledby="pay-mode-l">
+                {MODES.map((m) => (
+                  <button key={m} type="button" role="radio" aria-checked={mode === m}
+                    className={mode === m ? "on" : ""} onClick={() => setMode(m)}>{m}</button>
                 ))}
-              </select>
+              </div>
             </div>
 
-            <div>
-              <label>Receipt Code</label>
-              <input
-                value={receiptCode}
-                onChange={(e) => setReceiptCode(e.target.value)}
-                placeholder="MPESA / Reference"
-              />
+            <div className="pay-field">
+              <label>Allocation</label>
+              {accountsLoading ? (
+                <LoadingState message="Loading accounts…" />
+              ) : (
+                allocations.map((a, i) => (
+                  <div key={i} className="pay-alloc">
+                    <select aria-label={`Account ${i + 1}`} value={a.account} onChange={(e) => updateAllocation(i, "account", e.target.value)}>
+                      {ALLOCATION_KEYS.map((x) => (
+                        <option key={x.key} value={accountIds?.[x.key] || ""}>{x.name}</option>
+                      ))}
+                    </select>
+                    <div className="pay-amt">
+                      <span>KES</span>
+                      <input aria-label={`Amount ${i + 1}`} type="number" inputMode="decimal" min="0" step="0.01"
+                        placeholder="0.00" value={a.amount} onChange={(e) => updateAllocation(i, "amount", e.target.value)} />
+                    </div>
+                    {allocations.length > 1 && (
+                      <button type="button" className="pay-x" onClick={() => removeRow(i)} aria-label={`Remove allocation ${i + 1}`}>✕</button>
+                    )}
+                  </div>
+                ))
+              )}
+              <button type="button" className="pay-add" onClick={addRow} disabled={accountsLoading}>+ Add another allocation</button>
             </div>
-
-            <div>
-              <label>Date</label>
-              <input
-                type="date"
-                value={transactionDate}
-                onChange={(e) => setTransactionDate(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label>Mode</label>
-              <select value={mode} onChange={(e) => setMode(e.target.value)}>
-                <option>M-Pesa</option>
-                <option>Cash</option>
-                <option>Bank</option>
-              </select>
-            </div>
-
-            <div className="alloc-btn">
-              <button onClick={addRow}>+ Add Allocation</button>
-            </div>
-
           </div>
 
-          <div className="member-box">
-            Member: <strong>{memberName || "Not Selected"}</strong>
-          </div>
-
-          <h4>Allocations</h4>
-
-          {allocations.map((a, i) => (
-            <div key={i} className="row">
-
-              <select
-                value={a.account}
-                onChange={(e) => updateAllocation(i, "account", e.target.value)}
-                disabled={accountsLoading}
-              >
-                {SYSTEM_ACCOUNT_KEYS.map((x) => (
-                  <option key={x.key} value={accountIds?.[x.key] || ""}>
-                    {x.name}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="number"
-                value={a.amount}
-                onChange={(e) => updateAllocation(i, "amount", e.target.value)}
-                placeholder="Amount"
-              />
-
-              <button onClick={() => removeRow(i)}>✕</button>
-
+          {/* sticky action bar: stays visible above the tab bar while the form scrolls */}
+          <div className="pay-bar">
+            <div className="pay-bar-total">
+              <small>Total</small>
+              <strong>KES {kes(totalCents)}</strong>
             </div>
-          ))}
-
-          <div className="footer">
-            <span>Total: {total.toLocaleString()}</span>
-            <button onClick={submitPayment} disabled={loading}>
-              {loading ? "Processing..." : "Post Payment"}
+            <button type="button" className="pay-post" onClick={submitPayment} disabled={!!problem || posting || duplicateCode}>
+              {posting ? "Posting…" : "Post payment"}
             </button>
+            {(problem || duplicateCode) && !posting && (
+              <small className="pay-bar-hint">{duplicateCode ? "Use a different reference" : problem}</small>
+            )}
           </div>
+        </section>
 
-        </div>
+        {/* ============ HISTORY ============ */}
+        <section className={`pay-pane pay-history-pane ${tab === "history" ? "show" : ""}`}>
+          <div className="pay-card">
+            <div className="pay-hhead">
+              <h2 className="pay-h">Recent transactions</h2>
+              <input type="search" className="pay-search" placeholder="Search reference or member"
+                value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} aria-label="Search transactions" />
+            </div>
 
-        {/* ================= TRANSACTIONS ================= */}
-        <div className="card wide">
-          <h3>Transactions</h3>
-
-          {/* SCROLLABLE TABLE WRAPPER */}
-          <div className="table-container">
-            <table>
-
-              <thead>
-                <tr>
-                  <th>Receipt</th>
-                  <th>Member</th>
-                  <th>Date</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {ledger.map((l) => (
-                  <tr key={l.id}>
-                    <td>{l.reference}</td>
-                    <td>{l.name}</td>
-                    <td>{l.date}</td>
-                    <td>{num(l.amount).toLocaleString()}</td>
-
-                    <td className={l.status === "APPROVED" ? "approved" : "pending"}>
-                      {l.status}
-                    </td>
-
-                    <td>
-                      <button onClick={() => downloadReceipt(l)}>Download</button>
-                      <button onClick={() => approve(l)}>Approve</button>
-                    </td>
-                  </tr>
+            {historyLoading ? (
+              <LoadingState />
+            ) : filteredHistory.length === 0 ? (
+              <EmptyState title="No transactions" message="Posted payments will appear here." />
+            ) : (
+              <ul className="pay-list">
+                {filteredHistory.map((h) => (
+                  <li key={h.ref} className="pay-item">
+                    <div className="pay-item-top">
+                      <div className="pay-item-main">
+                        <strong>{h.ref}</strong>
+                        <small>{h.name || h.member_no || "—"} · {h.date}</small>
+                      </div>
+                      <div className="pay-item-amt">
+                        <strong>KES {kes(h.amountC)}</strong>
+                        <StatusBadge tone={statusTone(h.status)}>{h.status === "MIXED" ? "Part approved" : h.status}</StatusBadge>
+                      </div>
+                    </div>
+                    <div className="pay-item-actions">
+                      <button type="button" onClick={() => downloadReceipt(h)}>Receipt</button>
+                      {h.status !== "APPROVED" && <button type="button" className="primary" onClick={() => setConfirm(h)}>Approve</button>}
+                    </div>
+                  </li>
                 ))}
-              </tbody>
-
-            </table>
+              </ul>
+            )}
           </div>
-
-        </div>
-
+        </section>
       </div>
 
-      {/* ================= STYLES ================= */}
-      <style>{`
-        .payments{
-          padding:24px;
-          background:linear-gradient(135deg,#eef2f7,#f6f8fc);
-          font-family:Segoe UI;
-        }
-
-        .header{
-          background:#0f5132;
-          color:#fff;
-          padding:18px;
-          border-radius:14px;
-          margin-bottom:18px;
-        }
-
-        .grid{
-          display:grid;
-          grid-template-columns:1fr 2fr;
-          gap:18px;
-        }
-
-        .card{
-          background:#fff;
-          padding:18px;
-          border-radius:14px;
-          box-shadow:0 10px 25px rgba(0,0,0,0.06);
-        }
-
-        .form-grid-3{
-          display:grid;
-          grid-template-columns:repeat(2,1fr);
-          gap:12px;
-        }
-
-        .alloc-btn{
-          display:flex;
-          align-items:end;
-        }
-
-        input,select{
-          width:100%;
-          padding:10px;
-          border-radius:10px;
-          border:1px solid #ddd;
-        }
-
-        .member-box{
-          margin:10px 0;
-          padding:10px;
-          background:#f3f4f6;
-          border-radius:10px;
-        }
-
-        .row{
-          display:grid;
-          grid-template-columns:2fr 1fr 40px;
-          gap:10px;
-          margin-bottom:8px;
-        }
-
-        .footer{
-          display:flex;
-          justify-content:space-between;
-          margin-top:10px;
-          font-weight:bold;
-        }
-
-        /* SCROLL FIX */
-        .table-container{
-          max-height:420px;
-          overflow-y:auto;
-          border-radius:10px;
-        }
-
-        thead th{
-          position:sticky;
-          top:0;
-          background:#f3f4f6;
-          z-index:2;
-        }
-
-        table{
-          width:100%;
-          border-collapse:collapse;
-        }
-
-        th,td{
-          padding:10px;
-          border-bottom:1px solid #eee;
-        }
-
-        .approved{color:green;font-weight:bold}
-        .pending{color:orange;font-weight:bold}
-      `}</style>
-
+      <ConfirmDialog
+        open={!!confirm}
+        title="Approve this payment?"
+        message={confirm ? `${confirm.ref} · KES ${kes(confirm.amountC)}${confirm.name || confirm.member_no ? ` · ${confirm.name || confirm.member_no}` : ""}` : ""}
+        confirmLabel="Approve"
+        onConfirm={approve}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   );
 }

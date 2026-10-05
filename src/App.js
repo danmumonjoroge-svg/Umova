@@ -38,6 +38,7 @@ import PlatformAdminGate        from "./chama-erp-advanced/platform-admin/Platfo
 import LicenseManager           from "./chama-erp-advanced/platform-admin/LicenseManager";
 
 import AdminLayout            from "./Pages/Admin/AdminLayout";
+import AdminHub               from "./Pages/Admin/AdminHub";
 import AdminDashboard         from "./Pages/Admin/Dashboard";
 import AdminERPDashboard      from "./Pages/Admin/ERPDashboard";
 import AdminJournalEntry      from "./Pages/Admin/JournalEntry";
@@ -351,6 +352,9 @@ function App() {
         <Route element={<AdminLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
+          {/* Workspace pages: card grid for a module (money, loans, members,
+              accounting, reports) and the "more" tab. Opened by the bottom bar. */}
+          <Route path="hub/:module" element={<AdminHub />} />
           <Route path="erp-dashboard" element={<AdminERPDashboard />} />
           <Route path="members" element={<AdminMembers />} />
           <Route path="member-statements" element={<AdminMemberStatements />} />
