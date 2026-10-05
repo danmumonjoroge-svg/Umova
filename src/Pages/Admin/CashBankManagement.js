@@ -3,6 +3,8 @@ import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../Context/AuthContext";
 import { postJournal } from "../../services/journalAPI";
 import { getSystemAccount } from "../../services/chartOfAccountsAPI";
+import { SectionCard, EmptyState } from "./AdminUI";
+import { Field, kes } from "./AdminForm";
 
 /**
  * Section 14 — scoped deliberately: a real transaction ledger (transfers,
@@ -168,81 +170,90 @@ export default function CashBankManagement() {
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 900 }}>
-      <h2>Cash & Bank Management</h2>
-      <p style={{ color: "#666" }}>
+    <div className="up-page">
+      <p className="up-lead">
         Transfers, bank charges, and bank interest post through the same central
         engine as everything else. Reconciliation here is manual — mark a ledger
         row matched once you've checked it against a real bank statement.
         Statement import / auto-matching isn't built yet.
       </p>
 
-      <h4>Post a transaction</h4>
-      <div style={{ display: "grid", gap: 10, maxWidth: 420, marginBottom: 32 }}>
-        <label>
-          Type<br />
-          <select value={txType} onChange={(e) => setTxType(e.target.value)}>
-            {CASH_TX_TYPES.map((t) => (
-              <option key={t.key} value={t.key}>{t.label}</option>
-            ))}
-          </select>
-        </label>
-        <label>Amount<br />
-          <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </label>
-        <label>Reference / voucher code<br />
-          <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="CB-2026-000123" />
-        </label>
-        <label>Date<br />
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <label>Description (optional)<br />
-          <input value={description} onChange={(e) => setDescription(e.target.value)} />
-        </label>
-        <button onClick={submitTransaction} disabled={loading || !accountIds}>
-          {loading ? "Posting…" : "Post Transaction"}
-        </button>
-      </div>
+      <SectionCard title="Post a transaction">
+        <div className="ua-form cols-2">
+          <Field label="Type">
+            <select value={txType} onChange={(e) => setTxType(e.target.value)}>
+              {CASH_TX_TYPES.map((t) => (
+                <option key={t.key} value={t.key}>{t.label}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Amount (KES)">
+            <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00"
+              value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </Field>
+          <Field label="Reference / voucher code">
+            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="CB-2026-000123" autoComplete="off" />
+          </Field>
+          <Field label="Date">
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </Field>
+          <Field label="Description (optional)" span2>
+            <input value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+        </div>
+        <div className="up-actions">
+          <button type="button" className="ua-btn ua-btn-primary" onClick={submitTransaction} disabled={loading || !accountIds}>
+            {loading ? "Posting…" : "Post Transaction"}
+          </button>
+        </div>
+      </SectionCard>
 
-      <h4>Reconciliation</h4>
-      <div style={{ marginBottom: 8 }}>
-        <label>
-          Show:{" "}
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="unreconciled">Unreconciled</option>
-            <option value="reconciled">Reconciled</option>
-            <option value="all">All</option>
-          </select>
-        </label>
-      </div>
-
-      <table width="100%" cellPadding={6} style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd" }}>
-            <th>Date</th><th>Description</th><th>Reference</th><th>Amount</th><th>Reconciled</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ledgerRows.map((row) => (
-            <tr key={row.cod} style={{ borderBottom: "1px solid #eee" }}>
-              <td>{row.date}</td>
-              <td>{row.description}</td>
-              <td>{row.reference_no}</td>
-              <td>{row.amount}</td>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={!!row.reconciled}
-                  onChange={() => toggleReconciled(row)}
-                />
-              </td>
-            </tr>
-          ))}
-          {ledgerRows.length === 0 && (
-            <tr><td colSpan={5}>No transactions found for this filter.</td></tr>
-          )}
-        </tbody>
-      </table>
+      <SectionCard
+        title="Reconciliation"
+        subtitle="Latest 100 cash and bank ledger rows"
+        actions={
+          <div className="up-toolbar">
+            <Field label="Show">
+              <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+                <option value="unreconciled">Unreconciled</option>
+                <option value="reconciled">Reconciled</option>
+                <option value="all">All</option>
+              </select>
+            </Field>
+          </div>
+        }
+      >
+        {ledgerRows.length === 0 ? (
+          <EmptyState title="Nothing to show" message="No transactions found for this filter." />
+        ) : (
+          <div className="ua-table-wrap">
+            <table className="ua-table stack">
+              <thead>
+                <tr><th>Date</th><th>Description</th><th>Reference</th><th className="num">Amount</th><th>Reconciled</th></tr>
+              </thead>
+              <tbody>
+                {ledgerRows.map((row) => (
+                  <tr key={row.cod}>
+                    <td data-label="Date">{row.date}</td>
+                    <td data-label="Description">{row.description}</td>
+                    <td data-label="Reference">{row.reference_no}</td>
+                    <td data-label="Amount" className="num">{kes(row.amount)}</td>
+                    <td data-label="Reconciled">
+                      <input
+                        type="checkbox"
+                        className="up-check"
+                        aria-label={`Reconciled: ${row.reference_no || row.description || row.cod}`}
+                        checked={!!row.reconciled}
+                        onChange={() => toggleReconciled(row)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }

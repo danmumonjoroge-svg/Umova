@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { postJournal } from "../../services/journalAPI";
 import { getSystemAccount } from "../../services/chartOfAccountsAPI";
+import { SectionCard, KpiCard, StatusBadge, EmptyState } from "./AdminUI";
+import { Field, kes, statusTone, statusLabel } from "./AdminForm";
 
 /**
  * Section 13 — general Accounts Receivable, deliberately separate from
@@ -201,83 +203,115 @@ export default function AccountsReceivable() {
 
   const outstandingInvoices = invoices.filter((i) => i.status === "approved" || i.status === "partially_paid");
 
+  const outstandingTotal = invoices.reduce(
+    (sum, i) => sum + Math.max(0, Number(i.total_amount || 0) - Number(i.amount_received || 0)), 0
+  );
+  const openCount = outstandingInvoices.length;
+
   return (
-    <div style={{ padding: 24, maxWidth: 1000 }}>
-      <h2>Accounts Receivable</h2>
-      <p style={{ color: "#666" }}>
+    <div className="up-page">
+      <p className="up-lead">
         For general debtors (e.g. hall rental, services rendered to non-members) —
         not loan repayments, which stay in Loan Repayments.
       </p>
 
-      <h4>Customers</h4>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-        <input placeholder="Name" value={newCustomer.name} onChange={(e) => setNewCustomer((c) => ({ ...c, name: e.target.value }))} />
-        <input placeholder="Contact person" value={newCustomer.contact_person} onChange={(e) => setNewCustomer((c) => ({ ...c, contact_person: e.target.value }))} />
-        <input placeholder="Phone" value={newCustomer.phone} onChange={(e) => setNewCustomer((c) => ({ ...c, phone: e.target.value }))} />
-        <input placeholder="Email" value={newCustomer.email} onChange={(e) => setNewCustomer((c) => ({ ...c, email: e.target.value }))} />
-        <button onClick={addCustomer}>Add Customer</button>
-      </div>
-      <p style={{ color: "#666" }}>{customers.length} customer(s) on file.</p>
-
-      <h4>Record Customer Invoice</h4>
-      <div style={{ display: "grid", gap: 8, maxWidth: 420, marginBottom: 32 }}>
-        <select value={invoiceForm.customer_id} onChange={(e) => setInvoiceForm((f) => ({ ...f, customer_id: e.target.value }))}>
-          <option value="">-- Select customer --</option>
-          {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <input placeholder="Invoice number" value={invoiceForm.invoice_number} onChange={(e) => setInvoiceForm((f) => ({ ...f, invoice_number: e.target.value }))} />
-        <label>Invoice date<input type="date" value={invoiceForm.invoice_date} onChange={(e) => setInvoiceForm((f) => ({ ...f, invoice_date: e.target.value }))} /></label>
-        <label>Due date<input type="date" value={invoiceForm.due_date} onChange={(e) => setInvoiceForm((f) => ({ ...f, due_date: e.target.value }))} /></label>
-        <select value={invoiceForm.income_account_id} onChange={(e) => setInvoiceForm((f) => ({ ...f, income_account_id: e.target.value }))}>
-          <option value="">-- Income category --</option>
-          {incomeAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
-        <input type="number" placeholder="Amount" value={invoiceForm.amount} onChange={(e) => setInvoiceForm((f) => ({ ...f, amount: e.target.value }))} />
-        <input placeholder="Description" value={invoiceForm.description} onChange={(e) => setInvoiceForm((f) => ({ ...f, description: e.target.value }))} />
-        <button onClick={submitInvoice} disabled={loading}>Record & Post Invoice</button>
+      <div className="ua-kpi-grid">
+        <KpiCard label="Outstanding receivable" value={`KES ${kes(outstandingTotal)}`} foot={`${openCount} open invoice(s)`} />
+        <KpiCard label="Customers" value={customers.length} foot="on file" />
+        <KpiCard label="Invoices" value={invoices.length} foot="recorded" />
       </div>
 
-      <h4>Receive Payment for an Invoice</h4>
-      <div style={{ display: "grid", gap: 8, maxWidth: 420, marginBottom: 32 }}>
-        <select value={receiptForm.invoice_id} onChange={(e) => setReceiptForm((f) => ({ ...f, invoice_id: e.target.value }))}>
-          <option value="">-- Select outstanding invoice --</option>
-          {outstandingInvoices.map((i) => (
-            <option key={i.id} value={i.id}>
-              {i.invoice_number} — {i.customers?.name} — outstanding {Number(i.total_amount) - Number(i.amount_received || 0)}
-            </option>
-          ))}
-        </select>
-        <input type="number" placeholder="Amount" value={receiptForm.amount} onChange={(e) => setReceiptForm((f) => ({ ...f, amount: e.target.value }))} />
-        <label>Receipt date<input type="date" value={receiptForm.receipt_date} onChange={(e) => setReceiptForm((f) => ({ ...f, receipt_date: e.target.value }))} /></label>
-        <select value={receiptForm.receipt_method} onChange={(e) => setReceiptForm((f) => ({ ...f, receipt_method: e.target.value }))}>
-          <option value="Bank">Bank</option>
-          <option value="Cash">Cash</option>
-        </select>
-        <input placeholder="Reference / voucher code" value={receiptForm.reference} onChange={(e) => setReceiptForm((f) => ({ ...f, reference: e.target.value }))} />
-        <button onClick={submitReceipt} disabled={loading}>Post Receipt</button>
+      <SectionCard title="Customers">
+        <div className="up-inline">
+          <Field label="Name"><input placeholder="Name" value={newCustomer.name} onChange={(e) => setNewCustomer((s) => ({ ...s, name: e.target.value }))} /></Field>
+          <Field label="Contact person"><input placeholder="Contact person" value={newCustomer.contact_person} onChange={(e) => setNewCustomer((s) => ({ ...s, contact_person: e.target.value }))} /></Field>
+          <Field label="Phone"><input type="tel" inputMode="tel" placeholder="Phone" value={newCustomer.phone} onChange={(e) => setNewCustomer((s) => ({ ...s, phone: e.target.value }))} /></Field>
+          <Field label="Email"><input type="email" inputMode="email" placeholder="Email" value={newCustomer.email} onChange={(e) => setNewCustomer((s) => ({ ...s, email: e.target.value }))} /></Field>
+        </div>
+        <div className="up-actions">
+          <button type="button" className="ua-btn ua-btn-secondary" onClick={addCustomer}>Add Customer</button>
+        </div>
+      </SectionCard>
+
+      <div className="up-grid-2">
+        <SectionCard title="Record customer invoice">
+          <div className="ua-form cols-2">
+            <Field label="Customer" span2>
+              <select value={invoiceForm.customer_id} onChange={(e) => setInvoiceForm((f) => ({ ...f, customer_id: e.target.value }))}>
+                <option value="">-- Select customer --</option>
+                {customers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Invoice number"><input placeholder="Invoice number" value={invoiceForm.invoice_number} onChange={(e) => setInvoiceForm((f) => ({ ...f, invoice_number: e.target.value }))} /></Field>
+            <Field label="Amount (KES)"><input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={invoiceForm.amount} onChange={(e) => setInvoiceForm((f) => ({ ...f, amount: e.target.value }))} /></Field>
+            <Field label="Invoice date"><input type="date" value={invoiceForm.invoice_date} onChange={(e) => setInvoiceForm((f) => ({ ...f, invoice_date: e.target.value }))} /></Field>
+            <Field label="Due date"><input type="date" value={invoiceForm.due_date} onChange={(e) => setInvoiceForm((f) => ({ ...f, due_date: e.target.value }))} /></Field>
+            <Field label="Income category" span2>
+              <select value={invoiceForm.income_account_id} onChange={(e) => setInvoiceForm((f) => ({ ...f, income_account_id: e.target.value }))}>
+                <option value="">-- Income category --</option>
+                {incomeAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Description" span2><input placeholder="Description" value={invoiceForm.description} onChange={(e) => setInvoiceForm((f) => ({ ...f, description: e.target.value }))} /></Field>
+          </div>
+          <div className="up-actions">
+            <button type="button" className="ua-btn ua-btn-primary" onClick={submitInvoice} disabled={loading}>{loading ? "Working…" : "Record & Post Invoice"}</button>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Receive payment for an invoice">
+          <div className="ua-form cols-2">
+            <Field label="Outstanding invoice" span2>
+              <select value={receiptForm.invoice_id} onChange={(e) => setReceiptForm((f) => ({ ...f, invoice_id: e.target.value }))}>
+                <option value="">-- Select outstanding invoice --</option>
+                {outstandingInvoices.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.invoice_number} — {i.customers?.name} — outstanding {kes(Number(i.total_amount) - Number(i.amount_received || 0))}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Amount (KES)"><input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={receiptForm.amount} onChange={(e) => setReceiptForm((f) => ({ ...f, amount: e.target.value }))} /></Field>
+            <Field label="Receipt date"><input type="date" value={receiptForm.receipt_date} onChange={(e) => setReceiptForm((f) => ({ ...f, receipt_date: e.target.value }))} /></Field>
+            <Field label="Method">
+              <select value={receiptForm.receipt_method} onChange={(e) => setReceiptForm((f) => ({ ...f, receipt_method: e.target.value }))}>
+                <option value="Bank">Bank</option>
+                <option value="Cash">Cash</option>
+              </select>
+            </Field>
+            <Field label="Reference / voucher code"><input placeholder="Reference / voucher code" value={receiptForm.reference} onChange={(e) => setReceiptForm((f) => ({ ...f, reference: e.target.value }))} autoComplete="off" /></Field>
+          </div>
+          <div className="up-actions">
+            <button type="button" className="ua-btn ua-btn-primary" onClick={submitReceipt} disabled={loading}>{loading ? "Working…" : "Post Receipt"}</button>
+          </div>
+        </SectionCard>
       </div>
 
-      <h4>Invoices</h4>
-      <table width="100%" cellPadding={6} style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd" }}>
-            <th>Invoice #</th><th>Customer</th><th>Date</th><th>Total</th><th>Received</th><th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {invoices.map((i) => (
-            <tr key={i.id} style={{ borderBottom: "1px solid #eee" }}>
-              <td>{i.invoice_number}</td>
-              <td>{i.customers?.name}</td>
-              <td>{i.invoice_date}</td>
-              <td>{i.total_amount}</td>
-              <td>{i.amount_received || 0}</td>
-              <td>{i.status}</td>
-            </tr>
-          ))}
-          {invoices.length === 0 && <tr><td colSpan={6}>No invoices recorded yet.</td></tr>}
-        </tbody>
-      </table>
+      <SectionCard title="Invoices">
+        {invoices.length === 0 ? (
+          <EmptyState title="No invoices yet" message="Invoices you record will appear here." />
+        ) : (
+          <div className="ua-table-wrap">
+            <table className="ua-table stack">
+              <thead>
+                <tr><th>Invoice #</th><th>Customer</th><th>Date</th><th className="num">Total</th><th className="num">Received</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {invoices.map((i) => (
+                  <tr key={i.id}>
+                    <td data-label="Invoice #">{i.invoice_number}</td>
+                    <td data-label="Customer">{i.customers?.name}</td>
+                    <td data-label="Date">{i.invoice_date}</td>
+                    <td data-label="Total" className="num">{kes(i.total_amount)}</td>
+                    <td data-label="Received" className="num">{kes(i.amount_received)}</td>
+                    <td data-label="Status"><StatusBadge tone={statusTone(i.status)}>{statusLabel(i.status)}</StatusBadge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }

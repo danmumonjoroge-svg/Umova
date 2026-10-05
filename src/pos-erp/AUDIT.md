@@ -1926,3 +1926,18 @@ throughout this session.
 - Follow-up: the 401s on `/rest/v1/` are offline/useNetStatus.js's HEAD reachability probe, not scanner calls. It treated 401 as unreachable (could flip the app to "offline"); now any response < 500 counts as reachable.
 - Camera fix (testing proved a separate bug): "A video element must be provided" (ZXing) came from useCameraScanner.start() racing with stop()/unmount (modal close, mode toggle, dev StrictMode double-mount) — videoRef.current was null when the decoder was created, and decoder.start() was un-awaited so the rejection escaped the try/catch. Added a run-id guard so stale starts release the camera and exit quietly, awaited decoder.start(), and onScan is now read via a ref (no stale closure). Scanner UI components untouched.
 - Camera fix 2: `reader.reset is not a function` — installed @zxing/browser no longer has BrowserMultiFormatReader.reset(); barcodeService stop() now uses controls.stop() and only calls reset() if present. useCameraScanner.stop() wraps decoder.stop() in try/catch so unmount teardown can't throw and always releases the stream. (The per-frame "non-ReaderException NotFoundException" console warnings and "Trying to play video that is already playing" are ZXing library noise, not errors.)
+
+---
+
+## Phase 18 — Demo account
+
+**Added (no existing behaviour changed):**
+- `schema/phase18_demo_account.sql` — creates tenant `DEMO` / user `demo` / password `Demo@1234` via the real `register_pos_tenant()`, then approves it and clears `must_change_password`. Idempotent; run after phase1.
+- `auth/demoAccount.js` — public demo credentials + `seedDemoDataIfEmpty()`, which fills the demo business (12 products with opening stock, 4 customers, 2 suppliers, 3 expenses, an open till shift, 6 sales: cash / M-Pesa / credit) **through the app's own services**, only when the DEMO business has no products.
+- `auth/POSLogin.jsx` — "Try the demo" button (calls the normal `login()`).
+- `POSApp.jsx` — `DemoSeeder` (no-op for every non-DEMO tenant).
+
+**Not touched:** login RPCs, auth context, RLS, tenant isolation, schema of any lb_* table.
+
+**Unverified (no live DB here):** that `'approved'` is the live `pos_tenants.status` value; that `lb_business_types` has a `retail` code (falls back to NULL); that CREDIT sales bump `lb_customers.outstanding_balance` (a trigger/RPC outside this zip); that the seeded `customer_type`/expense-category values are accepted. Seeding failures are logged to the console and never block demo login.
+**Known limits:** all demo visitors share one tenant, and sample sales are all dated "today". No reset job yet — to reset, delete the DEMO tenant's lb_* rows and log in again.

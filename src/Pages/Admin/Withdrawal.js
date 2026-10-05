@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { postJournal } from "../../services/journalAPI";
 import { getSystemAccount } from "../../services/chartOfAccountsAPI";
+import { SectionCard, StatusBadge, EmptyState } from "./AdminUI";
+import { Field, kes, ledgerTone } from "./AdminForm";
 
 /**
  * The missing counterpart to Payments.jsx. Every "withdrawal" reference
@@ -130,86 +132,90 @@ export default function Withdrawal() {
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 700 }}>
-      <h2>Member Withdrawal</h2>
-      <p style={{ color: "#666" }}>
+    <div className="up-page">
+      <p className="up-lead">
         Debits the member's {SOURCE_ACCOUNT_KEYS.find((k) => k.key === sourceKey)?.name.toLowerCase()},
         credits Cash. This does not currently gate on an approval step —
         large withdrawals may warrant one (see Section 19 workflow states);
         that's a policy decision, not added here on its own.
       </p>
 
-      <div style={{ display: "grid", gap: 10, margin: "16px 0", maxWidth: 420 }}>
-        <label>
-          Member<br />
-          <select value={memberNo} onChange={(e) => selectMember(e.target.value)}>
-            <option value="">-- Select member --</option>
-            {members.map((m) => (
-              <option key={m.member_no} value={m.member_no}>
-                {m.member_no} — {m.name}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="up-grid-2">
+        <SectionCard title="Post a withdrawal">
+          <div className="ua-form">
+            <Field label="Member">
+              <select value={memberNo} onChange={(e) => selectMember(e.target.value)}>
+                <option value="">-- Select member --</option>
+                {members.map((m) => (
+                  <option key={m.member_no} value={m.member_no}>
+                    {m.member_no} — {m.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
-        <div>Member: <strong>{memberName || "Not selected"}</strong></div>
+            <div className="up-readout" aria-live="polite">
+              <small>Selected member</small>
+              <strong>{memberName || "Not selected"}</strong>
+            </div>
 
-        <label>
-          Withdraw from<br />
-          <select value={sourceKey} onChange={(e) => setSourceKey(e.target.value)}>
-            {SOURCE_ACCOUNT_KEYS.map((x) => (
-              <option key={x.key} value={x.key}>{x.name}</option>
-            ))}
-          </select>
-        </label>
+            <div className="ua-form cols-2">
+              <Field label="Withdraw from">
+                <select value={sourceKey} onChange={(e) => setSourceKey(e.target.value)}>
+                  {SOURCE_ACCOUNT_KEYS.map((x) => (
+                    <option key={x.key} value={x.key}>{x.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Amount (KES)">
+                <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00"
+                  value={amount} onChange={(e) => setAmount(e.target.value)} />
+              </Field>
+              <Field label="Reference / voucher code">
+                <input value={receiptCode} onChange={(e) => setReceiptCode(e.target.value)}
+                  placeholder="WD-2026-000123" autoComplete="off" />
+              </Field>
+              <Field label="Transaction date">
+                <input type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} />
+              </Field>
+              <Field label="Reason (optional)" span2>
+                <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. emergency, planned exit" />
+              </Field>
+            </div>
+          </div>
 
-        <label>
-          Amount<br />
-          <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </label>
+          <div className="up-actions">
+            <button type="button" className="ua-btn ua-btn-primary" onClick={submitWithdrawal} disabled={loading || accountsLoading}>
+              {loading ? "Posting…" : "Post Withdrawal"}
+            </button>
+          </div>
+        </SectionCard>
 
-        <label>
-          Reference / voucher code<br />
-          <input value={receiptCode} onChange={(e) => setReceiptCode(e.target.value)} placeholder="WD-2026-000123" />
-        </label>
-
-        <label>
-          Transaction date<br />
-          <input type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} />
-        </label>
-
-        <label>
-          Reason (optional)<br />
-          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. emergency, planned exit" />
-        </label>
-
-        <button onClick={submitWithdrawal} disabled={loading || accountsLoading}>
-          {loading ? "Posting…" : "Post Withdrawal"}
-        </button>
-      </div>
-
-      <h4>Recent withdrawals</h4>
-      <table width="100%" cellPadding={6} style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd" }}>
-            <th>Date</th><th>Member</th><th>Amount</th><th>Reference</th><th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {history.map((row) => (
-            <tr key={row.cod} style={{ borderBottom: "1px solid #eee" }}>
-              <td>{row.date}</td>
-              <td>{row.member_no}</td>
-              <td>{row.amount}</td>
-              <td>{row.reference_no}</td>
-              <td>{row.status}</td>
-            </tr>
-          ))}
-          {history.length === 0 && (
-            <tr><td colSpan={5}>No withdrawals recorded yet.</td></tr>
+        <SectionCard title="Recent withdrawals" subtitle="Last 25">
+          {history.length === 0 ? (
+            <EmptyState title="No withdrawals yet" message="Posted withdrawals will appear here." />
+          ) : (
+            <div className="ua-table-wrap">
+              <table className="ua-table stack">
+                <thead>
+                  <tr><th>Date</th><th>Member</th><th className="num">Amount</th><th>Reference</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  {history.map((row) => (
+                    <tr key={row.cod}>
+                      <td data-label="Date">{row.date}</td>
+                      <td data-label="Member">{row.member_no}</td>
+                      <td data-label="Amount" className="num">{kes(row.amount)}</td>
+                      <td data-label="Reference">{row.reference_no}</td>
+                      <td data-label="Status"><StatusBadge tone={ledgerTone(row.status)}>{row.status || "PENDING"}</StatusBadge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
-        </tbody>
-      </table>
+        </SectionCard>
+      </div>
     </div>
   );
 }

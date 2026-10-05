@@ -18,6 +18,7 @@ import React, { useState } from "react";
 import { Loader2, Store, Fingerprint } from "lucide-react";
 import { usePOSAuth } from "../context/POSAuthContext";
 import { posPasskeys } from "./posPasskeys";
+import { DEMO_BUSINESS_CODE, DEMO_USERNAME, DEMO_PASSWORD } from "./demoAccount";
 
 const REASON_MESSAGES = {
   BUSINESS_NOT_FOUND: "No business found with that code.",
@@ -57,6 +58,21 @@ export default function POSLogin({ onGoToSignup, logoutNotice }) {
         REASON_MESSAGES[result.reason] ||
         result.detail ||
         "Something went wrong signing in. Try again."
+      );
+    }
+    setSubmitting(false);
+  };
+
+  // Demo: same login() as everyone else, just with the public DEMO credentials.
+  const tryDemo = async () => {
+    setSubmitting(true);
+    setError("");
+    const result = await login(DEMO_BUSINESS_CODE, DEMO_USERNAME, DEMO_PASSWORD);
+    if (!result.ok) {
+      setError(
+        result.reason === "BUSINESS_NOT_FOUND"
+          ? "The demo isn't set up on this server yet."
+          : REASON_MESSAGES[result.reason] || result.detail || "Could not open the demo. Try again."
       );
     }
     setSubmitting(false);
@@ -135,6 +151,15 @@ export default function POSLogin({ onGoToSignup, logoutNotice }) {
         >
           {submitting && <Loader2 className="animate-spin" size={16} />}
           {submitting ? "Signing in…" : "Sign in"}
+        </button>
+
+        <button
+          type="button"
+          onClick={tryDemo}
+          disabled={submitting || passkeyBusy}
+          className="w-full mt-3 bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 font-semibold py-3 px-6 rounded-2xl transition disabled:opacity-60"
+        >
+          Try the demo — no sign-up needed
         </button>
 
         {posPasskeys.supported() && (

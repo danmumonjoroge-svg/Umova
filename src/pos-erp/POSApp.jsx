@@ -10,6 +10,8 @@ import React from "react";
 import { Routes, Route } from "react-router-dom";
 import { POSAuthProvider } from "./context/POSAuthContext";
 import POSAuthGate from "./auth/POSAuthGate";
+import { usePosErpAuth } from "./auth/usePosErpAuth";
+import { isDemoTenant, seedDemoDataIfEmpty } from "./auth/demoAccount";
 import POSLayout from "./POSLayout";
 import POSDashboard from "./pages/POSDashboard";
 import POSPage from "./pages/POSPage";
@@ -58,7 +60,37 @@ function DevBypassBanner() {
   );
 }
 
+// Fills the DEMO business with sample data on its first login (no-op for
+// every other tenant, and for DEMO once it has products). See auth/demoAccount.js.
+function DemoSeeder() {
+  const { tenant, staffId } = usePosErpAuth();
+  const [seeding, setSeeding] = React.useState(false);
+  const started = React.useRef(false);
+  React.useEffect(() => {
+    if (started.current || !isDemoTenant(tenant) || !staffId) return;
+    started.current = true;
+    setSeeding(true);
+    seedDemoDataIfEmpty({ tenant, staffId }).then((r) => {
+      setSeeding(false);
+      if (r.seeded) window.location.reload(); // pages loaded before the data existed — refetch
+    });
+  }, [tenant, staffId]);
+  if (!seeding) return null;
+  return (
+    <div style={{ background: "#78350f", color: "#fff", fontSize: 12, fontWeight: 700, textAlign: "center", padding: "6px 12px" }}>
+      Setting up your demo shop with sample stock, customers and sales…
+    </div>
+  );
+}
+
 const PosRoutes = () => (
+  <>
+    <DemoSeeder />
+    <PosRoutesInner />
+  </>
+);
+
+const PosRoutesInner = () => (
   <Routes>
     <Route element={<POSLayout />}>
       <Route index element={<POSPage />} />

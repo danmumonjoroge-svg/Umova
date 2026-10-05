@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { postJournal } from "../../services/journalAPI";
 import { getSystemAccount } from "../../services/chartOfAccountsAPI";
+import { SectionCard, KpiCard, StatusBadge, EmptyState } from "./AdminUI";
+import { Field, kes, statusTone, statusLabel } from "./AdminForm";
 
 /**
  * Section 16, scoped to Computer/Software — the only categories with real
@@ -182,66 +184,94 @@ export default function FixedAssets() {
     loadAssets();
   };
 
+  const totalCost = assets.reduce((n, a) => n + Number(a.acquisition_cost || 0), 0);
+  const totalDep = assets.reduce((n, a) => n + Number(a.accumulated_depreciation || 0), 0);
+
   return (
-    <div style={{ padding: 24, maxWidth: 1000 }}>
-      <h2>Fixed Assets</h2>
-      <p style={{ color: "#666" }}>
+    <div className="up-page">
+      <p className="up-lead">
         Scoped to Computer and Software — the only categories with a matching
         asset + accumulated-depreciation account pair in the Chart of Accounts.
         Disposal isn't built yet (needs a Gain/Loss on Disposal account).
       </p>
 
-      <h4>Record Asset Purchase</h4>
-      <div style={{ display: "grid", gap: 8, maxWidth: 420, marginBottom: 32 }}>
-        <input placeholder="Asset number (e.g. FA-0001)" value={form.asset_number} onChange={(e) => setForm((f) => ({ ...f, asset_number: e.target.value }))} />
-        <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
-          <option value="Computer">Computer</option>
-          <option value="Software">Software</option>
-        </select>
-        <input placeholder="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-        <label>Acquisition date<input type="date" value={form.acquisition_date} onChange={(e) => setForm((f) => ({ ...f, acquisition_date: e.target.value }))} /></label>
-        <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))}>
-          <option value="">-- Supplier (optional) --</option>
-          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <input type="number" placeholder="Acquisition cost" value={form.acquisition_cost} onChange={(e) => setForm((f) => ({ ...f, acquisition_cost: e.target.value }))} />
-        <input type="number" placeholder="Useful life (years)" value={form.useful_life_years} onChange={(e) => setForm((f) => ({ ...f, useful_life_years: e.target.value }))} />
-        <input placeholder="Location" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} />
-        <input placeholder="Department" value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} />
-        <select value={form.payment_method} onChange={(e) => setForm((f) => ({ ...f, payment_method: e.target.value }))}>
-          <option value="Bank">Paid via Bank</option>
-          <option value="Cash">Paid via Cash</option>
-        </select>
-        <button onClick={submitAsset} disabled={loading}>Record & Post Purchase</button>
+      <div className="ua-kpi-grid">
+        <KpiCard label="Total cost" value={`KES ${kes(totalCost)}`} foot={`${assets.length} asset(s)`} />
+        <KpiCard label="Accum. depreciation" value={`KES ${kes(totalDep)}`} />
+        <KpiCard label="Net book value" value={`KES ${kes(totalCost - totalDep)}`} />
       </div>
 
-      <h4>Run Monthly Depreciation</h4>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 32 }}>
-        <input type="month" value={depPeriod} onChange={(e) => setDepPeriod(e.target.value)} max={todayISO().slice(0, 7)} />
-        <button onClick={runDepreciation} disabled={loading}>Run Depreciation for this Month</button>
-      </div>
+      <SectionCard title="Record asset purchase">
+        <div className="ua-form cols-2">
+            <Field label="Asset number"><input placeholder="e.g. FA-0001" value={form.asset_number} onChange={(e) => setForm((f) => ({ ...f, asset_number: e.target.value }))} /></Field>
+            <Field label="Category">
+              <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
+                <option value="Computer">Computer</option>
+                <option value="Software">Software</option>
+              </select>
+            </Field>
+            <Field label="Description" span2><input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} /></Field>
+            <Field label="Acquisition date"><input type="date" value={form.acquisition_date} onChange={(e) => setForm((f) => ({ ...f, acquisition_date: e.target.value }))} /></Field>
+            <Field label="Supplier (optional)">
+              <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))}>
+                <option value="">-- None --</option>
+                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Acquisition cost (KES)"><input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={form.acquisition_cost} onChange={(e) => setForm((f) => ({ ...f, acquisition_cost: e.target.value }))} /></Field>
+            <Field label="Useful life (years)"><input type="number" inputMode="numeric" min="1" step="1" placeholder="e.g. 3" value={form.useful_life_years} onChange={(e) => setForm((f) => ({ ...f, useful_life_years: e.target.value }))} /></Field>
+            <Field label="Location"><input value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} /></Field>
+            <Field label="Department"><input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} /></Field>
+            <Field label="Paid via">
+              <select value={form.payment_method} onChange={(e) => setForm((f) => ({ ...f, payment_method: e.target.value }))}>
+                <option value="Bank">Bank</option>
+                <option value="Cash">Cash</option>
+              </select>
+            </Field>
+        </div>
+        <div className="up-actions">
+          <button type="button" className="ua-btn ua-btn-primary" onClick={submitAsset} disabled={loading}>
+            {loading ? "Working…" : "Record & Post Purchase"}
+          </button>
+        </div>
+      </SectionCard>
 
-      <h4>Asset Register</h4>
-      <table width="100%" cellPadding={6} style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd" }}>
-            <th>Asset #</th><th>Category</th><th>Cost</th><th>Accum. Depreciation</th><th>Net Book Value</th><th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {assets.map((a) => (
-            <tr key={a.id} style={{ borderBottom: "1px solid #eee" }}>
-              <td>{a.asset_number}</td>
-              <td>{a.category}</td>
-              <td>{a.acquisition_cost}</td>
-              <td>{Number(a.accumulated_depreciation).toFixed(2)}</td>
-              <td>{(Number(a.acquisition_cost) - Number(a.accumulated_depreciation)).toFixed(2)}</td>
-              <td>{a.status}</td>
-            </tr>
-          ))}
-          {assets.length === 0 && <tr><td colSpan={6}>No assets recorded yet.</td></tr>}
-        </tbody>
-      </table>
+      <SectionCard title="Run monthly depreciation" subtitle="Posts one journal per active asset for the chosen month">
+        <div className="up-run">
+          <Field label="Month">
+            <input type="month" value={depPeriod} onChange={(e) => setDepPeriod(e.target.value)} max={todayISO().slice(0, 7)} />
+          </Field>
+          <button type="button" className="ua-btn ua-btn-primary" onClick={runDepreciation} disabled={loading}>
+            {loading ? "Running…" : "Run Depreciation"}
+          </button>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Asset register">
+        {assets.length === 0 ? (
+          <EmptyState title="No assets yet" message="Recorded assets will appear here." />
+        ) : (
+          <div className="ua-table-wrap">
+            <table className="ua-table stack">
+              <thead>
+                <tr><th>Asset #</th><th>Category</th><th className="num">Cost</th><th className="num">Accum. Depreciation</th><th className="num">Net Book Value</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {assets.map((a) => (
+                  <tr key={a.id}>
+                    <td data-label="Asset #">{a.asset_number}</td>
+                    <td data-label="Category">{a.category}</td>
+                    <td data-label="Cost" className="num">{kes(a.acquisition_cost)}</td>
+                    <td data-label="Accum. Depreciation" className="num">{kes(a.accumulated_depreciation)}</td>
+                    <td data-label="Net Book Value" className="num">{kes(Number(a.acquisition_cost) - Number(a.accumulated_depreciation))}</td>
+                    <td data-label="Status"><StatusBadge tone={statusTone(a.status)}>{statusLabel(a.status)}</StatusBadge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }
