@@ -12,35 +12,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
- * Umova uses different session storage depending on platform.
+ * Web:
+ * Uses browser sessionStorage.
  *
- * WEB:
- * Keep the existing browser sessionStorage behaviour.
- *
- * NATIVE:
- * Use the secure native storage adapter so the Supabase
- * authentication session is protected by the mobile app's
- * secure storage mechanism.
+ * Native:
+ * Uses secure native storage for the Supabase
+ * authentication session.
  */
 const authStorage = Capacitor.isNativePlatform()
   ? secureAuthStorage
   : window.sessionStorage;
 
 /**
- * Keep the existing per-tab/per-app storage key.
- *
- * Do not change this unless your existing application already
- * uses a different key elsewhere.
+ * Supabase authentication storage key.
  */
-const STORAGE_KEY =
-  "umova-auth-session";
+const STORAGE_KEY = "umova-auth-session";
 
 /**
  * Supabase client.
  *
- * Authentication remains controlled by Supabase.
- * Biometric authentication is only an additional local
- * authentication layer for the trusted device.
+ * Supabase remains the authoritative authentication
+ * and authorization system.
+ *
+ * Biometric authentication is only an additional
+ * trusted-device/app-unlock layer.
  */
 export const supabase = createClient(
   supabaseUrl,
