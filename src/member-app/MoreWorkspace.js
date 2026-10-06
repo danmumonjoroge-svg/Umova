@@ -5,6 +5,9 @@ import { PageHeader, Card } from "./ui";
 import { NotificationList } from "./NotificationCenter";
 import PasskeySettings from "../components/Auth/PasskeySettings";
 import Profile from "../components/Dashboard/Profile";
+import { supabase } from "../supabaseClient";
+import FingerprintToggle from "../security/FingerprintToggle";
+import { isNativeApp } from "../security/nativeBiometric";
 
 export function MoreWorkspace() {
   const { logout, unreadNotifications } = useOutletContext();
@@ -43,11 +46,20 @@ export function NotificationsWorkspace() {
   );
 }
 
+// Phone app: one simple "Fingerprint login" switch for THIS phone (no device naming, no device picking).
+// Web: unchanged, still the existing passkey screen. Passkeys are intentionally not offered inside the
+// native app, so Android's passkey chooser never appears there.
 export function SecurityWorkspace() {
+  const native = isNativeApp();
   return (
     <>
-      <PageHeader title="Security" description="Passkeys and sign-in settings." />
-      <Card><PasskeySettings /></Card>
+      <PageHeader
+        title="Security"
+        description={native ? "Fingerprint and sign-in settings." : "Passkeys and sign-in settings."}
+      />
+      <Card>
+        {native ? <FingerprintToggle service="finance" client={supabase} /> : <PasskeySettings />}
+      </Card>
     </>
   );
 }

@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../Context/AuthContext";
 import { supabase } from "../../supabaseClient";
+import AppLock from "../../security/AppLock";
 import {
   Home, Bell, Search, LogOut, ChevronDown, ChevronLeft, MoreHorizontal,
 } from "lucide-react";
@@ -127,7 +128,11 @@ export default function AdminLayout() {
 
   const isActiveLink = (to) => path === adminPath(to) || path.startsWith(adminPath(to) + "/");
 
+  // AppLock sits INSIDE StaffGuard (App.js): the staff member is already authenticated and their role resolved,
+  // so fingerprint only unlocks the app; it never changes what this role is allowed to do.
+  // Same "finance" service as the member app (one Umova Finance account per phone). Web: renders children untouched.
   return (
+    <AppLock service="finance" client={supabase} onSignOut={logout}>
     <div className="um-app">
       {/* ───── sidebar (tablet rail / desktop) ───── */}
       <aside className="um-sidebar">
@@ -272,5 +277,6 @@ export default function AdminLayout() {
         </Link>
       </nav>
     </div>
+    </AppLock>
   );
 }

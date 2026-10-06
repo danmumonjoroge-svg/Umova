@@ -1,383 +1,65 @@
+// src/security/EnableBiometricPrompt.js
+// "Would you like to use fingerprint for faster sign-in?" Shown once, right after a FRESH normal login.
 import React, { useEffect, useState } from "react";
-import { Capacitor } from "@capacitor/core";
+import { Fingerprint, Loader2 } from "lucide-react";
+import { checkBiometry, bioMessage, BioStatus } from "./nativeBiometric";
+import { enable, prefGet, prefSet } from "./deviceTrust";
 
-import {
-  canUseBiometric,
-  enable,
-} from "./deviceTrust";
+const FRESH_LOGIN_MS = 5 * 60 * 1000;      // only offer right after a real sign-in, not on every session restore
+const ASK_AGAIN_MS = 3 * 24 * 3600 * 1000; // "Not now" -> ask again in 3 days
 
-/**
- * EnableBiometricPrompt
- *
- * Appears after a successful normal login when biometric
- * trusted-device access has not yet been enabled.
- *
- * It does NOT replace normal authentication.
- * It simply gives the user the option to protect future
- * app openings with the device biometric.
- */
-export default function EnableBiometricPrompt({
-  client,
-  service = "finance",
-  onEnabled,
-}) {
-  const [visible, setVisible] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const [enabling, setEnabling] = useState(false);
+export default function EnableBiometricPrompt({ service, client, adapter, onEnabled }) {
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const dismissKey = `umova.trust.dismissed.${service}`;
 
-  /**
-   * Check whether this is a native app and whether biometric
-   * authentication is available.
-   */
   useEffect(() => {
-    let cancelled = false;
-
-    const checkBiometric = async () => {
-      /**
-       * Never show this prompt in the browser.
-       */
-      if (!Capacitor.isNativePlatform()) {
-        if (!cancelled) {
-          setChecking(false);
-          setVisible(false);
-        }
-
-        return;
+    let alive = true;
+    (async () => {
+      const info = await checkBiometry();
+      if (!info.biometric) return;                               // no hardware / nothing enrolled: stay quiet (Settings explains)
+      if (adapter?.signedInWithin) {
+        if (!(await adapter.signedInWithin(FRESH_LOGIN_MS))) return;
+      } else {
+        const { data } = await client.auth.getSession();
+        const last = data?.session?.user?.last_sign_in_at;
+        if (!last || Date.now() - new Date(last).getTime() > FRESH_LOGIN_MS) return;
       }
+      const dismissed = Number(await prefGet(dismissKey));
+      if (dismissed && Date.now() - dismissed < ASK_AGAIN_MS) return;
+      if (alive) setShow(true);
+    })();
+    return () => { alive = false; };
+  }, [client, adapter, dismissKey]);
 
-      if (!client) {
-        if (!cancelled) {
-          setChecking(false);
-          setVisible(false);
-        }
+  if (!show) return null;
 
-        return;
-      }
-
-      try {
-        const result =
-          await canUseBiometric();
-
-        if (cancelled) {
-          return;
-        }
-
-        /**
-         * Only show the prompt when the phone actually
-         * supports biometric authentication.
-         */
-        if (result?.available) {
-          setVisible(true);
-        } else {
-          setVisible(false);
-        }
-      } catch (err) {
-        console.error(
-          "Biometric availability check failed:",
-          err
-        );
-
-        if (!cancelled) {
-          setVisible(false);
-        }
-      } finally {
-        if (!cancelled) {
-          setChecking(false);
-        }
-      }
-    };
-
-    checkBiometric();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [client]);
-
-  /**
-   * Enable trusted-device biometric access.
-   */
-  const handleEnable = async () => {
-    if (enabling) {
-      return;
-    }
-
-    setError("");
-    setEnabling(true);
-
-    try {
-      const result = await enable(
-        service,
-        client
-      );
-
-      if (!result?.ok) {
-        let message =
-          "Biometric authentication could not be enabled.";
-
-        switch (result?.reason) {
-          case "not_enrolled":
-            message =
-              "No fingerprint is enrolled on this device. Add a fingerprint in Android Settings, then try again.";
-            break;
-
-          case "passcode_not_set":
-            message =
-              "Please set a screen lock PIN, password, or pattern on your device first.";
-            break;
-
-          case "unavailable":
-          case "biometric_unavailable":
-            message =
-              "Biometric authentication is not available on this device.";
-            break;
-
-          case "user_cancel":
-          case "app_cancel":
-          case "system_cancel":
-          case "user_fallback":
-            message =
-              "Biometric setup was cancelled.";
-            break;
-
-          case "lockout":
-          case "temporary_lockout":
-            message =
-              "Biometric authentication is temporarily locked. Try again later.";
-            break;
-
-          default:
-            if (
-              result?.error?.userMessage
-            ) {
-              message =
-                result.error.userMessage;
-            }
-        }
-
-        setError(message);
-        return;
-      }
-
-      /**
-       * Trusted-device registration succeeded.
-       */
-      setVisible(false);
-      setError("");
-
-      if (typeof onEnabled === "function") {
-        await onEnabled();
-      }
-    } catch (err) {
-      console.error(
-        "Enable biometric error:",
-        err
-      );
-
-      setError(
-        err?.message ||
-          "Unable to enable biometric authentication."
-      );
-    } finally {
-      setEnabling(false);
-    }
+  const onEnable = async () => {
+    setBusy(true); setError("");
+    const r = adapter?.enable ? await adapter.enable() : await enable({ service, client });
+    setBusy(false);
+    if (r.ok) { setShow(false); onEnabled?.(); return; }
+    if (r.status === BioStatus.CANCELLED || r.status === BioStatus.FALLBACK) return;   // changed their mind in the OS prompt
+    setError(r.status === "server_error" || r.status === "vault_error"
+      ? "Couldn't turn on fingerprint sign-in. You can try again from Settings."
+      : bioMessage(r.status));
   };
 
-  /**
-   * User can choose not to enable biometric now.
-   *
-   * We simply hide the prompt. Normal login continues
-   * to work.
-   */
-  const handleNotNow = () => {
-    setVisible(false);
-    setError("");
-  };
-
-  if (checking || !visible) {
-    return null;
-  }
+  const notNow = async () => { await prefSet(dismissKey, Date.now()); setShow(false); };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        display: "flex",
-        alignItems: "flex-end",
-        justifyContent: "center",
-        padding: 16,
-        background:
-          "rgba(2, 44, 34, 0.42)",
-        boxSizing: "border-box",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 460,
-          background: "#ffffff",
-          borderRadius:
-            "24px 24px 18px 18px",
-          padding: "28px 22px 22px",
-          boxSizing: "border-box",
-          boxShadow:
-            "0 -12px 50px rgba(0,0,0,0.18)",
-        }}
-      >
-        {/* Biometric icon */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            marginBottom: 18,
-          }}
-        >
-          <div
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background:
-                "linear-gradient(135deg, #065f46, #10b981)",
-              color: "#ffffff",
-              fontSize: 32,
-            }}
-          >
-            👆
-          </div>
-        </div>
-
-        <h2
-          style={{
-            margin: 0,
-            textAlign: "center",
-            color: "#12372a",
-            fontSize: 22,
-            fontWeight: 800,
-          }}
-        >
-          Protect Umova with fingerprint
-        </h2>
-
-        <p
-          style={{
-            margin:
-              "10px auto 0",
-            maxWidth: 380,
-            textAlign: "center",
-            color: "#64748b",
-            fontSize: 14,
-            lineHeight: 1.55,
-          }}
-        >
-          Use your fingerprint or device
-          biometric to unlock Umova faster
-          the next time you open the app.
-        </p>
-
-        <div
-          style={{
-            marginTop: 18,
-            padding: "12px 14px",
-            borderRadius: 12,
-            background: "#ecfdf5",
-            border:
-              "1px solid #a7f3d0",
-            color: "#065f46",
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}
-        >
-          Your biometric is handled by your
-          phone. Umova does not receive or
-          store your fingerprint.
-        </div>
-
-        {error && (
-          <div
-            style={{
-              marginTop: 14,
-              padding: "11px 13px",
-              borderRadius: 10,
-              background: "#fef2f2",
-              border:
-                "1px solid #fecaca",
-              color: "#b91c1c",
-              fontSize: 13,
-              lineHeight: 1.5,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={handleEnable}
-          disabled={enabling}
-          style={{
-            width: "100%",
-            marginTop: 20,
-            padding: "15px 18px",
-            border: "none",
-            borderRadius: 14,
-            background: enabling
-              ? "#94a3b8"
-              : "#047857",
-            color: "#ffffff",
-            fontSize: 16,
-            fontWeight: 700,
-            cursor: enabling
-              ? "not-allowed"
-              : "pointer",
-          }}
-        >
-          {enabling
-            ? "Setting up fingerprint..."
-            : "Enable fingerprint"}
+    <div className="fixed inset-0 z-[9998] bg-black/60 flex items-end sm:items-center justify-center p-4">
+      <div className="w-full max-w-sm bg-white rounded-3xl p-7 text-center shadow-2xl">
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-green-100 text-green-800 flex items-center justify-center mb-4"><Fingerprint size={28} /></div>
+        <h2 className="text-xl font-black text-slate-800">Faster sign-in?</h2>
+        <p className="text-sm text-slate-500 mt-2">Use your fingerprint or face to open Umova on this phone. Your fingerprint never leaves your phone, and your password still works.</p>
+        {error && <p className="mt-3 text-sm text-red-700 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
+        <button onClick={onEnable} disabled={busy}
+          className="mt-5 w-full h-12 rounded-2xl bg-green-800 text-white font-bold disabled:opacity-60 flex items-center justify-center gap-2">
+          {busy && <Loader2 size={18} className="animate-spin" />} Enable biometric login
         </button>
-
-        <button
-          type="button"
-          onClick={handleNotNow}
-          disabled={enabling}
-          style={{
-            width: "100%",
-            marginTop: 10,
-            padding: "13px 18px",
-            border: "none",
-            background: "transparent",
-            color: "#64748b",
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: enabling
-              ? "not-allowed"
-              : "pointer",
-          }}
-        >
-          Not now
-        </button>
-
-        <p
-          style={{
-            margin:
-              "14px 0 0",
-            textAlign: "center",
-            fontSize: 11,
-            lineHeight: 1.5,
-            color: "#94a3b8",
-          }}
-        >
-          You can continue using Umova
-          normally without enabling
-          biometric unlock.
-        </p>
+        <button onClick={notNow} disabled={busy} className="mt-2 w-full h-11 text-sm font-semibold text-slate-500 hover:text-slate-700">Not now</button>
       </div>
     </div>
   );

@@ -20,6 +20,7 @@
 // across dev/staging/prod without edits.
 
 import { createClient } from "@supabase/supabase-js";
+import { secureAuthStorage } from "../../security/secureAuthStorage";
 
 const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_KEY;
@@ -33,8 +34,12 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
+// Phone app only: the POS session (same separate "sb-pos-auth-token" key) is kept in secure native storage
+// instead of plain localStorage. secureAuthStorage is undefined on the web, so the browser behaves exactly as
+// before (default localStorage). A session already in localStorage is moved across once, then removed.
 export const posSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
+    ...(secureAuthStorage ? { storage: secureAuthStorage } : {}),
     storageKey: "sb-pos-auth-token", // distinct from the main client's default key
     persistSession: true,
     autoRefreshToken: true,

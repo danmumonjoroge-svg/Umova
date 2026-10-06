@@ -45,6 +45,7 @@ import {
 import { useChama } from "../../chama-erp-advanced/ChamaContext";
 import { resolveStaffLogin, resolveMemberLogin, looksLikePhoneNumber } from "./loginHelpers";
 import { loginWithPasskey, passkeysSupported } from "./webauthnHelpers";
+import { isNativeApp } from "../../security/nativeBiometric";
 
 export default function UnifiedLogin() {
   const navigate = useNavigate();
@@ -283,7 +284,9 @@ export default function UnifiedLogin() {
               )}
             </button>
 
-            {passkeysSupported() && (
+            {/* Web only. Inside the phone app, fingerprint is handled by the native lock (src/security),
+                and showing the passkey button would open Android's own passkey chooser. */}
+            {!isNativeApp() && passkeysSupported() && (
               <button
                 type="button"
                 disabled={passkeyBusy}

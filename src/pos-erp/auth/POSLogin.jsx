@@ -18,6 +18,7 @@ import React, { useState } from "react";
 import { Loader2, Store, Fingerprint } from "lucide-react";
 import { usePOSAuth } from "../context/POSAuthContext";
 import { posPasskeys } from "./posPasskeys";
+import { isNativeApp } from "../../security/nativeBiometric";
 import { DEMO_BUSINESS_CODE, DEMO_USERNAME, DEMO_PASSWORD } from "./demoAccount";
 
 const REASON_MESSAGES = {
@@ -162,7 +163,9 @@ export default function POSLogin({ onGoToSignup, logoutNotice }) {
           Try the demo — no sign-up needed
         </button>
 
-        {posPasskeys.supported() && (
+        {/* Web only. In the phone app, fingerprint is the native lock (src/security); this button would open
+            Android's own passkey chooser instead. */}
+        {!isNativeApp() && posPasskeys.supported() && (
           <button
             type="button"
             onClick={fingerprint}

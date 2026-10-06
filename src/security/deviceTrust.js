@@ -1,782 +1,180 @@
-import { Preferences } from "@capacitor/preferences";
+// src/security/deviceTrust.js
+//
+// Trusted-device logic, reusable by Finance, My Business (and Chama once its adapter exists).
+// Each service passes in ITS OWN Supabase client (supabase / posSupabase), so we never merge the auth systems.
+//
+// Model:  account (already authenticated)  ->  trusted device  ->  biometric-protected device secret.
+//   * The secret is 32 random bytes generated on the phone, kept in the OS secure store.
+//   * The server stores only SHA-256(secret) in trusted_devices. No biometric data exists anywhere in Umova.
+//   * Biometric success only RELEASES the secret locally; the server then confirms the device is still
+//     trusted (not revoked, secret matches) and belongs to the signed-in account.
+//   * Biometric proves "the phone's owner is here". It never grants roles/permissions: those still come from
+//     AuthContext / POSAuthContext / RLS exactly as before.
+
 import { Capacitor } from "@capacitor/core";
-import {
-  authenticate,
-  isBiometricAvailable,
-} from "./nativeBiometric";
+import { authenticate, checkBiometry, BioStatus } from "./nativeBiometric";
+import { vaultSet, vaultGet, vaultDelete, prefGet, prefSet, prefRemove } from "./secureVault";
 
-import {
-  vaultSet,
-  vaultGet,
-  vaultDelete,
-  vaultIsEnabled,
-  vaultGetDeviceId,
-} from "./secureVault";
+export const SERVICES = Object.freeze({ FINANCE: "finance", BUSINESS: "business", CHAMA: "chama" });
 
-const DEVICE_NAMESPACE = "umova-device-trust-v2";
+const K_DEVICE = "umova.deviceId";
+const trustKey = (s) => `umova.trust.${s}`;
 
-const SERVICES = {
-  finance: "finance",
-  business: "business",
-  chama: "chama",
+// ---- helpers -------------------------------------------------------------
+const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+const randomSecret = () => hex(crypto.getRandomValues(new Uint8Array(32)));
+const uuid = () =>
+  crypto.randomUUID
+    ? crypto.randomUUID()
+    : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+const isNetworkError = (e) => /network|failed to fetch|timeout|offline/i.test(String(e?.message || e));
+
+const defaultLabel = () => {
+  const p = Capacitor.getPlatform();
+  return p === "ios" ? "iPhone" : p === "android" ? "Android phone" : "This device";
 };
 
-/**
- * Trusted-device authentication is only intended for the native
- * mobile application.
- */
-function isNativeApp() {
-  return Capacitor.isNativePlatform();
+/** Random per-install id. NOT a hardware identifier (IMEI, serial, ANDROID_ID are never read). */
+export async function getDeviceId() {
+  let id = await prefGet(K_DEVICE);
+  if (!id) { id = uuid(); await prefSet(K_DEVICE, id); }
+  return id;
 }
 
-/**
- * Generate a random installation/device identifier.
- */
-function generateDeviceId() {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return crypto.randomUUID();
-  }
-
-  const randomPart = Math.random()
-    .toString(36)
-    .substring(2, 12);
-
-  return `umova-${Date.now()}-${randomPart}`;
+export async function isEnabled(service) {
+  const raw = await prefGet(trustKey(service));
+  if (!raw) return false;
+  try { return !!JSON.parse(raw).enabled; } catch { return false; }
 }
 
-/**
- * Generate a cryptographically strong secret.
- */
-function generateSecret() {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.getRandomValues === "function"
-  ) {
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-
-    return Array.from(bytes)
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("");
-  }
-
-  throw new Error(
-    "Secure random number generation is not available on this device."
-  );
-}
-
-/**
- * Get the current Supabase session.
- */
-async function getCurrentSession(client) {
-  if (!client?.auth) {
-    throw new Error("Supabase client is not available.");
-  }
-
-  const {
-    data,
-    error,
-  } = await client.auth.getSession();
-
-  if (error) {
-    throw error;
-  }
-
-  return data?.session || null;
-}
-
-/**
- * Get the currently authenticated user's ID.
- */
-async function getCurrentUserId(client) {
-  const session = await getCurrentSession(client);
-
-  return session?.user?.id || null;
-}
-
-/**
- * Local metadata key.
- *
- * This is NOT a secret.
- */
-function metadataKey(service) {
-  return `${DEVICE_NAMESPACE}:metadata:${service}`;
-}
-
-/**
- * Save non-secret local metadata.
- */
-async function saveMetadata(service, metadata) {
-  await Preferences.set({
-    key: metadataKey(service),
-    value: JSON.stringify(metadata),
-  });
-}
-
-/**
- * Read non-secret local metadata.
- */
-async function getMetadata(service) {
-  const { value } = await Preferences.get({
-    key: metadataKey(service),
-  });
-
-  if (!value) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Remove local metadata.
- */
-async function clearMetadata(service) {
-  await Preferences.remove({
-    key: metadataKey(service),
-  });
-}
-
-/**
- * Validate service name.
- */
-function normalizeService(service) {
-  if (!Object.values(SERVICES).includes(service)) {
-    throw new Error(`Unsupported trusted-device service: ${service}`);
-  }
-
-  return service;
-}
-
-/**
- * Check whether trusted-device biometric authentication is
- * available on this device.
- */
-export async function canUseBiometric() {
-  if (!isNativeApp()) {
-    return {
-      available: false,
-      reason: "not_native",
-    };
-  }
-
-  return await isBiometricAvailable();
-}
-
-/**
- * Check whether biometric trusted-device access is enabled
- * for the currently logged-in user.
- *
- * IMPORTANT:
- * This only checks local metadata.
- * It does not authenticate the user.
- */
-export async function isEnabled(service, client) {
-  service = normalizeService(service);
-
-  if (!isNativeApp()) {
-    return false;
-  }
-
-  const userId = await getCurrentUserId(client);
-
-  if (!userId) {
-    return false;
-  }
-
-  const metadata = await getMetadata(service);
-
-  if (!metadata) {
-    return false;
-  }
-
-  /**
-   * Protect against another user using the same physical phone.
-   *
-   * If the locally trusted device belongs to another Supabase
-   * user, clear the local trust information.
-   */
-  if (metadata.userId !== userId) {
-    await clearTrustedDevice(service);
-    return false;
-  }
-
-  const vaultEnabled = await vaultIsEnabled(service);
-
-  if (!vaultEnabled) {
-    await clearMetadata(service);
-    return false;
-  }
-
-  return true;
-}
-
-/**
- * Enable biometric trusted-device access.
- *
- * Flow:
- *
- * 1. Confirm native device.
- * 2. Confirm biometric is available.
- * 3. Confirm the current Supabase user.
- * 4. Ask for biometric authentication.
- * 5. Generate a random trusted-device secret.
- * 6. Store the secret inside the native biometric-protected vault.
- * 7. Register the trusted device with the Supabase server.
- * 8. Store only non-secret metadata locally.
- */
-export async function enable(service, client) {
-  service = normalizeService(service);
-
-  if (!isNativeApp()) {
-    return {
-      ok: false,
-      reason: "not_native",
-    };
-  }
-
-  if (!client) {
-    throw new Error("Supabase client is required.");
-  }
-
-  const userId = await getCurrentUserId(client);
-
-  if (!userId) {
-    throw new Error(
-      "You must be logged in before enabling biometric authentication."
-    );
-  }
-
-  const availability = await canUseBiometric();
-
-  if (!availability?.available) {
-    return {
-      ok: false,
-      reason:
-        availability?.reason ||
-        "biometric_unavailable",
-      error: availability?.error || null,
-    };
-  }
-
-  /**
-   * First biometric verification.
-   *
-   * This proves that the person enabling trusted-device access
-   * is physically present.
-   */
-  const authentication = await authenticate(
-    "Confirm your identity to enable biometric login."
-  );
-
-  if (!authentication?.ok) {
-    return {
-      ok: false,
-      reason:
-        authentication?.reason ||
-        "authentication_failed",
-      error: authentication?.error || null,
-    };
-  }
-
-  const deviceId = generateDeviceId();
-  const secret = generateSecret();
-
-  /**
-   * Register the trusted device with the server first.
-   *
-   * The secret is sent only through the authenticated Supabase
-   * session. The server should hash/store it securely and should
-   * never return the secret later.
-   */
-  const { data, error } = await client.rpc(
-    "register_trusted_device",
-    {
-      p_user_id: userId,
-      p_service: service,
-      p_device_id: deviceId,
-      p_secret: secret,
-    }
-  );
-
-  if (error) {
-    throw error;
-  }
-
-  if (data === false) {
-    throw new Error(
-      "The server rejected trusted-device registration."
-    );
-  }
-
-  /**
-   * Store the secret ONLY after the server has accepted it.
-   *
-   * vaultSet protects it with the device's biometric system.
-   */
-  try {
-    await vaultSet(
-      service,
-      deviceId,
-      secret
-    );
-  } catch (vaultError) {
-    /**
-     * If secure storage fails, immediately attempt to remove
-     * the server-side trusted-device registration so we don't
-     * leave a trusted device that the phone cannot use.
-     */
-    try {
-      await client.rpc(
-        "revoke_trusted_device",
-        {
-          p_user_id: userId,
-          p_service: service,
-          p_device_id: deviceId,
-        }
-      );
-    } catch (cleanupError) {
-      console.warn(
-        "Trusted-device cleanup warning:",
-        cleanupError
-      );
-    }
-
-    throw vaultError;
-  }
-
-  await saveMetadata(service, {
-    version: 2,
-    userId,
-    deviceId,
-    enabledAt: new Date().toISOString(),
-  });
-
-  return {
-    ok: true,
-    service,
-    deviceId,
-  };
-}
-
-/**
- * Unlock a trusted device.
- *
- * IMPORTANT:
- *
- * vaultGet() itself invokes the biometric-protected native
- * credential retrieval. Therefore we DO NOT call authenticate()
- * immediately before vaultGet().
- *
- * Otherwise the user could receive two biometric prompts.
- */
-export async function unlock(
-  service,
-  client,
-  options = {}
-) {
-  service = normalizeService(service);
-
-  if (!isNativeApp()) {
-    return {
-      ok: false,
-      reason: "not_native",
-    };
-  }
-
-  if (!client) {
-    throw new Error("Supabase client is required.");
-  }
-
-  const userId = await getCurrentUserId(client);
-
-  if (!userId) {
-    return {
-      ok: false,
-      reason: "not_authenticated",
-    };
-  }
-
-  const enabled = await isEnabled(
-    service,
-    client
-  );
-
-  if (!enabled) {
-    return {
-      ok: false,
-      reason: "not_enabled",
-    };
-  }
-
-  let protectedCredentials;
-
-  /**
-   * This is where the Android biometric prompt happens.
-   *
-   * The secret is released only after successful biometric
-   * authentication.
-   */
-  try {
-    protectedCredentials = await vaultGet(
-      service,
-      options.reason ||
-        "Authenticate to unlock Umova."
-    );
-  } catch (error) {
-    return {
-      ok: false,
-      reason:
-        error?.reason ||
-        "biometric_failed",
-      error,
-    };
-  }
-
-  if (
-    !protectedCredentials?.deviceId ||
-    !protectedCredentials?.secret
-  ) {
-    return {
-      ok: false,
-      reason: "protected_credentials_missing",
-    };
-  }
-
-  const metadata = await getMetadata(service);
-
-  /**
-   * Verify that the protected device identity belongs to
-   * the currently authenticated user.
-   */
-  if (
-    !metadata ||
-    metadata.userId !== userId ||
-    metadata.deviceId !==
-      protectedCredentials.deviceId
-  ) {
-    await clearTrustedDevice(service);
-
-    return {
-      ok: false,
-      reason: "device_user_mismatch",
-    };
-  }
-
-  /**
-   * Server-side trusted-device verification.
-   *
-   * The biometric itself never grants permissions.
-   * The server still decides whether this trusted device
-   * is valid.
-   */
-  try {
-    const { data, error } =
-      await client.rpc(
-        "verify_trusted_device",
-        {
-          p_user_id: userId,
-          p_service: service,
-          p_device_id:
-            protectedCredentials.deviceId,
-          p_secret:
-            protectedCredentials.secret,
-        }
-      );
-
-    if (error) {
-      throw error;
-    }
-
-    if (!data) {
-      return {
-        ok: false,
-        reason: "trusted_device_rejected",
-      };
-    }
-
-    return {
-      ok: true,
-      verified: true,
-      service,
-      userId,
-      deviceId:
-        protectedCredentials.deviceId,
-    };
-  } catch (error) {
-    /**
-     * Network failure is different from authentication failure.
-     *
-     * We allow the application to report that local biometric
-     * authentication succeeded, but callers MUST NOT treat
-     * this as server authorization for financial transactions.
-     *
-     * This is useful for opening cached/view-only screens when
-     * temporarily offline.
-     */
-    if (isNetworkError(error)) {
-      return {
-        ok: true,
-        verified: false,
-        unverified: true,
-        offline: true,
-        service,
-        userId,
-        deviceId:
-          protectedCredentials.deviceId,
-        warning:
-          "Biometric authentication succeeded, but the trusted device could not be verified with the server because the network is unavailable.",
-      };
-    }
-
-    return {
-      ok: false,
-      reason: "server_verification_failed",
-      error,
-    };
-  }
-}
-
-/**
- * Password fallback.
- *
- * This is intentionally separate from biometric trusted-device
- * authentication.
- */
-export async function verifyPassword(
-  client,
-  email,
-  password
-) {
-  if (!client?.auth) {
-    throw new Error("Supabase client is not available.");
-  }
-
-  if (!email || !password) {
-    return {
-      ok: false,
-      reason: "missing_credentials",
-    };
-  }
-
-  const {
-    data,
-    error,
-  } = await client.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (error) {
-    return {
-      ok: false,
-      reason: "invalid_credentials",
-      error,
-    };
-  }
-
-  return {
-    ok: true,
-    session: data?.session || null,
-    user: data?.user || null,
-  };
-}
-
-/**
- * Disable trusted-device access.
- *
- * Revokes the device on the server and removes the local
- * biometric-protected secret.
- */
-export async function disable(
-  service,
-  client
-) {
-  service = normalizeService(service);
-
-  if (!isNativeApp()) {
-    return {
-      ok: true,
-    };
-  }
-
-  const userId = await getCurrentUserId(client);
-  const deviceId =
-    await vaultGetDeviceId(service);
-
-  /**
-   * Revoke on server when possible.
-   */
-  if (userId && deviceId && client?.rpc) {
-    try {
-      await client.rpc(
-        "revoke_trusted_device",
-        {
-          p_user_id: userId,
-          p_service: service,
-          p_device_id: deviceId,
-        }
-      );
-    } catch (error) {
-      console.warn(
-        "Trusted-device server revoke warning:",
-        error
-      );
-    }
-  }
-
-  await clearTrustedDevice(service);
-
-  return {
-    ok: true,
-  };
-}
-
-/**
- * Clear local trusted-device information.
- */
-export async function clearTrustedDevice(
-  service
-) {
-  service = normalizeService(service);
-
+async function clearLocal(service) {
   await vaultDelete(service);
-  await clearMetadata(service);
+  await prefRemove(trustKey(service));
 }
 
-/**
- * Revoke every trusted device for the current user/service.
- */
-export async function revokeAll(
-  service,
-  client
-) {
-  service = normalizeService(service);
-
-  const userId = await getCurrentUserId(client);
-
-  if (!userId) {
-    return {
-      ok: false,
-      reason: "not_authenticated",
-    };
-  }
-
-  if (client?.rpc) {
-    try {
-      const { error } = await client.rpc(
-        "revoke_all_trusted_devices",
-        {
-          p_user_id: userId,
-          p_service: service,
-        }
-      );
-
-      if (error) {
-        throw error;
-      }
-    } catch (error) {
-      return {
-        ok: false,
-        reason: "server_revoke_failed",
-        error,
-      };
-    }
-  }
-
-  await clearTrustedDevice(service);
-
-  return {
-    ok: true,
-  };
+async function currentUserId(client) {
+  const { data } = await client.auth.getSession();
+  return data?.session?.user?.id ?? null;
 }
 
-/**
- * List trusted devices from the server.
- */
-export async function listTrustedDevices(
-  service,
-  client
-) {
-  service = normalizeService(service);
+// ---- enable --------------------------------------------------------------
+/** Call only while the account is signed in. Returns { ok } or { ok:false, status, detail? }. */
+export async function enable({ service, client, label }) {
+  const info = await checkBiometry();
+  if (!info.biometric) return { ok: false, status: info.status === BioStatus.OK ? BioStatus.UNAVAILABLE : info.status };
 
-  const userId = await getCurrentUserId(client);
+  // User must prove presence at the OS level before we create the trust.
+  const auth = await authenticate({ reason: "Confirm to turn on fingerprint sign-in" });
+  if (!auth.ok) return { ok: false, status: auth.status };
 
-  if (!userId) {
-    return {
-      ok: false,
-      reason: "not_authenticated",
-      devices: [],
-    };
+  const deviceId = await getDeviceId();
+  const secret = randomSecret();
+
+  const { data, error } = await client.rpc("register_trusted_device", {
+    p_device_id: deviceId,
+    p_service: service,
+    p_label: (label || defaultLabel()).slice(0, 60),
+    p_platform: Capacitor.getPlatform(),
+    p_secret: secret,
+  });
+  if (error || !data?.ok) return { ok: false, status: "server_error", detail: error?.message || data?.reason };
+
+  try {
+    await vaultDelete(service);                 // clear any stale entry (iOS keychain survives reinstall)
+    await vaultSet(service, deviceId, secret);
+  } catch (e) {
+    await client.rpc("revoke_trusted_device", { p_device_id: deviceId, p_service: service, p_row_id: null });
+    return { ok: false, status: "vault_error", detail: e?.message };
   }
 
-  const {
-    data,
-    error,
-  } = await client.rpc(
-    "list_trusted_devices",
-    {
-      p_user_id: userId,
-      p_service: service,
-    }
-  );
+  await prefSet(trustKey(service), JSON.stringify({ enabled: true, since: Date.now(), userId: await currentUserId(client) }));
+  return { ok: true };
+}
+
+// ---- unlock --------------------------------------------------------------
+/**
+ * Biometric unlock of an EXISTING session (the lock screen). Never creates a session by itself:
+ * after "Sign out" the user must do a full login again.
+ *
+ * -> { ok:true, unverified? }  or  { ok:false, status }
+ *    status: a BioStatus value (retry/fallback), or
+ *            "invalidated" | "revoked" -> local trust was wiped, user must use password then re-enable
+ *            "no_session"              -> Supabase session is gone/expired, full login needed
+ *            "server_error"            -> couldn't verify; fail closed, offer password
+ */
+export async function unlock({ service, client, reason = "Unlock Umova" }) {
+  if (!(await isEnabled(service))) return { ok: false, status: "not_enabled" };
+
+  const auth = await authenticate({ reason });
+  if (!auth.ok) return { ok: false, status: auth.status };
+
+  const stored = await vaultGet(service);
+  if (!stored) {                                    // OS dropped the credential (e.g. biometrics changed)
+    await clearLocal(service);
+    return { ok: false, status: BioStatus.INVALIDATED };
+  }
+
+  const { data, error } = await client.rpc("verify_trusted_device", {
+    p_device_id: stored.deviceId, p_service: service, p_secret: stored.secret,
+  });
 
   if (error) {
-    return {
-      ok: false,
-      reason: "server_error",
-      error,
-      devices: [],
-    };
+    // Offline: the biometric check passed and the session is still local, so allow the UI to open;
+    // revocation is re-checked on the next online unlock. Any other server error fails closed.
+    return isNetworkError(error) ? { ok: true, unverified: true } : { ok: false, status: "server_error" };
   }
+  if (data?.ok) return { ok: true };
 
-  return {
-    ok: true,
-    devices: data || [],
-  };
+  switch (data?.reason) {
+    case "NO_SESSION":
+      return { ok: false, status: "no_session" };
+    case "REVOKED": case "NOT_FOUND": case "SECRET_MISMATCH":
+      await clearLocal(service);
+      return { ok: false, status: "revoked" };
+    default:
+      return { ok: false, status: "server_error" };
+  }
 }
 
-/**
- * Determine whether an error looks like a network problem.
- */
-function isNetworkError(error) {
-  const message =
-    String(
-      error?.message ||
-        error?.error ||
-        ""
-    ).toLowerCase();
-
-  const code = String(
-    error?.code || ""
-  ).toLowerCase();
-
-  return (
-    message.includes("network") ||
-    message.includes("fetch") ||
-    message.includes("failed to fetch") ||
-    message.includes("offline") ||
-    message.includes("connection") ||
-    code === "network_error" ||
-    code === "fetch_error"
-  );
+// ---- disable / revoke ----------------------------------------------------
+/** "Remove this device": biometric login stops working here until re-enabled after a normal login. */
+export async function disable({ service, client }) {
+  const deviceId = await getDeviceId();
+  try { await client.rpc("revoke_trusted_device", { p_device_id: deviceId, p_service: service, p_row_id: null }); } catch { /* best effort */ }
+  await clearLocal(service);
+  return { ok: true };
 }
 
-export default {
-  canUseBiometric,
-  isEnabled,
-  enable,
-  unlock,
-  verifyPassword,
-  disable,
-  clearTrustedDevice,
-  revokeAll,
-  listTrustedDevices,
-};
+export async function listDevices({ service, client }) {
+  const { data, error } = await client.rpc("list_trusted_devices", { p_service: service, p_current_device: await getDeviceId() });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function revokeDevice({ client, rowId }) {
+  const { data, error } = await client.rpc("revoke_trusted_device", { p_device_id: null, p_service: null, p_row_id: rowId });
+  if (error) throw error;
+  return data;
+}
+
+/** "Log out all devices": revoke every trusted device, then invalidate every refresh token for the account. */
+export async function signOutEverywhere({ service, client }) {
+  await client.rpc("revoke_all_trusted_devices", { p_service: service });
+  await clearLocal(service);
+  await client.auth.signOut({ scope: "global" });
+}
+
+// ---- password fallback / re-auth -----------------------------------------
+/** Confirms the signed-in account's password. Works for member, staff and POS accounts (POS uses its synthetic email). */
+export async function verifyPassword(client, password) {
+  const { data } = await client.auth.getSession();
+  const email = data?.session?.user?.email;
+  if (!email) return { ok: false, reason: "no_session" };
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  return error ? { ok: false, reason: "wrong_password" } : { ok: true };
+}
+
+export async function shouldOfferEnable(service) {
+  return !(await isEnabled(service));
+}
+export { prefGet, prefSet };

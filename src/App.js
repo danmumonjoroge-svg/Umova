@@ -34,6 +34,7 @@ import Statements    from "./components/Dashboard/Statements";
 import { ChamaProvider }        from "./chama-erp-advanced/ChamaContext";
 import AuthGate                 from "./chama-erp-advanced/auth/AuthGate";
 import ChamaDashboardAdvanced   from "./chama-erp-advanced/ChamaDashboardAdvanced";
+import ChamaLock                from "./chama-erp-advanced/auth/ChamaLock";
 import PlatformAdminGate        from "./chama-erp-advanced/platform-admin/PlatformAdminGate";
 import LicenseManager           from "./chama-erp-advanced/platform-admin/LicenseManager";
 
@@ -305,7 +306,9 @@ function App() {
         element={
           <ChamaProvider>
             <AuthGate>
-              <ChamaDashboardAdvanced />
+              <ChamaLock>
+                <ChamaDashboardAdvanced />
+              </ChamaLock>
             </AuthGate>
           </ChamaProvider>
         }

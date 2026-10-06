@@ -12,6 +12,8 @@ import { POSAuthProvider } from "./context/POSAuthContext";
 import POSAuthGate from "./auth/POSAuthGate";
 import { usePosErpAuth } from "./auth/usePosErpAuth";
 import { isDemoTenant, seedDemoDataIfEmpty } from "./auth/demoAccount";
+import { posSupabase } from "./services/posSupabaseClient";
+import AppLock from "../security/AppLock";
 import POSLayout from "./POSLayout";
 import POSDashboard from "./pages/POSDashboard";
 import POSPage from "./pages/POSPage";
@@ -83,6 +85,19 @@ function DemoSeeder() {
   );
 }
 
+// Phone-only fingerprint lock for My Business. Sits INSIDE POSAuthGate, so the tenant, staff record and role
+// (owner / manager / cashier) are already resolved and unchanged: fingerprint only unlocks the app, it never
+// grants extra permissions. Uses the POS Supabase client (separate session) and its own "business" setting.
+// On web it renders children untouched.
+function PosLock({ children }) {
+  const { logout } = usePosErpAuth();
+  return (
+    <AppLock service="business" client={posSupabase} onSignOut={logout}>
+      {children}
+    </AppLock>
+  );
+}
+
 const PosRoutes = () => (
   <>
     <DemoSeeder />
@@ -143,7 +158,9 @@ export default function POSApp() {
         </>
       ) : (
         <POSAuthGate>
-          <PosRoutes />
+          <PosLock>
+            <PosRoutes />
+          </PosLock>
         </POSAuthGate>
       )}
     </POSAuthProvider>

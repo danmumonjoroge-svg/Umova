@@ -6,6 +6,7 @@ import { supabase } from "../supabaseClient";
 import { useMemberLedger } from "../hooks/useMemberLedger";
 import { MemberSidebar, MemberMobileNav, Brand } from "./MemberNav";
 import NotificationCenter from "./NotificationCenter";
+import AppLock from "../security/AppLock";
 import "./member-app.css";
 
 const SEEN_KEY = "umova-notif-last-seen";
@@ -70,7 +71,10 @@ export default function MemberAppShell() {
 
   const handleLogout = async () => { try { await logout(); } catch (e) { console.error(e); } };
 
+  // AppLock sits INSIDE MemberGuard (App.js), so the user is already authenticated and their role resolved.
+  // It only adds the phone lock screen + "Enable fingerprint login?" prompt; on web it renders children untouched.
   return (
+    <AppLock service="finance" client={supabase} onSignOut={handleLogout}>
     <div className="uma">
       <MemberSidebar onLogout={handleLogout} />
       <div className="uma-main">
@@ -96,5 +100,6 @@ export default function MemberAppShell() {
       </div>
       <MemberMobileNav />
     </div>
+    </AppLock>
   );
 }
