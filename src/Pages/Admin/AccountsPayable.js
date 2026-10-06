@@ -1,111 +1,85 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { postJournal } from "../../services/journalAPI";
 import { getSystemAccount } from "../../services/chartOfAccountsAPI";
-import { SectionCard, KpiCard, StatusBadge, EmptyState } from "./AdminUI";
-import { Field, kes, statusTone, statusLabel } from "./AdminForm";
+import { Page, SectionCard, Field, Tabs, StatusBadge, EmptyState, KpiCard, kes, todayISO } from "./AdminUI";
 
 /**
- * Section 12. Nothing existing in this codebase relates to Financial-side
- * Accounts Payable — purchaseService.js/inventoryService.js found in this
- * ZIP are POS/MSME module files (their own headers say so), not this.
- *
- * Flow: Supplier -> Invoice (posts Expense DR / Accounts Payable CR,
- * recognizing the liability immediately) -> Payment (posts Accounts
- * Payable DR / Cash or Bank CR, allocated to a specific invoice).
- *
- * Deliberately NOT built: separate approve-vs-pay role gating (Section 19
- * calls for this) — RLS here is permissive for any authenticated user.
- * That needs a real status-transition permission model, not bolted on
- * quickly alongside everything else here.
+ * Section 12 — Accounts Payable (Financial side; the POS purchase files are a different module). Flow: Supplier -> Invoice (posts Expense DR / Accounts Payable CR,
+ * recognised immediately) -> Payment (posts Accounts Payable DR / Cash/Bank CR,
+ * allocated to a specific invoice). No approve-vs-payment role gating
+ * (RLS is permissive for any authenticated user). Posting logic unchanged;
+ * this file only changes the presentation and error reporting.
  */
+const EMPTY_PARTY = { name: "", contact_person: "", phone: "", email: "" };
+const emptyInvoice = () => ({ supplier_id: "", invoice_number: "", invoice_date: todayISO(), due_date: "", expense_account_id: "", amount: "", description: "" });
+const emptySettle = () => ({ invoice_id: "", amount: "", payment_date: todayISO(), payment_method: "Bank", reference: "" });
+
+const statusTone = (s) => (s === "paid" ? "success" : s === "partially_paid" ? "warning" : "neutral");
+const statusLabel = (s) => (s === "partially_paid" ? "Part paid" : s);
+
 export default function AccountsPayable() {
-  const [suppliers, setSuppliers] = useState([]);
+  const [tab, setTab] = useState("invoice");
+  const [parties, setParties] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [expenseAccounts, setExpenseAccounts] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [accountIds, setAccountIds] = useState(null);
-
-  const [newSupplier, setNewSupplier] = useState({ name: "", contact_person: "", phone: "", email: "" });
-
-  const [invoiceForm, setInvoiceForm] = useState({
-    supplier_id: "", invoice_number: "", invoice_date: "", due_date: "",
-    expense_account_id: "", amount: "", description: "",
-  });
-
-  const [paymentForm, setPaymentForm] = useState({
-    invoice_id: "", amount: "", payment_date: "", payment_method: "Bank", reference: "",
-  });
-
+  const [newParty, setNewParty] = useState(EMPTY_PARTY);
+  const [invoiceForm, setInvoiceForm] = useState(emptyInvoice());
+  const [settleForm, setSettleForm] = useState(emptySettle());
   const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
 
-  useEffect(() => {
-    loadSuppliers();
-    loadInvoices();
-    loadExpenseAccounts();
-    loadSystemAccounts();
-  }, []);
+  useEffect(() => { loadParties(); loadInvoices(); loadAccounts(); loadSystemAccounts(); }, []);
 
-  const loadSuppliers = async () => {
+  const loadParties = async () => {
     const { data } = await supabase.from("suppliers").select("*").order("name");
-    setSuppliers(data || []);
+    setParties(data || []);
   };
-
   const loadInvoices = async () => {
-    const { data } = await supabase
-      .from("supplier_invoices")
-      .select("*, suppliers(name)")
-      .order("invoice_date", { ascending: false });
+    const { data } = await supabase.from("supplier_invoices").select("*, suppliers(name)").order("invoice_date", { ascending: false });
     setInvoices(data || []);
   };
-
-  const loadExpenseAccounts = async () => {
-    const { data } = await supabase
-      .from("chart_of_accounts")
-      .select("id, name")
-      .eq("type", "expense")
-      .eq("is_active", true)
-      .eq("allow_posting", true)
-      .order("name");
-    setExpenseAccounts(data || []);
+  const loadAccounts = async () => {
+    const { data } = await supabase.from("chart_of_accounts").select("id, name")
+      .eq("type", "expense").eq("is_active", true).eq("allow_posting", true).order("name");
+    setAccounts(data || []);
   };
-
   const loadSystemAccounts = async () => {
     try {
-      const [ACCOUNTS_PAYABLE, CASH, BANK] = await Promise.all([
-        getSystemAccount("ACCOUNTS_PAYABLE"),
-        getSystemAccount("CASH"),
-        getSystemAccount("BANK"),
-      ]);
+      const [ACCOUNTS_PAYABLE, CASH, BANK] = await Promise.all([getSystemAccount("ACCOUNTS_PAYABLE"), getSystemAccount("CASH"), getSystemAccount("BANK")]);
       setAccountIds({ ACCOUNTS_PAYABLE, CASH, BANK });
     } catch (err) {
-      alert(`Failed to load Chart of Accounts mapping: ${err.message || err}`);
+      setResult({ ok: false, text: `Chart of Accounts mapping failed to load: ${err.message || err}` });
     }
   };
 
-  // ================= SUPPLIERS =================
-  const addSupplier = async () => {
-    if (!newSupplier.name) return alert("Supplier name is required");
-    const { error } = await supabase.from("suppliers").insert([newSupplier]);
-    if (error) return alert(`Failed to add supplier: ${error.message}`);
-    setNewSupplier({ name: "", contact_person: "", phone: "", email: "" });
-    loadSuppliers();
+  const setInv = (k) => (e) => setInvoiceForm((f) => ({ ...f, [k]: e.target.value }));
+  const setSet = (k) => (e) => setSettleForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // ================= PARTIES =================
+  const addParty = async () => {
+    if (!newParty.name.trim()) return setResult({ ok: false, text: "Supplier name is required." });
+    const { error } = await supabase.from("suppliers").insert([newParty]);
+    if (error) return setResult({ ok: false, text: `Supplier not added: ${error.message}` });
+    setResult({ ok: true, text: `${newParty.name} added.` });
+    setNewParty(EMPTY_PARTY);
+    loadParties();
   };
 
   // ================= INVOICE =================
   const submitInvoice = async () => {
     const f = invoiceForm;
     if (!f.supplier_id || !f.invoice_number || !f.invoice_date || !f.expense_account_id || !f.amount) {
-      return alert("Supplier, invoice number, date, expense category, and amount are all required.");
+      return setResult({ ok: false, text: "Supplier, invoice number, date, expense category and amount are all required." });
     }
-    if (!accountIds) return alert("Chart of Accounts mapping hasn't loaded yet.");
+    if (!accountIds) return setResult({ ok: false, text: "Chart of Accounts mapping hasn't loaded yet." });
 
-    setLoading(true);
+    setLoading(true); setResult(null);
+    let journalRef = null;
     try {
       const amount = Number(f.amount);
-      const journalRef = `AP-INV-${Date.now()}`;
-
-      // Recognize the liability immediately (accrual basis) — not at
-      // payment time. Expense DR, Accounts Payable CR.
+      journalRef = `AP-INV-${Date.now()}`;
       await postJournal({
         reference: journalRef,
         date: f.invoice_date,
@@ -116,54 +90,44 @@ export default function AccountsPayable() {
           { account_id: accountIds.ACCOUNTS_PAYABLE, debit: 0, credit: amount },
         ],
       });
-
       const { error } = await supabase.from("supplier_invoices").insert([{
-        supplier_id: f.supplier_id,
-        invoice_number: f.invoice_number,
-        invoice_date: f.invoice_date,
-        due_date: f.due_date || null,
-        expense_account_id: Number(f.expense_account_id),
-        amount,
-        total_amount: amount,
-        description: f.description,
-        status: "approved",
-        journal_reference: journalRef,
+        supplier_id: f.supplier_id, invoice_number: f.invoice_number, invoice_date: f.invoice_date,
+        due_date: f.due_date || null, expense_account_id: Number(f.expense_account_id),
+        amount, total_amount: amount, description: f.description, status: "approved", journal_reference: journalRef,
       }]);
-      if (error) throw error;
+      if (error) throw Object.assign(error, { afterPost: true });
 
-      alert("✅ Invoice recorded and posted");
-      setInvoiceForm({ supplier_id: "", invoice_number: "", invoice_date: "", due_date: "", expense_account_id: "", amount: "", description: "" });
+      setResult({ ok: true, text: `Invoice ${f.invoice_number} recorded and posted (${journalRef})` });
+      setInvoiceForm(emptyInvoice());
       loadInvoices();
     } catch (err) {
-      alert(`Failed to record invoice: ${err.message || err}`);
-    } finally {
-      setLoading(false);
-    }
+      setResult({ ok: false, text: err.afterPost
+        ? `Journal ${journalRef} WAS posted, but the invoice record failed to save: ${err.message}. Do not post again.`
+        : `Invoice not recorded: ${err.message || err}` });
+    } finally { setLoading(false); }
   };
 
   // ================= PAYMENT =================
-  const submitPayment = async () => {
-    const f = paymentForm;
+  const submitSettle = async () => {
+    const f = settleForm;
     if (!f.invoice_id || !f.amount || !f.payment_date || !f.reference) {
-      return alert("Invoice, amount, date, and reference are all required.");
+      return setResult({ ok: false, text: "Invoice, amount, date and reference are all required." });
     }
-    if (!accountIds) return alert("Chart of Accounts mapping hasn't loaded yet.");
-
+    if (!accountIds) return setResult({ ok: false, text: "Chart of Accounts mapping hasn't loaded yet." });
     const invoice = invoices.find((i) => i.id === f.invoice_id);
-    if (!invoice) return alert("Invoice not found");
+    if (!invoice) return setResult({ ok: false, text: "Invoice not found." });
 
     const outstanding = Number(invoice.total_amount) - Number(invoice.amount_paid || 0);
     const amount = Number(f.amount);
     if (amount > outstanding + 0.005) {
-      return alert(`Payment (${amount}) exceeds outstanding balance (${outstanding}) on this invoice.`);
+      return setResult({ ok: false, text: `Payment (${kes(amount)}) exceeds the outstanding balance (${kes(outstanding)}) on this invoice.` });
     }
 
-    setLoading(true);
+    setLoading(true); setResult(null);
+    let journalRef = null;
     try {
-      const journalRef = `AP-PMT-${Date.now()}`;
+      journalRef = `AP-PMT-${Date.now()}`;
       const cashOrBank = f.payment_method === "Cash" ? accountIds.CASH : accountIds.BANK;
-
-      // Settle the liability. Accounts Payable DR, Cash/Bank CR.
       await postJournal({
         reference: journalRef,
         date: f.payment_date,
@@ -175,143 +139,168 @@ export default function AccountsPayable() {
         ],
       });
 
-      const newAmountPaid = Number(invoice.amount_paid || 0) + amount;
-      const newStatus = newAmountPaid >= Number(invoice.total_amount) - 0.005 ? "paid" : "partially_paid";
-
-      const { error: invErr } = await supabase
-        .from("supplier_invoices")
-        .update({ amount_paid: newAmountPaid, status: newStatus })
-        .eq("id", invoice.id);
-      if (invErr) throw invErr;
-
-      const { error: payErr } = await supabase.from("supplier_payments").insert([{
-        supplier_id: invoice.supplier_id,
-        invoice_id: invoice.id,
-        amount,
-        payment_date: f.payment_date,
-        payment_method: f.payment_method,
-        reference: f.reference,
-        journal_reference: journalRef,
+      const newDone = Number(invoice.amount_paid || 0) + amount;
+      const newStatus = newDone >= Number(invoice.total_amount) - 0.005 ? "paid" : "partially_paid";
+      const { error: invErr } = await supabase.from("supplier_invoices").update({ amount_paid: newDone, status: newStatus }).eq("id", invoice.id);
+      if (invErr) throw Object.assign(invErr, { afterPost: true });
+      const { error: recErr } = await supabase.from("supplier_payments").insert([{
+        supplier_id: invoice.supplier_id, invoice_id: invoice.id, amount,
+        payment_date: f.payment_date, payment_method: f.payment_method, reference: f.reference, journal_reference: journalRef,
       }]);
-      if (payErr) throw payErr;
+      if (recErr) throw Object.assign(recErr, { afterPost: true });
 
-      alert("✅ Payment posted");
-      setPaymentForm({ invoice_id: "", amount: "", payment_date: "", payment_method: "Bank", reference: "" });
+      setResult({ ok: true, text: `Payment posted · ${invoice.invoice_number} · KES ${kes(amount)} (${journalRef})` });
+      setSettleForm(emptySettle());
       loadInvoices();
     } catch (err) {
-      alert(`Failed to post payment: ${err.message || err}`);
-    } finally {
-      setLoading(false);
-    }
+      setResult({ ok: false, text: err.afterPost
+        ? `Journal ${journalRef} WAS posted, but updating the invoice record failed: ${err.message}. Do not post again.`
+        : `Payment not posted: ${err.message || err}` });
+    } finally { setLoading(false); }
   };
 
-  const outstandingInvoices = invoices.filter((i) => i.status === "approved" || i.status === "partially_paid");
-
-  const outstandingTotal = invoices.reduce(
-    (sum, i) => sum + Math.max(0, Number(i.total_amount || 0) - Number(i.amount_paid || 0)), 0
-  );
-  const openCount = outstandingInvoices.length;
+  const outstandingInvoices = useMemo(() => invoices.filter((i) => i.status === "approved" || i.status === "partially_paid"), [invoices]);
+  const totalOutstanding = outstandingInvoices.reduce((s, i) => s + Number(i.total_amount) - Number(i.amount_paid || 0), 0);
+  const picked = invoices.find((i) => i.id === settleForm.invoice_id);
+  const pickedOutstanding = picked ? Number(picked.total_amount) - Number(picked.amount_paid || 0) : null;
 
   return (
-    <div className="up-page">
-
-      <div className="ua-kpi-grid">
-        <KpiCard label="Outstanding payable" value={`KES ${kes(outstandingTotal)}`} foot={`${openCount} open invoice(s)`} />
-        <KpiCard label="Suppliers" value={suppliers.length} foot="on file" />
-        <KpiCard label="Invoices" value={invoices.length} foot="recorded" />
+    <Page intro="Supplier invoices create the liability when recorded; payments settle it against a specific invoice." result={result} onCloseResult={() => setResult(null)}>
+      <div className="ua-stat-row">
+        <KpiCard label="Outstanding" value={kes(totalOutstanding)} />
+        <KpiCard label="Open invoices" value={outstandingInvoices.length} />
+        <KpiCard label="Suppliers" value={parties.length} />
+        <KpiCard label="Invoices" value={invoices.length} />
       </div>
 
-      <SectionCard title="Suppliers">
-        <div className="up-inline">
-          <Field label="Name"><input placeholder="Name" value={newSupplier.name} onChange={(e) => setNewSupplier((s) => ({ ...s, name: e.target.value }))} /></Field>
-          <Field label="Contact person"><input placeholder="Contact person" value={newSupplier.contact_person} onChange={(e) => setNewSupplier((s) => ({ ...s, contact_person: e.target.value }))} /></Field>
-          <Field label="Phone"><input type="tel" inputMode="tel" placeholder="Phone" value={newSupplier.phone} onChange={(e) => setNewSupplier((s) => ({ ...s, phone: e.target.value }))} /></Field>
-          <Field label="Email"><input type="email" inputMode="email" placeholder="Email" value={newSupplier.email} onChange={(e) => setNewSupplier((s) => ({ ...s, email: e.target.value }))} /></Field>
-        </div>
-        <div className="up-actions">
-          <button type="button" className="ua-btn ua-btn-secondary" onClick={addSupplier}>Add Supplier</button>
-        </div>
-      </SectionCard>
+      <Tabs value={tab} onChange={setTab} items={[
+        { key: "invoice", label: "New invoice" },
+        { key: "settle", label: "Pay an invoice" },
+        { key: "invoices", label: "Invoices", count: invoices.length },
+        { key: "parties", label: "Suppliers", count: parties.length },
+      ]} />
 
-      <div className="up-grid-2">
+      {tab === "invoice" && (
         <SectionCard title="Record supplier invoice">
           <div className="ua-form cols-2">
-            <Field label="Supplier" span2>
-              <select value={invoiceForm.supplier_id} onChange={(e) => setInvoiceForm((f) => ({ ...f, supplier_id: e.target.value }))}>
-                <option value="">-- Select supplier --</option>
-                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <Field label="Supplier" span2 htmlFor="inv-party">
+              <select id="inv-party" value={invoiceForm.supplier_id} onChange={setInv("supplier_id")}>
+                <option value="">Select supplier</option>
+                {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
-            <Field label="Invoice number"><input placeholder="Invoice number" value={invoiceForm.invoice_number} onChange={(e) => setInvoiceForm((f) => ({ ...f, invoice_number: e.target.value }))} /></Field>
-            <Field label="Amount (KES)"><input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={invoiceForm.amount} onChange={(e) => setInvoiceForm((f) => ({ ...f, amount: e.target.value }))} /></Field>
-            <Field label="Invoice date"><input type="date" value={invoiceForm.invoice_date} onChange={(e) => setInvoiceForm((f) => ({ ...f, invoice_date: e.target.value }))} /></Field>
-            <Field label="Due date"><input type="date" value={invoiceForm.due_date} onChange={(e) => setInvoiceForm((f) => ({ ...f, due_date: e.target.value }))} /></Field>
-            <Field label="Expense category" span2>
-              <select value={invoiceForm.expense_account_id} onChange={(e) => setInvoiceForm((f) => ({ ...f, expense_account_id: e.target.value }))}>
-                <option value="">-- Expense category --</option>
-                {expenseAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <Field label="Invoice number" htmlFor="inv-no"><input id="inv-no" value={invoiceForm.invoice_number} onChange={setInv("invoice_number")} autoComplete="off" /></Field>
+            <Field label="Expense category" htmlFor="inv-acct">
+              <select id="inv-acct" value={invoiceForm.expense_account_id} onChange={setInv("expense_account_id")}>
+                <option value="">Select category</option>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </Field>
-            <Field label="Description" span2><input placeholder="Description" value={invoiceForm.description} onChange={(e) => setInvoiceForm((f) => ({ ...f, description: e.target.value }))} /></Field>
+            <Field label="Invoice date" htmlFor="inv-date"><input id="inv-date" type="date" value={invoiceForm.invoice_date} onChange={setInv("invoice_date")} /></Field>
+            <Field label="Due date (optional)" htmlFor="inv-due"><input id="inv-due" type="date" value={invoiceForm.due_date} onChange={setInv("due_date")} /></Field>
+            <Field label="Amount" htmlFor="inv-amt">
+              <div className="ua-amount"><span>KES</span>
+                <input id="inv-amt" type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={invoiceForm.amount} onChange={setInv("amount")} />
+              </div>
+            </Field>
+            <Field label="Description" htmlFor="inv-desc"><input id="inv-desc" value={invoiceForm.description} onChange={setInv("description")} /></Field>
           </div>
-          <div className="up-actions">
-            <button type="button" className="ua-btn ua-btn-primary" onClick={submitInvoice} disabled={loading}>{loading ? "Working…" : "Record & Post Invoice"}</button>
-          </div>
+          <button type="button" className="ua-btn ua-btn-primary ua-submit" onClick={submitInvoice} disabled={loading || !accountIds}>
+            {loading ? "Posting…" : "Record & post invoice"}
+          </button>
         </SectionCard>
+      )}
 
-        <SectionCard title="Pay an invoice">
+      {tab === "settle" && (
+        <SectionCard title="Pay a supplier invoice">
           <div className="ua-form cols-2">
-            <Field label="Outstanding invoice" span2>
-              <select value={paymentForm.invoice_id} onChange={(e) => setPaymentForm((f) => ({ ...f, invoice_id: e.target.value }))}>
-                <option value="">-- Select outstanding invoice --</option>
+            <Field label="Outstanding invoice" span2 htmlFor="st-inv"
+              hint={picked ? `Outstanding on this invoice: KES ${kes(pickedOutstanding)}` : undefined}>
+              <select id="st-inv" value={settleForm.invoice_id} onChange={setSet("invoice_id")}>
+                <option value="">Select invoice</option>
                 {outstandingInvoices.map((i) => (
                   <option key={i.id} value={i.id}>
-                    {i.invoice_number} — {i.suppliers?.name} — outstanding {kes(Number(i.total_amount) - Number(i.amount_paid || 0))}
+                    {i.invoice_number} · {i.suppliers?.name} · {kes(Number(i.total_amount) - Number(i.amount_paid || 0))}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="Amount (KES)"><input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={paymentForm.amount} onChange={(e) => setPaymentForm((f) => ({ ...f, amount: e.target.value }))} /></Field>
-            <Field label="Payment date"><input type="date" value={paymentForm.payment_date} onChange={(e) => setPaymentForm((f) => ({ ...f, payment_date: e.target.value }))} /></Field>
-            <Field label="Method">
-              <select value={paymentForm.payment_method} onChange={(e) => setPaymentForm((f) => ({ ...f, payment_method: e.target.value }))}>
-                <option value="Bank">Bank</option>
-                <option value="Cash">Cash</option>
-              </select>
+            <Field label="Amount" htmlFor="st-amt">
+              <div className="ua-amount"><span>KES</span>
+                <input id="st-amt" type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={settleForm.amount} onChange={setSet("amount")} />
+              </div>
             </Field>
-            <Field label="Reference / voucher code"><input placeholder="Reference / voucher code" value={paymentForm.reference} onChange={(e) => setPaymentForm((f) => ({ ...f, reference: e.target.value }))} autoComplete="off" /></Field>
+            <Field label="Date" htmlFor="st-date"><input id="st-date" type="date" value={settleForm.payment_date} onChange={setSet("payment_date")} /></Field>
+            <Field label="Method" span2>
+              <Tabs className="choice" value={settleForm.payment_method} onChange={(v) => setSettleForm((f) => ({ ...f, payment_method: v }))}
+                items={[{ key: "Bank", label: "Bank" }, { key: "Cash", label: "Cash" }]} />
+            </Field>
+            <Field label="Reference / voucher code" span2 htmlFor="st-ref"><input id="st-ref" value={settleForm.reference} onChange={setSet("reference")} autoComplete="off" /></Field>
           </div>
-          <div className="up-actions">
-            <button type="button" className="ua-btn ua-btn-primary" onClick={submitPayment} disabled={loading}>{loading ? "Working…" : "Post Payment"}</button>
-          </div>
+          <button type="button" className="ua-btn ua-btn-primary ua-submit" onClick={submitSettle} disabled={loading || !accountIds}>
+            {loading ? "Posting…" : "Post payment"}
+          </button>
         </SectionCard>
-      </div>
+      )}
 
-      <SectionCard title="Invoices">
-        {invoices.length === 0 ? (
-          <EmptyState title="No invoices yet" message="Invoices you record will appear here." />
-        ) : (
-          <div className="ua-table-wrap">
-            <table className="ua-table stack">
-              <thead>
-                <tr><th>Invoice #</th><th>Supplier</th><th>Date</th><th className="num">Total</th><th className="num">Paid</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                {invoices.map((i) => (
-                  <tr key={i.id}>
-                    <td data-label="Invoice #">{i.invoice_number}</td>
-                    <td data-label="Supplier">{i.suppliers?.name}</td>
-                    <td data-label="Date">{i.invoice_date}</td>
-                    <td data-label="Total" className="num">{kes(i.total_amount)}</td>
-                    <td data-label="Paid" className="num">{kes(i.amount_paid)}</td>
-                    <td data-label="Status"><StatusBadge tone={statusTone(i.status)}>{statusLabel(i.status)}</StatusBadge></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </SectionCard>
-    </div>
+      {tab === "invoices" && (
+        <SectionCard title="Invoices">
+          {invoices.length === 0 ? (
+            <EmptyState title="No invoices yet" message="Recorded invoices will appear here." />
+          ) : (
+            <div className="ua-table-wrap">
+              <table className="ua-table stack">
+                <thead><tr><th>Invoice #</th><th>Supplier</th><th>Date</th><th className="num">Total</th><th className="num">Paid</th><th>Status</th></tr></thead>
+                <tbody>
+                  {invoices.map((i) => (
+                    <tr key={i.id}>
+                      <td data-label="Invoice #"><strong>{i.invoice_number}</strong></td>
+                      <td data-label="Supplier" className="wrap">{i.suppliers?.name}</td>
+                      <td data-label="Date">{i.invoice_date}</td>
+                      <td data-label="Total" className="num">{kes(i.total_amount)}</td>
+                      <td data-label="Paid" className="num">{kes(i.amount_paid)}</td>
+                      <td data-label="Status"><StatusBadge tone={statusTone(i.status)}>{statusLabel(i.status)}</StatusBadge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {tab === "parties" && (
+        <>
+          <SectionCard title="Add supplier">
+            <div className="ua-form cols-2">
+              <Field label="Name" span2 htmlFor="pt-name"><input id="pt-name" value={newParty.name} onChange={(e) => setNewParty((p) => ({ ...p, name: e.target.value }))} /></Field>
+              <Field label="Contact person" htmlFor="pt-cp"><input id="pt-cp" value={newParty.contact_person} onChange={(e) => setNewParty((p) => ({ ...p, contact_person: e.target.value }))} /></Field>
+              <Field label="Phone" htmlFor="pt-ph"><input id="pt-ph" type="tel" inputMode="tel" value={newParty.phone} onChange={(e) => setNewParty((p) => ({ ...p, phone: e.target.value }))} /></Field>
+              <Field label="Email" span2 htmlFor="pt-em"><input id="pt-em" type="email" inputMode="email" value={newParty.email} onChange={(e) => setNewParty((p) => ({ ...p, email: e.target.value }))} /></Field>
+            </div>
+            <button type="button" className="ua-btn ua-btn-primary ua-submit" onClick={addParty}>Add supplier</button>
+          </SectionCard>
+          <SectionCard title="On file" subtitle={`${parties.length} supplier(s)`}>
+            {parties.length === 0 ? <EmptyState title="None yet" message="Added suppliers will appear here." /> : (
+              <div className="ua-table-wrap">
+                <table className="ua-table stack">
+                  <thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th></tr></thead>
+                  <tbody>
+                    {parties.map((p) => (
+                      <tr key={p.id}>
+                        <td data-label="Name"><strong>{p.name}</strong></td>
+                        <td data-label="Contact">{p.contact_person || "—"}</td>
+                        <td data-label="Phone">{p.phone || "—"}</td>
+                        <td data-label="Email" className="wrap">{p.email || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </SectionCard>
+        </>
+      )}
+    </Page>
   );
 }

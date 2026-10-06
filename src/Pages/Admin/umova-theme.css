@@ -223,6 +223,8 @@
   }
   .ua-table.stack td::before {
     content: attr(data-label);
+    flex: 0 0 auto;
+    padding-right: 12px;
     font-size: 12px;
     font-weight: 600;
     color: var(--umova-muted);
@@ -330,3 +332,102 @@
 .ua-hub-chev { color: var(--umova-muted); flex-shrink: 0; }
 .ua-hub-signout { color: var(--umova-danger); }
 .ua-hub-signout .ua-hub-ico { background: #F5E2E1; color: var(--umova-danger); }
+
+/* ---------- Form / list pages (Withdrawal, Cash & Bank, AR, AP, Fixed Assets) ---------- */
+.ua-page, .ua-page * { box-sizing: border-box; }
+.ua-page { max-width: 1000px; margin: 0 auto; color: var(--umova-text); }
+.ua-intro { margin: 0 0 14px; font-size: 13px; line-height: 1.5; color: var(--umova-muted); }
+.ua-hint { font-size: 12px; color: var(--umova-muted); }
+.ua-hint.bad { color: var(--umova-danger); }
+.ua-note {
+  margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5;
+  background: #F6EEDB; color: #6f571f; border: 1px solid var(--umova-gold-light);
+}
+
+.ua-banner {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  margin-bottom: 12px; padding: 12px 14px; border-radius: 12px; font-size: 14px; line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.ua-banner.ok  { background: #E3F1E9; color: #17583a; border: 1px solid #b9dcc8; }
+.ua-banner.bad { background: #F5E2E1; color: #8c2f2d; border: 1px solid #e3b9b7; }
+.ua-banner button { border: 0; background: transparent; color: inherit; width: 32px; height: 32px; cursor: pointer; flex-shrink: 0; }
+
+.ua-tabs {
+  display: flex; gap: 4px; padding: 4px; margin-bottom: 14px; overflow-x: auto;
+  background: var(--umova-soft-green); border-radius: 12px; -webkit-overflow-scrolling: touch;
+}
+.ua-tabs button {
+  flex: 1 0 auto; min-height: 44px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent;
+  font-size: 14px; font-weight: 600; color: var(--umova-muted); white-space: nowrap; cursor: pointer;
+}
+.ua-tabs button.on { background: var(--umova-white); color: var(--umova-forest); box-shadow: 0 1px 3px rgba(18,60,42,.12); }
+.ua-tab-count {
+  margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px;
+  background: var(--umova-gold); color: var(--umova-dark);
+}
+.ua-tabs.choice button { flex: 1 1 0; }
+.ua-tabs.choice button.on { background: var(--umova-forest); color: #fff; }
+
+.ua-page .ua-card + .ua-card { margin-top: 14px; }
+.ua-page .ua-card-head h2 { margin: 0; }
+.ua-page .ua-form.cols-2 .ua-field { margin: 0; }
+.ua-page .ua-field { margin-bottom: 0; }
+.ua-field input[type="date"], .ua-field input[type="month"] { font-family: inherit; }
+.ua-amount { position: relative; }
+.ua-amount > span {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  font-size: 13px; font-weight: 700; color: var(--umova-muted); pointer-events: none;
+}
+.ua-amount > input { padding-left: 52px; font-variant-numeric: tabular-nums; }
+
+.ua-submit { margin-top: 16px; width: 100%; }
+@media (min-width: 768px) { .ua-submit { width: auto; min-width: 220px; } }
+.ua-inline { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: end; }
+@media (min-width: 768px) { .ua-inline { grid-template-columns: 1fr auto; } .ua-inline .ua-btn { margin: 0; } }
+
+.ua-stat-row { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 14px; }
+@media (min-width: 768px) { .ua-stat-row { grid-template-columns: repeat(4, minmax(0,1fr)); } }
+
+/* member picker */
+.ua-chip {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 56px; padding: 8px 12px;
+  border-radius: 12px; background: var(--umova-soft-green); border: 1px solid var(--umova-border);
+}
+.ua-chip > div { display: flex; flex-direction: column; min-width: 0; }
+.ua-chip strong, .ua-chip small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ua-chip small { color: var(--umova-muted); font-size: 12px; }
+.ua-chip button { min-height: 40px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--umova-emerald); font-weight: 700; cursor: pointer; }
+.ua-matches { list-style: none; margin: 4px 0 0; padding: 0; border: 1px solid var(--umova-border); border-radius: 12px; overflow: hidden; }
+.ua-matches li + li { border-top: 1px solid var(--umova-border); }
+.ua-matches button {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 52px; padding: 8px 12px;
+  border: 0; background: var(--umova-white); text-align: left; font-size: 15px; color: var(--umova-text); cursor: pointer;
+}
+.ua-matches small { color: var(--umova-muted); font-size: 12px; flex-shrink: 0; }
+
+/* reconciled toggle: 44px tap target */
+.ua-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.ua-check input { width: 24px; height: 24px; min-height: 0; accent-color: var(--umova-emerald); }
+
+/* tables as cards on phones: right-aligned values, full-width cells */
+.ua-table .num { font-variant-numeric: tabular-nums; }
+.ua-table .wrap { overflow-wrap: anywhere; }
+.ua-table-empty { padding: 24px 12px; text-align: center; color: var(--umova-muted); font-size: 14px; }
+@media (max-width: 767px) { .ua-page-header h1 { display: none; } }
+
+/* two-pane pages: phone shows one pane chosen by tabs, desktop shows both */
+.ua-only-phone { display: flex; }
+.ua-split .ua-split-a, .ua-split .ua-split-b { display: none; }
+.ua-split.new .ua-split-a, .ua-split.history .ua-split-b { display: block; }
+@media (min-width: 768px) { .ua-only-phone { display: none; } .ua-split .ua-split-b { display: block; margin-top: 14px; } .ua-split .ua-split-a { display: block; } }
+@media (min-width: 1100px) {
+  .ua-split { display: grid; grid-template-columns: minmax(380px, 460px) 1fr; gap: 16px; align-items: start; }
+  .ua-split .ua-split-b { margin-top: 0; }
+}
+
+/* phones: multi-tab strips wrap into a grid instead of hiding tabs off-screen */
+@media (max-width: 767px) {
+  .ua-tabs:not(.choice) { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); overflow: visible; }
+  .ua-tabs:not(.choice) button { padding: 0 8px; }
+}

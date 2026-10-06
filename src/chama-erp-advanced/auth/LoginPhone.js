@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useChama } from "../ChamaContext";
 import { Phone, Lock, LogIn, Loader2, AlertCircle, Coins, Fingerprint } from "lucide-react";
 import { chamaPasskeys } from "./chamaPasskeys";
+import DemoLogin from "./DemoLogin";
 import "./LoginPhone.css";
 
 // -----------------------------------------------------------------------------
@@ -90,6 +91,8 @@ export default function LoginPhone({ onRegisterClick, onNewChamaClick }) {
             </button>
           )}
         </div>
+
+        <DemoLogin />
       </div>
     </div>
   );
