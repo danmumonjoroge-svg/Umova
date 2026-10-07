@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "../../supabaseClient";
 import { postJournal } from "../../services/journalAPI";
 import { getSystemAccount } from "../../services/chartOfAccountsAPI";
 
@@ -30,8 +31,15 @@ export default function LoanPenalties() {
       const penaltyReceivableAcct = await getSystemAccount("LOAN_PENALTY_RECEIVABLE");
       const interestIncomeAcct = await getSystemAccount("INTEREST_INCOME");
 
+      // Tag the penalty to the member's loan when there is exactly one open loan.
+      const { data: la } = await supabase
+        .from("loan_account").select("loan_id, status").eq("member_no", memberId.trim());
+      const open = (la || []).filter((x) => String(x.status || "").toLowerCase() !== "closed");
+      const loan_id = open.length === 1 ? open[0].loan_id : undefined;
+
       await postJournal({
-        member_no: memberId,
+        member_no: memberId.trim(),
+        loan_id,
         reference: `PEN-${Date.now()}`,
         description: "Loan penalty",
         source_module: "loan_penalty",

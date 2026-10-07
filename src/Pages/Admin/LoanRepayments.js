@@ -19,6 +19,8 @@ export default function LoanRepayments() {
   const [search, setSearch] = useState("");
 
   const [member, setMember] = useState(null);
+  const [memberLoans, setMemberLoans] = useState([]); // loan_account rows for the member
+  const [loanId, setLoanId] = useState("");
 
   const [principalBalance, setPrincipalBalance] = useState(0);
   const [interestBalance, setInterestBalance] = useState(0);
@@ -73,6 +75,16 @@ export default function LoanRepayments() {
       return;
     }
 
+    // Loan accounts, so the repayment is tagged to the loan it belongs to
+    // (needed for per-loan statements). Only ids that exist are ever sent.
+    const { data: la } = await supabase
+      .from("loan_account").select("loan_id, loan_type, status, outstanding_balance")
+      .eq("member_no", memberNo).order("disbursed_at", { ascending: false });
+    const accts = la || [];
+    setMemberLoans(accts);
+    const open = accts.filter((x) => String(x.status || "").toLowerCase() !== "closed");
+    setLoanId((open[0] || accts[0])?.loan_id || "");
+
     const { data: ledger } = await supabase
       .from("general_ledger")
       .select("*")
@@ -116,6 +128,7 @@ export default function LoanRepayments() {
     setPrincipalPayment("");
     setInterestPayment("");
 
+    setMemberLoans([]); setLoanId("");
     fetchMember(m.member_no);
   };
 
@@ -205,6 +218,7 @@ export default function LoanRepayments() {
 
       await postJournal({
         member_no: member.member_no,
+        loan_id: loanId || undefined,
         reference: `RPY-${Date.now()}`,
         description: "Loan repayment",
         source_module: "loan_repayment",
@@ -332,6 +346,20 @@ export default function LoanRepayments() {
                 </p>
 
               </div>
+
+              {memberLoans.length > 0 && (
+                <div className="mb-4">
+                  <label className="block mb-2 font-medium">Loan account</label>
+                  <select value={loanId} onChange={(e) => setLoanId(e.target.value)}
+                    className="w-full border rounded-xl p-3">
+                    {memberLoans.map((l) => (
+                      <option key={l.loan_id} value={l.loan_id}>
+                        {l.loan_id} — {l.loan_type || "Loan"} {l.status ? `(${l.status})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* PAYMENT ENTRY */}
               <div className="grid md:grid-cols-2 gap-4 mb-4">
