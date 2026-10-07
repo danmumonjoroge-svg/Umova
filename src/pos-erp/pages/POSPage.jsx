@@ -35,6 +35,8 @@ import { useMpesaPayment } from '../hooks/useMpesaPayment';
 import ReceiptModal from '../components/ReceiptModal';
 import { receiptService } from '../services/receiptService';
 import { settingsService } from '../services/settingsService';
+import { folioService } from '../services/folioService';
+import { useCapabilities } from '../navigation/CapabilitiesContext';
 import { Image as ImageIcon, Camera, Search, ArrowLeft, Minus, Plus, Loader2, ShoppingCart } from 'lucide-react';
 import MpesaPayPanel from '../components/MpesaPayPanel';
 import MpesaPromptModal from '../components/MpesaPromptModal';
@@ -120,6 +122,23 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [customerAmount, setCustomerAmount] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  // Phase 19 (folios). Only present when the business has switched on "Customer Folios"; otherwise
+  // none of this renders and the till behaves exactly as before.
+  const { enabled: enabledCaps } = useCapabilities();
+  const foliosOn = enabledCaps.includes('folios');
+  const [openFolio, setOpenFolio] = useState(null);      // the selected customer's open folio, if any
+  const [chargeToFolio, setChargeToFolio] = useState(false);
+  const [folioChecked, setFolioChecked] = useState(false); // have we looked yet (so we don't flash "no folio")
+  const folioMode = foliosOn && chargeToFolio && !!selectedCustomerId;
+  useEffect(() => {
+    setChargeToFolio(false); setOpenFolio(null); setFolioChecked(false);
+    if (!foliosOn || !selectedCustomerId) return undefined;
+    let alive = true;
+    folioService.getOpenForCustomer(selectedCustomerId)
+      .then((f) => { if (alive) { setOpenFolio(f); setFolioChecked(true); } })
+      .catch(() => { if (alive) setFolioChecked(true); });
+    return () => { alive = false; };
+  }, [selectedCustomerId, foliosOn]);
   const [saleError, setSaleError] = useState('');
   // Split/mixed payment (spec section 3 — "mixed payment if architecture
   // supports it"). saleService.create() already takes a payments[] array
@@ -454,7 +473,20 @@ export default function POSPage() {
     setSaleError('');
 
     let payments;
-    if (splitMode) {
+    let folioId = null;
+    if (folioMode) {
+      // Charge to folio: nothing is paid now; the amount goes on the customer's bill and is settled later.
+      if (openFolio) {
+        folioId = openFolio.id;
+      } else {
+        // First charge for this customer: open their folio. Needs the server (it is not created offline).
+        if (!isOnline) { setSaleError('Open this customer\'s folio while you have a connection, then charge to it.'); return; }
+        try {
+          folioId = await folioService.open({ businessId: tenant?.business_id, customerId: selectedCustomerId, createdBy: staffId });
+        } catch (err) { setSaleError(err.message || 'Could not open a folio for this customer.'); return; }
+      }
+      payments = [];
+    } else if (splitMode) {
       const validLines = splitPayments.filter(p => parseFloat(p.amount) > 0);
       if (validLines.length === 0) {
         setSaleError('Add at least one payment.');
@@ -531,6 +563,7 @@ export default function POSPage() {
     const sale = {
       shift_id: activeShift.id,
       customer_id: selectedCustomerId || null, // guaranteed non-empty for CREDIT by the checks above
+      folio_id: folioId, // phase19: null for every ordinary sale
       items: cart.map(i => ({
         product_id: i.product_id,
         name: i.name, // Phase 14: captured onto the receipt snapshot at sale time
@@ -553,6 +586,7 @@ export default function POSPage() {
       const selectedCustomer = customers.find(c => c.id === selectedCustomerId) || null;
       setCart([]); setCustomerAmount(''); setSearch(''); setSelectedCustomerId('');
       setSplitPayments([]); setSplitMode(false); setMpesaCode(''); setMobileView('items');
+      setChargeToFolio(false); setOpenFolio(null);
       // Phase 14: show the receipt instead of a bare alert(). For an
       // online sale, fetch the REAL lb_receipts row saleService.create()
       // already wrote (has a server-issued receipt_number). For an
@@ -567,6 +601,7 @@ export default function POSPage() {
             created_at: result.completed_at,
             receipt_data: {
               sale_number: result.sale_number, items: result.items, payments: result.payments,
+              ...(sale.folio_id ? { charged_to_folio: true } : {}),
               subtotal: result.subtotal, discount_total: result.discount_total,
               tax_total: result.tax_total, total_amount: result.total_amount,
               completed_at: result.completed_at,
@@ -615,16 +650,16 @@ export default function POSPage() {
   };
 
   const cartCount = cart.reduce((n, i) => n + (VARIABLE_MODES.includes(i.selling_mode) ? 1 : i.quantity), 0);
-  const isMpesaSingle = !splitMode && paymentMethod === 'MOBILE_MONEY';
+  const isMpesaSingle = !folioMode && !splitMode && paymentMethod === 'MOBILE_MONEY';
   const isPrompt = isMpesaSingle && effectiveMpesaMode === 'PROMPT';
   const isMpesaCode = isMpesaSingle && effectiveMpesaMode === 'MANUAL';
   const creditPicked = splitMode ? splitPayments.some(p => p.method === 'CREDIT') : paymentMethod === 'CREDIT';
   const canSubmit = cart.length > 0
     && !mpesaBusy
-    && !(splitMode && Math.abs(splitRemaining) > 0.01)
+    && !(!folioMode && splitMode && Math.abs(splitRemaining) > 0.01)
     && !(isPrompt && stkStatus !== 'ready')
     && !(isMpesaCode && !isValidMpesaCode(mpesaCode));
-  const submitLabel = isPrompt ? `Send M-Pesa prompt · KES ${total.toLocaleString()}` : `Complete sale · KES ${total.toLocaleString()}`;
+  const submitLabel = folioMode ? `Charge to folio · KES ${total.toLocaleString()}` : isPrompt ? `Send M-Pesa prompt · KES ${total.toLocaleString()}` : `Complete sale · KES ${total.toLocaleString()}`;
 
   if (!activeShift) {
     return (
@@ -803,6 +838,45 @@ export default function POSPage() {
             )}
             <div className="flex justify-between text-xl mb-4"><span className="font-semibold">Total</span><span className="font-bold text-[#237A52]">KES {total.toLocaleString()}</span></div>
 
+            {/* Customer picker. Required for CREDIT (enforced here and by
+                the DB trigger); optional otherwise. */}
+            <div className="mb-3">
+              <select
+                value={selectedCustomerId}
+                onChange={e => setSelectedCustomerId(e.target.value)}
+                className={`w-full border rounded-xl px-3 min-h-[48px] text-sm bg-white ${creditPicked && !selectedCustomerId ? 'border-red-400' : 'border-[#DDE3DD]'}`}
+              >
+                <option value="">{creditPicked ? 'Select customer (required)' : 'Customer (optional)'}</option>
+                {customers.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ''}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Phase 19: pay now, or put it on the customer's folio. Only when Customer Folios is switched on. */}
+            {foliosOn && selectedCustomerId && (
+              <div className="mb-3">
+                <div className="grid grid-cols-2 gap-2" role="group" aria-label="When is this paid?">
+                  {[[false, 'Pay now'], [true, 'Charge to folio']].map(([val, label]) => (
+                    <button
+                      key={label} type="button" onClick={() => { setChargeToFolio(val); setSaleError(''); }}
+                      aria-pressed={chargeToFolio === val}
+                      className={`min-h-[48px] rounded-xl text-sm font-semibold border transition-colors ${chargeToFolio === val ? 'bg-[#1B5138] text-white border-[#1B5138]' : 'bg-white text-[#26352D] border-[#DDE3DD] hover:bg-[#F7F6F0]'}`}
+                    >{label}</button>
+                  ))}
+                </div>
+                {chargeToFolio && (
+                  <p className="text-xs text-[#68756D] mt-1.5">
+                    {!folioChecked ? 'Checking for an open folio…'
+                      : openFolio ? `Goes on ${openFolio.title || 'their folio'} (${openFolio.folio_number}). Paid when the folio is settled.`
+                      : isOnline ? 'This customer has no open folio yet. One will be opened for this charge.'
+                      : 'No open folio on this device. Reconnect to open one.'}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!folioMode && (<>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-bold text-[#68756D] uppercase">How is the buyer paying?</span>
               <button
@@ -872,6 +946,8 @@ export default function POSPage() {
               </div>
             )}
 
+            </>)}
+
             {/* M-Pesa: a payment mode with two ways to collect it. */}
             {isMpesaSingle && (
               <MpesaPayPanel
@@ -883,22 +959,7 @@ export default function POSPage() {
               />
             )}
 
-            {/* Customer picker. Required for CREDIT (enforced here and by
-                the DB trigger); optional otherwise. */}
-            <div className="mb-3">
-              <select
-                value={selectedCustomerId}
-                onChange={e => setSelectedCustomerId(e.target.value)}
-                className={`w-full border rounded-xl px-3 min-h-[48px] text-sm bg-white ${creditPicked && !selectedCustomerId ? 'border-red-400' : 'border-[#DDE3DD]'}`}
-              >
-                <option value="">{creditPicked ? 'Select customer (required)' : 'Customer (optional)'}</option>
-                {customers.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ''}</option>
-                ))}
-              </select>
-            </div>
-
-            {!splitMode && paymentMethod === 'CASH' && (
+            {!folioMode && !splitMode && paymentMethod === 'CASH' && (
               <div className="flex gap-2 mb-3">
                 <input type="number" inputMode="decimal" placeholder="Amount received" value={customerAmount} onChange={e => setCustomerAmount(e.target.value)} className="border border-[#DDE3DD] rounded-xl px-3 min-h-[48px] flex-1 min-w-0" />
                 <div className="px-3 min-h-[48px] flex items-center bg-[#237A52]/10 text-[#1B5138] font-semibold rounded-xl shrink-0 whitespace-nowrap">Change: {change >= 0 ? change.toLocaleString() : '-'}</div>

@@ -205,7 +205,7 @@ export default function SettingsPage() {
         </button>
       </form>
 
-      {/* What does your business do? -- decides which of Retail / Rentals / Salon appear in the menu. Nothing is deleted by turning one off. */}
+      {/* What does your business do? -- decides which of Retail / Rentals / Salon / Customer Folios appear in the menu. Nothing is deleted by turning one off. */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-3">
         <div>
           <h2 className="font-bold text-slate-800">What does your business do?</h2>

@@ -22,15 +22,21 @@ import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package, Boxes, Truck, Users, UserRound,
   Wallet, Receipt, Building2, Home, Repeat, Gauge, FileText, Wrench, Scissors, CalendarClock, MessageSquare,
   Settings, ShieldCheck, Landmark, Smartphone, BarChart3, FileBarChart, HardHat, ClipboardList,
-  Bell, MoreHorizontal,
+  Bell, MoreHorizontal, BookUser,
 } from 'lucide-react';
 
+// `optIn: true` -- a capability that is NEVER on just because the owner hasn't chosen yet. Existing
+// businesses (which have no saved choice) therefore see exactly the menu they had before; a new
+// capability only appears once the owner switches it on in Settings.
 export const CAPABILITIES = {
   retail: { label: 'Retail', hint: 'Sell items and manage stock, suppliers and purchases' },
   rentals: { label: 'Rentals', hint: 'Manage rental units, rent charges and meter readings' },
   salon: { label: 'Salon & Services', hint: 'Sell services and manage appointments' },
+  folios: { label: 'Customer Folios', hint: 'Keep one running bill per customer and settle it all at once', optIn: true },
 };
 export const ALL_CAPABILITY_KEYS = Object.keys(CAPABILITIES);
+/** What an owner who hasn't chosen yet sees: everything except opt-in capabilities. */
+export const DEFAULT_CAPABILITY_KEYS = ALL_CAPABILITY_KEYS.filter((k) => !CAPABILITIES[k].optIn);
 
 export const MODULES = [
   {
@@ -95,6 +101,7 @@ export const MODULES = [
     tab: { label: 'People' },
     children: [
       { to: '/pos/customers', label: 'Customers', icon: UserRound },
+      { to: '/pos/folios', label: 'Customer Folios', icon: BookUser, capability: 'folios' },
     ],
   },
   {
@@ -148,6 +155,11 @@ export function resolveLocation(pathname) {
 /** Modules to show in navigation given the enabled capability keys. */
 export function visibleModules(enabledCapabilities) {
   return MODULES.filter((m) => !m.capability || enabledCapabilities.includes(m.capability));
+}
+
+/** A module's pages that are switched on (a child without a `capability` is always shown). */
+export function visibleChildren(module, enabledCapabilities) {
+  return (module?.children || []).filter((c) => !c.capability || enabledCapabilities.includes(c.capability));
 }
 
 /** Which bottom tab should look active for this module? Modules that live under "More" light up More. */

@@ -74,6 +74,7 @@ export const receiptService = {
     for (const p of d.payments || []) {
       lines.push(`Paid (${String(p.payment_method || '').replace('_', ' ')}): ${Number(p.amount).toLocaleString()}`);
     }
+    if (d.charged_to_folio) lines.push('Charged to your folio. Payable when you settle.');
     lines.push('');
     lines.push('Thank you for your business.');
     return lines.join('\n');
@@ -114,6 +115,7 @@ export const receiptService = {
       </table>
       <div class="divider"></div>
       <table>${paymentsHtml}</table>
+      ${d.charged_to_folio ? '<div class="bold">Charged to your folio</div><div class="muted">Payable when the folio is settled.</div>' : ''}
       <div class="divider"></div>
       <div class="center muted" style="margin-top:6px;">${escapeHtml(posSettings?.receipt_footer || 'Thank you for your business.')}</div>
     `;

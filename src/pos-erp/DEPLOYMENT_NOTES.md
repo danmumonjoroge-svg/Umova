@@ -56,7 +56,12 @@ phase12_mpesa.sql
 phase13_mpesa_client_credentials.sql
 phase14_receipts.sql
 phase15_business_logo.sql   -- run AFTER creating the storage bucket, see §5 below
+phase19_folios.sql          -- Customer Folios. Needs phase17 (next_doc_number). No enum change.
 ```
+
+`phase19_folios.sql` is tested against a scratch Postgres (`schema/tests/phase19_scenarios.py`, 24 checks) but NOT against your live
+schema. Before running it in production, confirm on staging: `lb_sales` has `customer_id`, `lb_sale_items` has `total_price`,
+`lb_products` has `name` + `track_inventory`, and `lb_payment_method` includes CASH / MOBILE_MONEY / CARD.
 
 `phase9_assets.sql` and `phase12_mpesa.sql` both have inline `NOTE`
 comments flagging column-name assumptions that haven't been checked

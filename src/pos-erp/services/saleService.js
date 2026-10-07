@@ -32,6 +32,7 @@
 import { posSupabase as supabase } from './posSupabaseClient';
 import { applyStockMovement, getDefaultWarehouseId } from './purchaseService';
 import { auditService } from './auditService';
+import { folioService } from './folioService';
 
 async function generateSaleNumber() {
   // Same count-based caveat as PO/GRN/return numbering — collision-safe
@@ -72,6 +73,7 @@ export const saleService = {
    *             discount_percent?, tax_amount?, selling_mode?, weight_value?, notes? }],
    *   payments: [{ payment_method, amount, change_amount?, reference_no? }],
    *   notes?, client_reference? // phase11: offline-sync idempotency key
+   *   folio_id?, stay_id?       // phase19: charge the sale to a customer folio (no payments)
    * }
    * shift_id is required — without it, cashierService.closeShift()'s
    * expected_cash calculation can never find this sale, and the till
@@ -81,6 +83,13 @@ export const saleService = {
     if (!sale.tenant_id) throw new Error('saleService.create: tenant_id is required.');
     if (!sale.shift_id) throw new Error('saleService.create: shift_id is required (needed for shift cash reconciliation).');
     if (!sale.items?.length) throw new Error('saleService.create: at least one item is required.');
+    // Phase 19 (folios): a sale charged to a folio is paid LATER, when the folio is settled. It must
+    // carry no payment rows (a CREDIT row would also raise the customer's balance a second time) and
+    // must name the customer who owns the folio -- post_sale_to_folio re-checks both on the server.
+    if (sale.folio_id) {
+      if (!sale.customer_id) throw new Error('saleService.create: a customer is required to charge a folio.');
+      if (sale.payments?.length) throw new Error('saleService.create: a sale charged to a folio takes no payment now.');
+    }
 
     // ── Pre-flight stock check, BEFORE writing anything ──
     // Prevents a partially-written sale if one line item would oversell
@@ -125,7 +134,11 @@ export const saleService = {
         .select('id')
         .eq('client_reference', sale.client_reference)
         .maybeSingle();
-      if (existing) return this.getById(existing.id);
+      if (existing) {
+        // A retried offline sync that was cut off before the folio step finished must finish it now.
+        if (sale.folio_id) await folioService.postSale(sale.folio_id, existing.id, sale.cashier_id);
+        return this.getById(existing.id);
+      }
     }
 
     const { data: headerData, error: hErr } = await supabase
@@ -137,6 +150,8 @@ export const saleService = {
         cashier_id: sale.cashier_id,
         shift_id: sale.shift_id,
         customer_id: sale.customer_id ?? null,
+        folio_id: sale.folio_id ?? null,
+        stay_id: sale.stay_id ?? null,
         sale_number: await generateSaleNumber(),
         status: 'COMPLETED',
         subtotal,
@@ -214,6 +229,19 @@ export const saleService = {
       });
     }
 
+    // Phase 19: put the sale on the customer's folio. Amounts are read from the stored sale by the
+    // server. If this fails the sale is voided (stock goes back) so a charge never exists without its
+    // folio line -- the cashier sees an error and can retry, rather than a sale nobody will ever bill.
+    if (sale.folio_id) {
+      try {
+        await folioService.postSale(sale.folio_id, headerData.id, sale.cashier_id);
+      } catch (folioErr) {
+        try { await this.voidSale(headerData.id, 'Could not be charged to the folio', { voidedBy: sale.cashier_id }); }
+        catch (voidErr) { console.error('[saleService.create] folio post failed AND void failed -- sale', headerData.id, 'needs manual review:', voidErr); }
+        throw folioErr;
+      }
+    }
+
     // Receipt row — content snapshot (items/payments/totals) so a
     // reprint later reflects what was actually sold, even if product
     // prices change afterward. Sending/printing UI is a separate phase;
@@ -234,6 +262,7 @@ export const saleService = {
         tax_total: taxTotal,
         total_amount: totalAmount,
         completed_at: headerData.completed_at,
+        ...(sale.folio_id ? { charged_to_folio: true, folio_id: sale.folio_id } : {}),
       },
     });
     if (rErr) throw rErr;
@@ -259,6 +288,7 @@ export const saleService = {
           discount_total: discountTotal,
           payment_methods: (sale.payments || []).map((p) => p.payment_method),
           customer_id: sale.customer_id ?? null,
+          folio_id: sale.folio_id ?? null,
         },
       });
     } catch (auditErr) {

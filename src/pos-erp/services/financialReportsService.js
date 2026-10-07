@@ -36,7 +36,7 @@
 //     account ledger anywhere in this schema (see brief §39: "at
 //     minimum track balances and payment references", nothing more).
 //   Inventory Value = SUM(lb_inventory.quantity * average_cost)
-//   Accounts Receivable = SUM(lb_customers.outstanding_balance)
+//   Accounts Receivable = SUM(lb_customers.outstanding_balance) + open folio balances (phase19)
 //   Accounts Payable = SUM(lb_suppliers.outstanding_balance)
 //   Owner's Equity = Assets - Liabilities (a PLUG, not a tracked figure —
 //     there is no capital-contributions/drawings ledger in this schema,
@@ -114,12 +114,29 @@ export const financialReportsService = {
     if (rentError) throw rentError;
     const rentIncome = (rentRows || []).filter((r) => !['WAIVED', 'CANCELLED'].includes(r.status)).reduce((sum, r) => sum + Number(r.amount), 0);
 
+    // Folio charges that are NOT POS sales (room nights, manual charges, activities, discounts). Charges that came
+    // from a sale are already in `revenue` above (the sale is COMPLETED at charge time), so they are excluded
+    // here -- counting them twice would overstate income. Voided lines are excluded. Adjustments are negative.
+    // Zero for any business that doesn't use folios.
+    let folioQuery = supabase
+      .from('lb_folio_lines')
+      .select('amount')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'POSTED')
+      .is('sale_id', null)
+      .gte('created_at', `${fromDate}T00:00:00`)
+      .lt('created_at', `${toDate}T23:59:59.999`);
+    if (businessId) folioQuery = folioQuery.eq('business_id', businessId);
+    const { data: folioRows, error: folioError } = await folioQuery;
+    if (folioError) throw folioError;
+    const folioIncome = (folioRows || []).reduce((sum, r) => sum + Number(r.amount), 0);
+
     const grossProfit = revenue - cogs;
-    const netIncome = grossProfit + rentIncome - totalExpenses;
+    const netIncome = grossProfit + rentIncome + folioIncome - totalExpenses;
 
     return {
       fromDate, toDate,
-      revenue, cogs, grossProfit, rentIncome,
+      revenue, cogs, grossProfit, rentIncome, folioIncome,
       expensesByCategory: Object.entries(expensesByCategory).map(([category, amount]) => ({ category, amount })),
       totalExpenses, netIncome,
     };
@@ -175,6 +192,16 @@ export const financialReportsService = {
       cashOut += Number(p.amount);
     }
 
+    // Folio settlements (phase19): money received against customer folios. Never CREDIT (settle_folio refuses it).
+    let folioPayQuery = supabase.from('lb_folio_payments').select('amount, payment_method').eq('tenant_id', tenantId);
+    if (businessId) folioPayQuery = folioPayQuery.eq('business_id', businessId);
+    const { data: folioPayments, error: folioPayError } = await folioPayQuery;
+    if (folioPayError) throw folioPayError;
+    for (const p of folioPayments || []) {
+      if (NON_CASH_METHODS.has(p.payment_method)) continue;
+      cashIn += Number(p.amount);
+    }
+
     const cashAndBank = cashIn - cashOut;
 
     // --- Inventory value ---
@@ -189,7 +216,16 @@ export const financialReportsService = {
     if (businessId) custQuery = custQuery.eq('business_id', businessId);
     const { data: custRows, error: custError } = await custQuery;
     if (custError) throw custError;
-    const accountsReceivable = (custRows || []).reduce((sum, r) => sum + Number(r.outstanding_balance), 0);
+    const creditReceivable = (custRows || []).reduce((sum, r) => sum + Number(r.outstanding_balance), 0);
+
+    // Open customer folios are money owed too, but they are NOT in outstanding_balance (a folio charge has no
+    // CREDIT payment, so nothing double counts). Added here so the balance sheet matches the revenue it reports.
+    let folioBalQuery = supabase.from('lb_folio_summary').select('balance_due').eq('tenant_id', tenantId).eq('status', 'OPEN').gt('balance_due', 0);
+    if (businessId) folioBalQuery = folioBalQuery.eq('business_id', businessId);
+    const { data: folioBalRows, error: folioBalError } = await folioBalQuery;
+    if (folioBalError) throw folioBalError;
+    const folioReceivable = (folioBalRows || []).reduce((sum, r) => sum + Number(r.balance_due), 0);
+    const accountsReceivable = creditReceivable + folioReceivable;
 
     let supQuery = supabase.from('lb_suppliers').select('outstanding_balance').eq('tenant_id', tenantId).gt('outstanding_balance', 0);
     if (businessId) supQuery = supQuery.eq('business_id', businessId);

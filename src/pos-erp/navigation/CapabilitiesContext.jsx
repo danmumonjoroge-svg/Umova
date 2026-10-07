@@ -6,7 +6,7 @@
 // already a generic settings store (see settingsService.js's header).
 //
 // null / missing means "the owner hasn't chosen yet" -> every capability
-// is shown. That is deliberate: this system has no reliable signal for a
+// is shown (except opt-in capabilities such as folios). That is deliberate: this system has no reliable signal for a
 // business's type (pos_tenants.business_type is a free-text, optional
 // signup field), and hiding "Rentals" from a property business that
 // simply hasn't visited Settings would lock them out of their own
@@ -16,10 +16,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { settingsService } from '../services/settingsService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
-import { ALL_CAPABILITY_KEYS } from './navConfig';
+import { ALL_CAPABILITY_KEYS, DEFAULT_CAPABILITY_KEYS } from './navConfig';
 
 const CapabilitiesContext = createContext({
-  enabled: ALL_CAPABILITY_KEYS,
+  enabled: DEFAULT_CAPABILITY_KEYS,
   chosen: false,
   loading: false,
   refresh: () => {},
@@ -48,7 +48,7 @@ export function CapabilitiesProvider({ children }) {
   useEffect(() => { refresh(); }, [refresh]);
 
   const value = useMemo(() => ({
-    enabled: stored ?? ALL_CAPABILITY_KEYS,
+    enabled: stored ?? DEFAULT_CAPABILITY_KEYS,
     chosen: stored !== null,
     loading,
     refresh,

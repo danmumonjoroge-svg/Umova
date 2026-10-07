@@ -86,6 +86,12 @@ export async function createOfflineAwareSale(sale, { isOnline }) {
     throw new Error('Select a customer before completing a credit sale.');
   }
 
+  // A sale charged to a folio is billed later, so it needs the customer and carries no payment.
+  // It stays "Saved locally" until the server has put it on the folio -- never shown as billed before that.
+  if (sale.folio_id && (!sale.customer_id || sale.payments?.length)) {
+    throw new Error('A sale charged to a folio needs the customer and takes no payment now.');
+  }
+
   const clientReference = await nextLocalId('SALE');
   const totals = computeTotals(sale.items);
   const payload = { ...sale, client_reference: clientReference };

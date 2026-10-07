@@ -45,7 +45,7 @@ export default function MoreWorkspace() {
       <SectionTitle>Manage</SectionTitle>
       <div className="bg-white border border-[#DDE3DD] rounded-xl divide-y divide-[#DDE3DD] overflow-hidden">
         {more.children.map((c) => <Row key={c.to} to={c.to} icon={c.icon} label={c.label} />)}
-        <Row to="/pos/settings" icon={SlidersHorizontal} label="What my business does" blurb="Choose Retail, Rentals or Salon to show" />
+        <Row to="/pos/settings" icon={SlidersHorizontal} label="What my business does" blurb="Choose what shows in your menu" />
       </div>
 
       <button

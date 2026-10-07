@@ -49,6 +49,17 @@ db.version(1).stores({
   meta: 'key',
 });
 
+// v2 (phase19): open customer folios, so a cashier can still pick one
+// with no signal. READ cache only -- a folio is never opened, charged
+// or settled locally; a folio-charged SALE is queued like any other sale.
+db.version(2).stores({
+  outbox: '++id, kind, status, clientReference, createdAt',
+  products_cache: 'id, sku, barcode, name',
+  customers_cache: 'id, name, phone, customer_type',
+  folios_cache: 'id, customer_id',
+  meta: 'key',
+});
+
 /** Small helper -- get/set a single meta value without exposing the whole table shape everywhere. */
 export async function getMeta(key) {
   const row = await db.meta.get(key);
