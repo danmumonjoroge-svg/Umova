@@ -25,7 +25,8 @@ async function fetchAll(build) {
   return rows;
 }
 
-const rowKey = (t) => t.id ?? t.cod ?? `${t.journal_no}|${t.line_no}|${t.date}|${t.amount}`;
+// cod is the real primary key. `id` is NOT unique (older rows store account ids in it), so never key on it.
+const rowKey = (t) => t.cod ?? `${t.journal_no}|${t.line_no}|${t.date}|${t.amount}`;
 const refOf = (t) => t.reference_no || t.journal_no || t.reference || "";
 
 // Debit/credit shown from the member's point of view on each row.
@@ -55,6 +56,7 @@ export default function AdminMemberStatement() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [newestFirst, setNewestFirst] = useState(true);
+  const [counts, setCounts] = useState(null);
 
   const fetchStatement = async (loanOverride) => {
     const no = memberNo.trim();
@@ -119,6 +121,7 @@ export default function AdminMemberStatement() {
         String(a.created_at || "").localeCompare(String(b.created_at || "")) ||
         (Number(a.cod) || 0) - (Number(b.cod) || 0));
 
+      setCounts({ direct: direct.length, linked: linked.length, total: merged.length });
       setMember(m || null);
       setLedger(merged.map((t) => ({ ...t, amount: Number(t.amount || 0), ...classify(t) })));
       if (!m) setResult({ ok: false, text: `No member found with number ${no}. Showing ledger rows only.` });
@@ -239,7 +242,7 @@ export default function AdminMemberStatement() {
             </SectionCard>
           )}
 
-          <SectionCard title="Transactions" subtitle={`${shown.length} of ${ledger.length} entries${ledger.length ? ` · latest posting ${ledger[ledger.length - 1].date}` : ""}`}>
+          <SectionCard title="Transactions" subtitle={`${shown.length} of ${ledger.length} entries${ledger.length ? ` · latest posting ${ledger[ledger.length - 1].date}` : ""}${counts ? ` · ${counts.direct} by member no, ${counts.linked} via journals` : ""}`}>
             <div className="ms-filters">
               <Field label="Type">
                 <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
