@@ -1,0 +1,10 @@
+.ms-filters{display:grid;grid-template-columns:1fr;gap:12px}
+.ms-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.ms-actions .ua-btn{flex:1 1 160px}
+.ms-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.ms-dr{color:var(--umova-danger,#b42318)}
+.ms-cr{color:var(--umova-emerald,#0f7a4a)}
+@media (min-width:700px){
+  .ms-filters{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+  .ms-kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+}

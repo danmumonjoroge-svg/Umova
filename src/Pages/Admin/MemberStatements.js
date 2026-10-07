@@ -1,456 +1,286 @@
-import { useState } from "react"; 
+import { useState, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
 import { generateStatementPDF } from "../../utils/generateStatementPDF";
-import QRCode from "react-qr-code";
+import {
+  Page, SectionCard, Field, KpiCard, PrimaryButton, SecondaryButton,
+  EmptyState, LoadingState, kes,
+} from "./AdminUI";
+import "./MemberStatements.css";
 
-const format = (n) =>
-  Number(n || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+// Account ids used by the statement (same ids the PDF uses).
+const ACC = { SAVINGS: 1018, SHARES: 1012, LOANS: 1011, LOAN_INT: 1020, SAV_INT: 1006 };
+
+const PAGE = 1000;   // Supabase caps a response at 1000 rows → always page.
+const CHUNK = 150;   // journal numbers per .in() request (keeps URL short).
+
+// Read every row of a query, 1000 at a time.
+async function fetchAll(build) {
+  const rows = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await build().range(from, from + PAGE - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+  }
+  return rows;
+}
+
+const rowKey = (t) => t.id ?? t.cod ?? `${t.journal_no}|${t.line_no}|${t.date}|${t.amount}`;
+const refOf = (t) => t.reference_no || t.journal_no || t.reference || "";
+
+// Debit/credit shown from the member's point of view on each row.
+function classify(t) {
+  const dr = Number(t.debit_account_id) || 0;
+  const cr = Number(t.credit_account_id) || 0;
+  const amt = Number(t.amount) || 0;
+  let label = "Other", memberDr = 0, memberCr = 0;
+  if (dr === ACC.SAVINGS || cr === ACC.SAVINGS) { label = "Savings"; if (dr === ACC.SAVINGS) memberDr = amt; else memberCr = amt; }
+  else if (dr === ACC.SHARES || cr === ACC.SHARES) { label = "Shares"; if (dr === ACC.SHARES) memberDr = amt; else memberCr = amt; }
+  else if (dr === ACC.LOANS || cr === ACC.LOANS) { label = "Loan"; if (dr === ACC.LOANS) memberDr = amt; else memberCr = amt; }
+  else if (cr === ACC.LOAN_INT) { label = "Loan interest"; memberDr = 0; memberCr = amt; }
+  else if (cr === ACC.SAV_INT || dr === ACC.SAV_INT) { label = "Savings interest"; memberCr = cr === ACC.SAV_INT ? amt : 0; memberDr = dr === ACC.SAV_INT ? amt : 0; }
+  return { label, memberDr, memberCr };
+}
 
 export default function AdminMemberStatement() {
-
   const [memberNo, setMemberNo] = useState("");
   const [member, setMember] = useState(null);
   const [ledger, setLedger] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [hash, setHash] = useState("");
-
+  const [result, setResult] = useState(null);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-
-  // Per-loan statement support: a member can hold several loan accounts
-  // (LN2026000001, LN2026000004, ...) that all post into the same
-  // general_ledger. "all" shows every ledger line for the member, same as
-  // before; picking a specific loan_id filters the statement down to just
-  // that loan's postings.
   const [loans, setLoans] = useState([]);
   const [selectedLoanId, setSelectedLoanId] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [newestFirst, setNewestFirst] = useState(true);
 
-  const fetchStatement = async (loanIdOverride) => {
-
-    if (!memberNo) return alert("Enter member number");
-
+  const fetchStatement = async (loanOverride) => {
+    const no = memberNo.trim();
+    if (!no) return setResult({ ok: false, text: "Enter a member number." });
     setLoading(true);
+    setResult(null);
+    const activeLoan = loanOverride !== undefined ? loanOverride : selectedLoanId;
 
-    const activeLoanId = loanIdOverride !== undefined ? loanIdOverride : selectedLoanId;
+    try {
+      const { data: m } = await supabase.from("members").select("*").eq("member_no", no).maybeSingle();
 
-    const { data: m, error: memberError } = await supabase
-      .from("members")
-      .select("*")
-      .eq("member_no", memberNo)
-      .single();
-    if (memberError) {
-      console.warn("Member lookup failed:", memberError.message);
+      const { data: loanAccounts } = await supabase
+        .from("loan_account").select("*").eq("member_no", no)
+        .order("disbursed_at", { ascending: false });
+      setLoans(loanAccounts || []);
+
+      const dateFilter = (q) => {
+        if (fromDate) q = q.gte("date", fromDate);
+        if (toDate) q = q.lte("date", toDate);
+        if (activeLoan !== "all") q = q.eq("loan_id", activeLoan);
+        return q;
+      };
+
+      // 1) rows stamped with the member number
+      const direct = await fetchAll(() =>
+        dateFilter(supabase.from("general_ledger").select("*").eq("member_no", no))
+          .order("date", { ascending: true })
+      );
+
+      // 2) rows that belong to the member's journals but were stored WITHOUT a
+      //    member_no (older posting code). journal_lines is the source of truth.
+      let linked = [];
+      try {
+        const jl = await fetchAll(() => supabase.from("journal_lines").select("journal_id").eq("member_no", no));
+        const ids = [...new Set(jl.map((r) => r.journal_id).filter(Boolean))];
+        const refs = [];
+        for (let i = 0; i < ids.length; i += CHUNK) {
+          const { data } = await supabase.from("journal_entries").select("reference").in("id", ids.slice(i, i + CHUNK));
+          (data || []).forEach((r) => r.reference && refs.push(r.reference));
+        }
+        for (let i = 0; i < refs.length; i += CHUNK) {
+          const part = refs.slice(i, i + CHUNK);
+          const rows = await fetchAll(() =>
+            dateFilter(supabase.from("general_ledger").select("*").in("journal_no", part).is("member_no", null))
+              .order("date", { ascending: true })
+          );
+          linked.push(...rows);
+        }
+      } catch (e) {
+        console.warn("Journal-linked lookup skipped:", e.message || e);
+      }
+
+      const seen = new Set();
+      const merged = [...direct, ...linked].filter((t) => {
+        const k = rowKey(t);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      merged.sort((a, b) =>
+        String(a.date || "").localeCompare(String(b.date || "")) ||
+        String(a.created_at || "").localeCompare(String(b.created_at || "")) ||
+        (Number(a.cod) || 0) - (Number(b.cod) || 0));
+
+      setMember(m || null);
+      setLedger(merged.map((t) => ({ ...t, amount: Number(t.amount || 0), ...classify(t) })));
+      if (!m) setResult({ ok: false, text: `No member found with number ${no}. Showing ledger rows only.` });
+    } catch (err) {
+      setResult({ ok: false, text: `Failed to load statement: ${err.message || err}` });
+    } finally {
+      setLoading(false);
     }
-
-    const { data: loanAccounts, error: loansError } = await supabase
-      .from("loan_account")
-      .select("*")
-      .eq("member_no", memberNo)
-      .order("disbursed_at", { ascending: false });
-    if (loansError) {
-      console.warn("Loan account lookup failed — has the loan_account table been created yet?", loansError.message);
-    }
-    setLoans(loanAccounts || []);
-
-    let query = supabase
-      .from("general_ledger")
-      .select("*")
-      .eq("member_no", memberNo)
-      .order("date", { ascending: true });
-
-    if (activeLoanId !== "all") query = query.eq("loan_id", activeLoanId);
-    if (fromDate) query = query.gte("date", fromDate);
-    if (toDate) query = query.lte("date", toDate);
-
-    const { data: l, error: ledgerError } = await query;
-    if (ledgerError) {
-      alert(`Failed to load ledger: ${ledgerError.message}`);
-    }
-
-    const cleanLedger = (l || []).map(t => ({
-      ...t,
-      debit: Number(t.debit || 0),
-      credit: Number(t.credit || 0),
-      amount: Number(t.amount || 0)
-    }));
-
-    setMember(m || null);
-    setLedger(cleanLedger);
-    setLoading(false);
   };
 
-  const selectedLoan = selectedLoanId === "all" ? null : loans.find(l => l.loan_id === selectedLoanId);
-
-  const handleLoanFilterChange = (e) => {
-    const value = e.target.value;
-    setSelectedLoanId(value);
-    fetchStatement(value);
+  const onMemberChange = (v) => {
+    setMemberNo(v);
+    setSelectedLoanId("all");
+    setLoans([]);
+    setMember(null);
+    setLedger([]);
   };
 
-  const summary = ledger.reduce((acc, t) => {
+  const selectedLoan = selectedLoanId === "all" ? null : loans.find((l) => l.loan_id === selectedLoanId);
 
-    const amt = t.amount;
+  const summary = useMemo(() => ledger.reduce((a, t) => {
+    const dr = Number(t.debit_account_id), cr = Number(t.credit_account_id), amt = t.amount;
+    // Member's own balances: savings & shares are credit balances, loans are debit balances.
+    if (cr === ACC.SAVINGS) a.savings += amt;
+    if (dr === ACC.SAVINGS) a.savings -= amt;
+    if (cr === ACC.SHARES) a.shares += amt;
+    if (dr === ACC.SHARES) a.shares -= amt;
+    if (dr === ACC.LOANS) a.loans += amt;
+    if (cr === ACC.LOANS) a.loans -= amt;
+    if (cr === ACC.LOAN_INT) a.loan_interest += amt;
+    if (cr === ACC.SAV_INT) a.savings_interest += amt;
+    return a;
+  }, { savings: 0, loans: 0, shares: 0, loan_interest: 0, savings_interest: 0 }), [ledger]);
 
-    if (Number(t.debit_account_id) === 1018) acc.savings += amt;
-    if (Number(t.credit_account_id) === 1018) acc.savings -= amt;
+  const shown = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    const rows = ledger.filter((t) =>
+      (typeFilter === "all" || t.label === typeFilter) &&
+      (!s || `${refOf(t)} ${t.description || ""}`.toLowerCase().includes(s)));
+    return newestFirst ? [...rows].reverse() : rows;
+  }, [ledger, typeFilter, search, newestFirst]);
 
-    if (Number(t.debit_account_id) === 1011) {
-      acc.loans += amt;
-    }
-
-    if (Number(t.credit_account_id) === 1011) {
-      acc.loans -= amt;
-    }
-
-    // ================= LOAN INTEREST (1020 FIXED) =================
-    if (Number(t.credit_account_id) === 1020) {
-      acc.loan_interest = (acc.loan_interest || 0) + amt;
-    }
-
-    // ================= SAVINGS INTEREST (1006 FIXED) =================
-    if (Number(t.credit_account_id) === 1006) {
-      acc.savings_interest = (acc.savings_interest || 0) + amt;
-    }
-
-    if (Number(t.debit_account_id) === 1012) acc.shares += amt;
-    if (Number(t.credit_account_id) === 1012) acc.shares -= amt;
-
-    return acc;
-
-  }, { savings: 0, loans: 0, shares: 0 });
+  const types = useMemo(() => ["all", ...new Set(ledger.map((t) => t.label))], [ledger]);
 
   const downloadPDF = async () => {
     await generateStatementPDF(member, ledger, {
-      summary,
-      loan: selectedLoan || null,
-      generated_at: new Date().toISOString()
+      summary, loan: selectedLoan || null, generated_at: new Date().toISOString(),
     });
   };
 
   return (
-    <div className="statement-page">
-
-      {/* HEADER */}
-      <div className="header">
-
-        <div className="header-left">
-          <h1>🏦 Member Statement Engine</h1>
-          <p>Core Banking • Audit-Ready Financial Statements</p>
+    <Page
+      intro="Generate a member's statement from the general ledger. Includes the newest postings."
+      result={result}
+      onCloseResult={() => setResult(null)}
+    >
+      <SectionCard title="Statement filters">
+        <div className="ms-filters">
+          <Field label="Member number" htmlFor="ms-no">
+            <input id="ms-no" value={memberNo} onChange={(e) => onMemberChange(e.target.value)}
+              placeholder="e.g. TEST001" autoCapitalize="characters"
+              onKeyDown={(e) => e.key === "Enter" && fetchStatement()} />
+          </Field>
+          <Field label="From" htmlFor="ms-from">
+            <input id="ms-from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </Field>
+          <Field label="To" htmlFor="ms-to">
+            <input id="ms-to" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </Field>
+          {member && loans.length > 0 && (
+            <Field label="Account" htmlFor="ms-loan">
+              <select id="ms-loan" value={selectedLoanId}
+                onChange={(e) => { setSelectedLoanId(e.target.value); fetchStatement(e.target.value); }}>
+                <option value="all">All accounts (savings, loans, shares)</option>
+                {loans.map((l) => (
+                  <option key={l.loan_id} value={l.loan_id}>
+                    {l.loan_id} — {l.loan_type || "Loan"} ({kes(l.outstanding_balance)} outstanding)
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
         </div>
-
-        {hash && (
-          <div className="qr">
-            <QRCode value={hash} size={70} />
-          </div>
-        )}
-
-      </div>
-
-      {/* FILTER BAR */}
-      <div className="filter-bar">
-
-        <input
-          value={memberNo}
-          onChange={(e) => setMemberNo(e.target.value)}
-          placeholder="Enter Member No"
-        />
-
-        <input type="date" onChange={(e) => setFromDate(e.target.value)} />
-        <input type="date" onChange={(e) => setToDate(e.target.value)} />
-
-        {member && loans.length > 0 && (
-          <select value={selectedLoanId} onChange={handleLoanFilterChange}>
-            <option value="all">All accounts (savings + loans + shares)</option>
-            {loans.map((l) => (
-              <option key={l.loan_id} value={l.loan_id}>
-                {l.loan_id} — {l.loan_type || "Loan"} ({format(l.outstanding_balance)} outstanding)
-              </option>
-            ))}
-          </select>
-        )}
-
-        <button className="btn-blue" onClick={() => fetchStatement()}>
-          {loading ? "Generating..." : "Generate Statement"}
-        </button>
-
-        {member && (
-          <button className="btn-green" onClick={downloadPDF}>
-            Download PDF
-          </button>
-        )}
-
-      </div>
-
-      {/* MEMBER CARD */}
-      {member && (
-        <div className="member-card">
-
-          <div className="member-left">
-            <div className="avatar">
-              {member.name?.charAt(0)?.toUpperCase()}
-            </div>
-
-            <div>
-              <h2>{member.name}</h2>
-              <p>{member.member_no}</p>
-            </div>
-          </div>
-
-          <div className="member-right">
-            <div className="stat">
-              <span>Savings</span>
-              <b>{format(summary.savings)}</b>
-            </div>
-
-            <div className="stat">
-              <span>Loans</span>
-              <b>{format(summary.loans)}</b>
-            </div>
-
-            <div className="stat">
-              <span>Loan Interest (1020)</span>
-              <b>{format(summary.loan_interest)}</b>
-            </div>
-
-            <div className="stat">
-              <span>Savings Interest (1006)</span>
-              <b>{format(summary.savings_interest)}</b>
-            </div>
-
-            <div className="stat">
-              <span>Shares</span>
-              <b>{format(summary.shares)}</b>
-            </div>
-
-          </div>
-
+        <div className="ms-actions">
+          <PrimaryButton onClick={() => fetchStatement()} disabled={loading}>
+            {loading ? "Generating…" : "Generate statement"}
+          </PrimaryButton>
+          {member && <SecondaryButton onClick={downloadPDF}>Download PDF</SecondaryButton>}
         </div>
+      </SectionCard>
+
+      {loading && <LoadingState message="Loading statement…" />}
+
+      {!loading && (member || ledger.length > 0) && (
+        <>
+          {member && (
+            <SectionCard title={member.name || member.member_no} subtitle={member.member_no}>
+              <div className="ms-kpis">
+                <KpiCard label="Savings" value={kes(summary.savings)} />
+                <KpiCard label="Shares" value={kes(summary.shares)} />
+                <KpiCard label="Loan balance" value={kes(summary.loans)} />
+                <KpiCard label="Loan interest" value={kes(summary.loan_interest)} />
+                <KpiCard label="Savings interest" value={kes(summary.savings_interest)} />
+              </div>
+            </SectionCard>
+          )}
+
+          {selectedLoan && (
+            <SectionCard title={selectedLoan.loan_id} subtitle={`${selectedLoan.loan_type || "Loan"} • ${selectedLoan.status || ""}`}>
+              <div className="ms-kpis">
+                <KpiCard label="Principal" value={kes(selectedLoan.principal)} />
+                <KpiCard label="Outstanding" value={kes(selectedLoan.outstanding_balance)} />
+                <KpiCard label="Instalment" value={kes(selectedLoan.monthly_installment)} />
+                <KpiCard label="Arrears (days)" value={selectedLoan.arrears_days || 0} />
+              </div>
+            </SectionCard>
+          )}
+
+          <SectionCard title="Transactions" subtitle={`${shown.length} of ${ledger.length} entries`}>
+            <div className="ms-filters">
+              <Field label="Type">
+                <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                  {types.map((t) => <option key={t} value={t}>{t === "all" ? "All types" : t}</option>)}
+                </select>
+              </Field>
+              <Field label="Order">
+                <select value={newestFirst ? "new" : "old"} onChange={(e) => setNewestFirst(e.target.value === "new")}>
+                  <option value="new">Newest first</option>
+                  <option value="old">Oldest first</option>
+                </select>
+              </Field>
+              <Field label="Search">
+                <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Reference or description" />
+              </Field>
+            </div>
+
+            {shown.length === 0 ? (
+              <EmptyState title="No transactions" message="Nothing matches these filters." />
+            ) : (
+              <table className="ua-table stack">
+                <thead>
+                  <tr><th>Date</th><th>Ref</th><th>Type</th><th>Description</th>
+                    <th className="num">Debit</th><th className="num">Credit</th><th className="num">Amount</th></tr>
+                </thead>
+                <tbody>
+                  {shown.map((t) => (
+                    <tr key={rowKey(t)}>
+                      <td data-label="Date">{t.date}</td>
+                      <td data-label="Ref">{refOf(t)}</td>
+                      <td data-label="Type">{t.label}</td>
+                      <td data-label="Description">{t.description}</td>
+                      <td data-label="Debit" className="num ms-dr">{t.memberDr ? kes(t.memberDr) : "—"}</td>
+                      <td data-label="Credit" className="num ms-cr">{t.memberCr ? kes(t.memberCr) : "—"}</td>
+                      <td data-label="Amount" className="num"><b>{kes(t.amount)}</b></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </SectionCard>
+        </>
       )}
-
-      {/* SELECTED LOAN ACCOUNT DETAIL */}
-      {selectedLoan && (
-        <div className="member-card">
-          <div className="member-left">
-            <div>
-              <h2>{selectedLoan.loan_id}</h2>
-              <p>{selectedLoan.loan_type || "Loan"} • {selectedLoan.status}</p>
-            </div>
-          </div>
-
-          <div className="member-right">
-            <div className="stat">
-              <span>Principal</span>
-              <b>{format(selectedLoan.principal)}</b>
-            </div>
-            <div className="stat">
-              <span>Outstanding Balance</span>
-              <b>{format(selectedLoan.outstanding_balance)}</b>
-            </div>
-            <div className="stat">
-              <span>Monthly Instalment</span>
-              <b>{format(selectedLoan.monthly_installment)}</b>
-            </div>
-            <div className="stat">
-              <span>Arrears (days)</span>
-              <b>{selectedLoan.arrears_days || 0}</b>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TABLE */}
-      <div className="table-card">
-
-        <div className="table-header">
-          <h3>Transaction Ledger</h3>
-          <span>{ledger.length} entries</span>
-        </div>
-
-        <div className="table-wrapper">
-
-          <table>
-
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Ref</th>
-                <th>Description</th>
-                <th>Debit</th>
-                <th>Credit</th>
-                <th>Amount</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {ledger.map((t, i) => (
-                <tr key={i}>
-                  <td>{t.date}</td>
-                  <td className="muted">{t.reference}</td>
-                  <td>{t.description}</td>
-                  <td className="debit">{format(t.debit)}</td>
-                  <td className="credit">{format(t.credit)}</td>
-                  <td className="amount">{format(t.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-
-          </table>
-
-        </div>
-
-      </div>
-
-      {/* STYLES */}
-      <style>{`
-        .statement-page{
-          padding:24px;
-          background:linear-gradient(135deg,#eef2f7,#f8fafc);
-          font-family:Segoe UI, Arial;
-        }
-
-        .header{
-          display:flex;
-          justify-content:space-between;
-          align-items:center;
-          background:linear-gradient(135deg,#0f5132,#198754);
-          color:white;
-          padding:18px;
-          border-radius:16px;
-          margin-bottom:16px;
-          box-shadow:0 10px 25px rgba(0,0,0,0.1);
-        }
-
-        .header h1{margin:0;font-size:20px}
-        .header p{margin:4px 0 0;font-size:12px;opacity:0.85}
-
-        .filter-bar{
-          display:flex;
-          gap:10px;
-          flex-wrap:wrap;
-          background:white;
-          padding:14px;
-          border-radius:14px;
-          box-shadow:0 8px 20px rgba(0,0,0,0.05);
-        }
-
-        .filter-bar input{
-          padding:10px;
-          border:1px solid #ddd;
-          border-radius:10px;
-        }
-
-        .btn-blue{
-          background:#2563eb;
-          color:white;
-          border:none;
-          padding:10px 14px;
-          border-radius:10px;
-        }
-
-        .btn-green{
-          background:#16a34a;
-          color:white;
-          border:none;
-          padding:10px 14px;
-          border-radius:10px;
-        }
-
-        .member-card{
-          margin-top:16px;
-          background:white;
-          padding:18px;
-          border-radius:16px;
-          display:flex;
-          justify-content:space-between;
-          align-items:center;
-          box-shadow:0 10px 25px rgba(0,0,0,0.06);
-        }
-
-        .member-left{
-          display:flex;
-          align-items:center;
-          gap:12px;
-        }
-
-        .avatar{
-          width:50px;
-          height:50px;
-          border-radius:50%;
-          background:#198754;
-          color:white;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          font-weight:bold;
-          font-size:20px;
-        }
-
-        .member-right{
-          display:flex;
-          gap:20px;
-        }
-
-        .stat{
-          text-align:right;
-        }
-
-        .stat span{
-          font-size:12px;
-          color:#666;
-        }
-
-        .stat b{
-          display:block;
-          font-size:14px;
-        }
-
-        .table-card{
-          margin-top:18px;
-          background:white;
-          border-radius:16px;
-          padding:14px;
-          box-shadow:0 10px 25px rgba(0,0,0,0.06);
-        }
-
-        .table-header{
-          display:flex;
-          justify-content:space-between;
-          margin-bottom:10px;
-        }
-
-        .table-wrapper{
-          max-height:420px;
-          overflow-y:auto;
-          border-radius:10px;
-        }
-
-        table{
-          width:100%;
-          border-collapse:collapse;
-          font-size:13px;
-        }
-
-        thead{
-          position:sticky;
-          top:0;
-          background:#f3f4f6;
-        }
-
-        th,td{
-          padding:10px;
-          border-bottom:1px solid #eee;
-          text-align:left;
-        }
-
-        .muted{color:#666}
-        .debit{color:#dc2626;font-weight:500}
-        .credit{color:#16a34a;font-weight:500}
-        .amount{font-weight:bold}
-      `}</style>
-
-    </div>
+    </Page>
   );
 }
