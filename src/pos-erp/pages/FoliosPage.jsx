@@ -11,35 +11,22 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Printer, BookUser, Loader2, X } from 'lucide-react';
+import { ArrowLeft, Plus, Printer, BookUser, Loader2 } from 'lucide-react';
 import { folioService } from '../services/folioService';
 import { customerService } from '../services/customerService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useNetStatus } from '../offline/useNetStatus';
 import { WorkspacePage, SectionTitle, kes } from '../components/workspace/WorkspaceKit';
+import Sheet, { fieldClass } from '../components/workspace/Sheet';
 import { printDocument } from '../utils/printDocument';
 import { buildFolioDocumentHtml } from '../utils/folioDocument';
 import { normalizeMpesaCode, isValidMpesaCode } from '../utils/mpesa';
 
 const METHODS = [['CASH', 'Cash'], ['MOBILE_MONEY', 'M-Pesa'], ['CARD', 'Card']];
 const CHARGE_TYPES = [['OTHER', 'Other charge'], ['SERVICE', 'Service'], ['ACTIVITY', 'Activity']];
-const field = 'w-full border border-[#DDE3DD] rounded-xl px-3 min-h-[48px] text-sm bg-white min-w-0';
+const field = fieldClass;
 
-function Sheet({ title, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-4 pb-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-[#26352D]">{title}</h3>
-          <button onClick={onClose} aria-label="Close" className="w-10 h-10 flex items-center justify-center text-[#68756D]"><X size={18} /></button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function FolioBill({ folioId, onBack }) {
+function FolioBill({ folioId, onBack, openSettle = false }) {
   const { staffId, tenant } = usePosErpAuth();
   const { isOnline } = useNetStatus();
   const [folio, setFolio] = useState(null);
@@ -54,6 +41,11 @@ function FolioBill({ folioId, onBack }) {
     catch (err) { setError(err.message || 'Could not load this folio.'); }
   }, [folioId]);
   useEffect(() => { load(); }, [load]);
+  // Arriving from check-out (?settle=1): go straight to the settle sheet once the bill has loaded.
+  const settleOpened = React.useRef(false);
+  useEffect(() => {
+    if (openSettle && folio && folio.status === 'OPEN' && Number(folio.balance_due) > 0 && !settleOpened.current) { settleOpened.current = true; setSheet('settle'); }
+  }, [openSettle, folio]);
 
   const act = async (fn) => {
     setBusy(true); setError('');
@@ -104,7 +96,7 @@ function FolioBill({ folioId, onBack }) {
                   <div className="min-w-0">
                     <div className="text-sm text-[#26352D]">{l.description}</div>
                     {Number(l.quantity) !== 1 && <div className="text-xs text-[#68756D]">{Number(l.quantity).toLocaleString()} × {kes(l.unit_price)}</div>}
-                    {open && !l.sale_id && (
+                    {open && !l.sale_id && !l.stay_id && (
                       <button className="text-xs text-red-600 min-h-[32px]" onClick={() => { const r = window.prompt('Why remove this line?'); if (r) act(() => folioService.voidLine(l.id, r)); }}>Remove</button>
                     )}
                   </div>
@@ -228,7 +220,7 @@ export default function FoliosPage() {
   return (
     <WorkspacePage title="Customer Folios" subtitle="One bill per customer. Charge as they go, settle it all at once.">
       {selected ? (
-        <FolioBill folioId={selected} onBack={() => setParams({})} />
+        <FolioBill folioId={selected} onBack={() => setParams({})} openSettle={params.get('settle') === '1'} />
       ) : (<>
         <div className="flex items-center gap-2 mb-3">
           <div className="grid grid-cols-2 gap-1 bg-[#EEF1EC] rounded-xl p-1 flex-1">

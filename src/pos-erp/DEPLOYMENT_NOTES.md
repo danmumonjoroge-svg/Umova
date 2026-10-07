@@ -57,6 +57,7 @@ phase13_mpesa_client_credentials.sql
 phase14_receipts.sql
 phase15_business_logo.sql   -- run AFTER creating the storage bucket, see §5 below
 phase19_folios.sql          -- Customer Folios. Needs phase17 (next_doc_number). No enum change.
+phase20_rooms_stays.sql     -- Rooms & Stays. Needs phase19. No enum change. Safe to re-run.
 ```
 
 `phase19_folios.sql` is tested against a scratch Postgres (`schema/tests/phase19_scenarios.py`, 24 checks) but NOT against your live

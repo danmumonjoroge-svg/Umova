@@ -11,7 +11,7 @@ import { useSettings } from '../hooks/useSettings';
 import { settingsService } from '../services/settingsService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useCapabilities } from '../navigation/CapabilitiesContext';
-import { CAPABILITIES, ALL_CAPABILITY_KEYS } from '../navigation/navConfig';
+import { CAPABILITIES, ALL_CAPABILITY_KEYS, withRequired } from '../navigation/navConfig';
 import POSPasskeySettings from '../auth/POSPasskeySettings';
 import { posSupabase } from '../services/posSupabaseClient';
 import FingerprintToggle from '../../security/FingerprintToggle';
@@ -103,7 +103,13 @@ export default function SettingsPage() {
   const capsShown = capsDraft ?? enabledCaps;
   const toggleCap = (k) => {
     const cur = capsShown;
-    setCapsDraft(cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]);
+    if (cur.includes(k)) {
+      // Switching off something another capability needs (Folios for Rooms) is ignored, not silently half-done.
+      if (cur.some((x) => x !== k && (CAPABILITIES[x]?.requires || []).includes(k))) return;
+      setCapsDraft(cur.filter((x) => x !== k));
+    } else {
+      setCapsDraft(withRequired([...cur, k]));
+    }
   };
   const submitCaps = async () => {
     setSaveError('');

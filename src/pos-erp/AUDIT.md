@@ -1941,3 +1941,8 @@ throughout this session.
 
 **Unverified (no live DB here):** that `'approved'` is the live `pos_tenants.status` value; that `lb_business_types` has a `retail` code (falls back to NULL); that CREDIT sales bump `lb_customers.outstanding_balance` (a trigger/RPC outside this zip); that the seeded `customer_type`/expense-category values are accepted. Seeding failures are logged to the console and never block demo login.
 **Known limits:** all demo visitors share one tenant, and sample sales are all dated "today". No reset job yet — to reset, delete the DEMO tenant's lb_* rows and log in again.
+
+---
+
+## Phase 20 (hospitality upgrade, Phase 3): Rooms & Stays
+Added `phase20_rooms_stays.sql` (rooms, room types, stays/reservations, room board and stay views, stay functions), `roomService`, Rooms / Stays pages, opt-in `rooms` capability (also switches on `folios`). Room nights are ordinary ROOM lines on the Phase 2 folio. Nothing in login, auth or tenant isolation changed. See PHASE3_NOTES.md for decisions, tests and what is unverified.

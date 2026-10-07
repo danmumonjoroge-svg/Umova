@@ -4,7 +4,7 @@ DO $$ BEGIN CREATE ROLE authenticated NOLOGIN; EXCEPTION WHEN duplicate_object T
 CREATE OR REPLACE FUNCTION get_current_tenant_id() RETURNS uuid LANGUAGE sql AS $$ SELECT coalesce(nullif(current_setting('test.tenant', true),''), '00000000-0000-0000-0000-0000000000aa')::uuid $$;
 CREATE TYPE lb_payment_method AS ENUM ('CASH','MOBILE_MONEY','CARD','CREDIT','BANK','OTHER');
 CREATE TABLE lb_businesses (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, name text);
-CREATE TABLE lb_customers (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, business_id uuid, name text, outstanding_balance numeric DEFAULT 0);
+CREATE TABLE lb_customers (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, business_id uuid, name text, phone text, email text, outstanding_balance numeric DEFAULT 0);
 CREATE TABLE lb_products (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, name text, track_inventory boolean DEFAULT true);
 CREATE TABLE lb_sales (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, business_id uuid, customer_id uuid, total_amount numeric, status text, created_at timestamptz DEFAULT now());
 CREATE TABLE lb_sale_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), sale_id uuid, product_id uuid, quantity numeric, unit_price numeric, total_price numeric);

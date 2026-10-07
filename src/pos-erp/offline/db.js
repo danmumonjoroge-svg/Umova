@@ -60,6 +60,17 @@ db.version(2).stores({
   meta: 'key',
 });
 
+// v3 (phase20): the room board, so staff can still see who is in which room with no
+// signal. READ cache only -- booking, check-in/out and housekeeping need the server.
+db.version(3).stores({
+  outbox: '++id, kind, status, clientReference, createdAt',
+  products_cache: 'id, sku, barcode, name',
+  customers_cache: 'id, name, phone, customer_type',
+  folios_cache: 'id, customer_id',
+  rooms_cache: 'id, room_number',
+  meta: 'key',
+});
+
 /** Small helper -- get/set a single meta value without exposing the whole table shape everywhere. */
 export async function getMeta(key) {
   const row = await db.meta.get(key);

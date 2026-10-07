@@ -16,7 +16,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { settingsService } from '../services/settingsService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
-import { ALL_CAPABILITY_KEYS, DEFAULT_CAPABILITY_KEYS } from './navConfig';
+import { ALL_CAPABILITY_KEYS, DEFAULT_CAPABILITY_KEYS, withRequired } from './navConfig';
 
 const CapabilitiesContext = createContext({
   enabled: DEFAULT_CAPABILITY_KEYS,
@@ -48,7 +48,7 @@ export function CapabilitiesProvider({ children }) {
   useEffect(() => { refresh(); }, [refresh]);
 
   const value = useMemo(() => ({
-    enabled: stored ?? DEFAULT_CAPABILITY_KEYS,
+    enabled: withRequired(stored ?? DEFAULT_CAPABILITY_KEYS),
     chosen: stored !== null,
     loading,
     refresh,

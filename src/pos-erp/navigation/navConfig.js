@@ -22,7 +22,7 @@ import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package, Boxes, Truck, Users, UserRound,
   Wallet, Receipt, Building2, Home, Repeat, Gauge, FileText, Wrench, Scissors, CalendarClock, MessageSquare,
   Settings, ShieldCheck, Landmark, Smartphone, BarChart3, FileBarChart, HardHat, ClipboardList,
-  Bell, MoreHorizontal, BookUser,
+  Bell, MoreHorizontal, BookUser, BedDouble, DoorOpen,
 } from 'lucide-react';
 
 // `optIn: true` -- a capability that is NEVER on just because the owner hasn't chosen yet. Existing
@@ -33,7 +33,15 @@ export const CAPABILITIES = {
   rentals: { label: 'Rentals', hint: 'Manage rental units, rent charges and meter readings' },
   salon: { label: 'Salon & Services', hint: 'Sell services and manage appointments' },
   folios: { label: 'Customer Folios', hint: 'Keep one running bill per customer and settle it all at once', optIn: true },
+  rooms: { label: 'Rooms & Stays', hint: 'Rooms, bookings, check-in and check-out. Each guest gets one bill (turns on Customer Folios too)', optIn: true, requires: ['folios'] },
 };
+
+/** A capability that needs others switches them on with it (Rooms & Stays bills through Customer Folios). */
+export function withRequired(keys) {
+  const out = new Set(keys);
+  keys.forEach((k) => (CAPABILITIES[k]?.requires || []).forEach((r) => out.add(r)));
+  return [...out];
+}
 export const ALL_CAPABILITY_KEYS = Object.keys(CAPABILITIES);
 /** What an owner who hasn't chosen yet sees: everything except opt-in capabilities. */
 export const DEFAULT_CAPABILITY_KEYS = ALL_CAPABILITY_KEYS.filter((k) => !CAPABILITIES[k].optIn);
@@ -80,6 +88,14 @@ export const MODULES = [
     children: [
       { to: '/pos/services', label: 'Services', icon: Scissors },
       { to: '/pos/appointments', label: 'Appointments', icon: CalendarClock },
+    ],
+  },
+  {
+    key: 'rooms', label: 'Rooms', icon: BedDouble, to: '/pos/rooms', capability: 'rooms',
+    blurb: 'Rooms, bookings, who is in, check-out',
+    children: [
+      { to: '/pos/room-list', label: 'Rooms', icon: BedDouble },
+      { to: '/pos/stays', label: 'Stays & Bookings', icon: DoorOpen },
     ],
   },
   {

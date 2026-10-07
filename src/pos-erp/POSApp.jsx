@@ -49,6 +49,9 @@ import RentalsWorkspace from "./pages/workspaces/RentalsWorkspace";
 import SalonWorkspace from "./pages/workspaces/SalonWorkspace";
 import MoreWorkspace from "./pages/workspaces/MoreWorkspace";
 import FoliosPage from "./pages/FoliosPage";
+import RoomsWorkspace from "./pages/workspaces/RoomsWorkspace";
+import RoomsPage from "./pages/RoomsPage";
+import StaysPage from "./pages/StaysPage";
 
 const SKIP_AUTH = process.env.REACT_APP_POS_SKIP_AUTH === "true";
 
@@ -119,11 +122,14 @@ const PosRoutesInner = () => (
       <Route path="comms" element={<MessagesWorkspace />} />
       <Route path="rentals" element={<RentalsWorkspace />} />
       <Route path="salon" element={<SalonWorkspace />} />
+      <Route path="rooms" element={<RoomsWorkspace />} />
       <Route path="more" element={<MoreWorkspace />} />
 
       <Route path="products" element={<ProductsPage />} />
       <Route path="customers" element={<CustomersPage />} />
       <Route path="folios" element={<FoliosPage />} />
+      <Route path="room-list" element={<RoomsPage />} />
+      <Route path="stays" element={<StaysPage />} />
       <Route path="inventory" element={<InventoryPage />} />
       <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
       <Route path="goods-receiving" element={<GoodsReceivingPage />} />
