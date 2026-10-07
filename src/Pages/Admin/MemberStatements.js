@@ -37,7 +37,7 @@ function classify(t) {
   if (dr === ACC.SAVINGS || cr === ACC.SAVINGS) { label = "Savings"; if (dr === ACC.SAVINGS) memberDr = amt; else memberCr = amt; }
   else if (dr === ACC.SHARES || cr === ACC.SHARES) { label = "Shares"; if (dr === ACC.SHARES) memberDr = amt; else memberCr = amt; }
   else if (dr === ACC.LOANS || cr === ACC.LOANS) { label = "Loan"; if (dr === ACC.LOANS) memberDr = amt; else memberCr = amt; }
-  else if (cr === ACC.LOAN_INT) { label = "Loan interest"; memberDr = 0; memberCr = amt; }
+  else if (dr === ACC.LOAN_INT || cr === ACC.LOAN_INT) { label = "Loan interest"; if (dr === ACC.LOAN_INT) memberDr = amt; else memberCr = amt; }
   else if (cr === ACC.SAV_INT || dr === ACC.SAV_INT) { label = "Savings interest"; memberCr = cr === ACC.SAV_INT ? amt : 0; memberDr = dr === ACC.SAV_INT ? amt : 0; }
   return { label, memberDr, memberCr };
 }
@@ -148,8 +148,10 @@ export default function AdminMemberStatement() {
     if (dr === ACC.SHARES) a.shares -= amt;
     if (dr === ACC.LOANS) a.loans += amt;
     if (cr === ACC.LOANS) a.loans -= amt;
-    if (cr === ACC.LOAN_INT) a.loan_interest += amt;
-    if (cr === ACC.SAV_INT) a.savings_interest += amt;
+    if (dr === ACC.LOAN_INT) { a.loans += amt; a.loan_interest += amt; }
+    if (cr === ACC.LOAN_INT) { a.loans -= amt; a.loan_interest -= amt; }
+    if (cr === ACC.SAV_INT) { a.savings += amt; a.savings_interest += amt; }
+    if (dr === ACC.SAV_INT) { a.savings -= amt; a.savings_interest -= amt; }
     return a;
   }, { savings: 0, loans: 0, shares: 0, loan_interest: 0, savings_interest: 0 }), [ledger]);
 
@@ -220,7 +222,7 @@ export default function AdminMemberStatement() {
                 <KpiCard label="Savings" value={kes(summary.savings)} />
                 <KpiCard label="Shares" value={kes(summary.shares)} />
                 <KpiCard label="Loan balance" value={kes(summary.loans)} />
-                <KpiCard label="Loan interest" value={kes(summary.loan_interest)} />
+                <KpiCard label="Loan interest due" value={kes(summary.loan_interest)} />
                 <KpiCard label="Savings interest" value={kes(summary.savings_interest)} />
               </div>
             </SectionCard>
@@ -237,7 +239,7 @@ export default function AdminMemberStatement() {
             </SectionCard>
           )}
 
-          <SectionCard title="Transactions" subtitle={`${shown.length} of ${ledger.length} entries`}>
+          <SectionCard title="Transactions" subtitle={`${shown.length} of ${ledger.length} entries${ledger.length ? ` · latest posting ${ledger[ledger.length - 1].date}` : ""}`}>
             <div className="ms-filters">
               <Field label="Type">
                 <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
