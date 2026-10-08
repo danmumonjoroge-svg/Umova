@@ -95,6 +95,17 @@ ok('/pos/production-runs belongs to Production', nav.resolveLocation('/pos/produ
 ok('/pos/activities belongs to Activities', nav.resolveLocation('/pos/activities').module?.key === 'activities');
 ok('Production and Activities add no bottom tab', nav.MOBILE_TABS.length === 5 && !nav.MOBILE_TABS.some((t) => ['production', 'activities'].includes(t.key)));
 
+
+// ---- Phase 6 / 7: Packages and Efficiency are opt-in and routed ----
+ok('Packages is opt-in and needs Folios', nav.CAPABILITIES.packages?.optIn === true && eq(nav.CAPABILITIES.packages.requires, ['folios']));
+ok('Efficiency is opt-in', nav.CAPABILITIES.efficiency?.optIn === true);
+ok('default menu has no Packages or Efficiency', !keys(nav.DEFAULT_CAPABILITY_KEYS).includes('packages') && !keys(nav.DEFAULT_CAPABILITY_KEYS).includes('efficiency'));
+ok('turning Packages on brings Folios', eq([...nav.withRequired(['packages'])].sort(), ['folios', 'packages']));
+ok('a hotel with Packages on sees Packages', keys(nav.withRequired(['retail', 'packages'])).includes('packages'));
+ok('a retailer sees neither', !keys(['retail']).includes('packages') && !keys(['retail']).includes('efficiency'));
+ok('/pos/packages and /pos/efficiency resolve to their modules', nav.resolveLocation('/pos/packages').module?.key === 'packages' && nav.resolveLocation('/pos/efficiency').module?.key === 'efficiency');
+ok('no new bottom tab', nav.MOBILE_TABS.length === 5);
+
 // ---- every menu link has a route ----
 const app = fs.readFileSync(path.join(root, 'POSApp.jsx'), 'utf8');
 const routes = new Set([...app.matchAll(/<Route\s+(?:index|path="([^"]*)")/g)].map((m) => (m[1] === undefined ? '' : m[1])));

@@ -15,6 +15,8 @@ import { ArrowLeft, Plus, Printer, BookUser, Loader2 } from 'lucide-react';
 import { folioService } from '../services/folioService';
 import { customerService } from '../services/customerService';
 import { serviceDetailsService } from '../services/salonService';
+import { packageService } from '../services/packageService';
+import { useCapabilities } from '../navigation/CapabilitiesContext';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useNetStatus } from '../offline/useNetStatus';
 import { WorkspacePage, SectionTitle, kes } from '../components/workspace/WorkspaceKit';
@@ -35,12 +37,21 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
   const [sheet, setSheet] = useState(null); // 'charge' | 'discount' | 'settle'
   const [busy, setBusy] = useState(false);
   const [services, setServices] = useState([]); // quick picks for "Add charge"
+  const { enabled } = useCapabilities();
+  const packagesOn = enabled.includes('packages');
+  const [packages, setPackages] = useState([]);
+  const [pkg, setPkg] = useState(null); // { pkg, qty } chosen in the charge sheet
   const [form, setForm] = useState({ type: 'OTHER', description: '', quantity: '1', price: '', method: 'CASH', code: '' });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   useEffect(() => {
     if (sheet !== 'charge' || services.length) return;
     serviceDetailsService.listServices({ businessId: tenant?.business_id }).then(setServices).catch(() => { /* quick picks are optional */ });
   }, [sheet, services.length, tenant?.business_id]);
+
+  useEffect(() => {
+    if (sheet !== 'charge' || !packagesOn || packages.length) return;
+    packageService.list().then(setPackages).catch(() => { /* packages are optional */ });
+  }, [sheet, packagesOn, packages.length]);
 
   const load = useCallback(async () => {
     try { setFolio(await folioService.getById(folioId)); setError(''); }
@@ -102,7 +113,10 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
                   <div className="min-w-0">
                     <div className="text-sm text-[#26352D]">{l.description}</div>
                     {Number(l.quantity) !== 1 && <div className="text-xs text-[#68756D]">{Number(l.quantity).toLocaleString()} × {kes(l.unit_price)}</div>}
-                    {open && !l.sale_id && !l.stay_id && (
+                    {open && l.package_charge_id && isOnline && folio.lines.find((x) => x.package_charge_id === l.package_charge_id)?.id === l.id && (
+                      <button className="text-xs text-red-600 min-h-[32px]" onClick={() => { const r = window.prompt('Why remove the whole package?'); if (r) act(() => packageService.removeFromFolio({ folioId, chargeId: l.package_charge_id, reason: r, by: staffId })); }}>Remove the whole package</button>
+                    )}
+                    {open && !l.sale_id && !l.stay_id && !l.package_charge_id && (
                       <button className="text-xs text-red-600 min-h-[32px]" onClick={() => { const r = window.prompt('Why remove this line?'); if (r) act(() => folioService.voidLine(l.id, r)); }}>Remove</button>
                     )}
                   </div>
@@ -145,6 +159,27 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
       {sheet === 'charge' && (
         <Sheet title="Add a charge" onClose={() => setSheet(null)}>
           <div className="space-y-2">
+            {packages.length > 0 && (
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-1">Packages</div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                  {packages.map((p) => (
+                    <button key={p.id} type="button" onClick={() => setPkg({ pkg: p, qty: '1' })} aria-pressed={pkg?.pkg.id === p.id}
+                      className={`shrink-0 min-h-[40px] px-3 rounded-full text-sm font-semibold border ${pkg?.pkg.id === p.id ? 'bg-[#237A52] text-white border-[#237A52]' : 'border-[#DDE3DD] bg-white'}`}>{p.name} · {Number(p.price).toLocaleString()}</button>
+                  ))}
+                </div>
+                {pkg && (
+                  <div className="border border-[#DDE3DD] rounded-xl p-3 mt-2 space-y-2">
+                    <div className="text-sm text-[#26352D]"><span className="font-semibold">{pkg.pkg.name}</span> · {kes(pkg.pkg.price)} each. It goes on the bill item by item and stocked items come out of stock.</div>
+                    <input className={field} type="number" inputMode="numeric" placeholder="How many packages" value={pkg.qty} onChange={(e) => setPkg({ ...pkg, qty: e.target.value })} />
+                    <button disabled={busy || !(Number(pkg.qty) >= 1) || Number(pkg.qty) !== Math.floor(Number(pkg.qty))}
+                      onClick={() => act(async () => { await packageService.addToFolio({ folioId, packageId: pkg.pkg.id, quantity: Number(pkg.qty), createdBy: staffId }); setPkg(null); })}
+                      className="w-full min-h-[48px] rounded-xl bg-[#237A52] text-white font-bold disabled:opacity-50">{busy ? 'Adding…' : `Add to bill · ${kes(Number(pkg.pkg.price) * (Number(pkg.qty) || 0))}`}</button>
+                  </div>
+                )}
+                <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D] mt-3 mb-1">Or one charge</div>
+              </div>
+            )}
             {services.length > 0 && (
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                 {services.map((sv) => (

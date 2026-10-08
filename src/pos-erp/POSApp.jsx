@@ -55,6 +55,8 @@ import StaysPage from "./pages/StaysPage";
 import ProductionWorkspace from "./pages/workspaces/ProductionWorkspace";
 import ProductionPage from "./pages/ProductionPage";
 import RecipesPage from "./pages/RecipesPage";
+import PackagesPage from "./pages/PackagesPage";
+import EfficiencyPage from "./pages/EfficiencyPage";
 
 const SKIP_AUTH = process.env.REACT_APP_POS_SKIP_AUTH === "true";
 
@@ -152,6 +154,8 @@ const PosRoutesInner = () => (
       <Route path="maintenance" element={<MaintenancePage />} />
       <Route path="services" element={<ServicesPage />} />
       <Route path="activities" element={<ServicesPage />} />
+      <Route path="packages" element={<PackagesPage />} />
+      <Route path="efficiency" element={<EfficiencyPage />} />
       <Route path="appointments" element={<AppointmentsPage />} />
       <Route path="communication" element={<CommunicationPage />} />
       <Route path="messages" element={<CustomerCommunicationPage />} />

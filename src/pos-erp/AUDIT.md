@@ -1951,3 +1951,8 @@ Added `phase20_rooms_stays.sql` (rooms, room types, stays/reservations, room boa
 
 ## Phases 21-22 (hospitality upgrade, Phases 4-5): Activities and Production
 Added `phase21_services_activities.sql` (service `kind`, ACTIVITY folio lines), opt-in `services` and `production` capabilities, Activities page (reuses ServicesPage), `phase22_production.sql` (recipes, runs, stock in/out through `lb_stock_movements`), `productionService`, Recipes / Production pages. Quick-pick of services on the folio charge sheet. Login, auth and tenant isolation untouched; all new tables have tenant RLS and no client write grants. See PHASE4_5_NOTES.md.
+
+---
+
+## Phases 23-24 (hospitality upgrade, Phases 6-7): Packages and Efficiency
+Added `phase23_packages.sql` (packages, components, folio-line package columns, save/sell/remove functions, stock issue via lb_stock_movements), `phase24_efficiency.sql` (read-only `efficiency_report`, SECURITY INVOKER so RLS applies), opt-in `packages` (also switches on folios) and `efficiency` capabilities, Packages and "How We Are Doing" pages, package picker on the folio charge sheet. Login, auth and tenant isolation untouched. See PHASE6_7_NOTES.md.

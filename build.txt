@@ -1,0 +1,233 @@
+
+> Umova@0.1.0 build
+> react-scripts build
+
+(node:9740) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Creating an optimized production build...
+Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+Compiled with warnings.
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\common\HTMLCanvasElementLuminanceSource.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\common\HTMLCanvasElementLuminanceSource.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\common\HTMLVisualMediaElement.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\common\HTMLVisualMediaElement.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\common\IScannerControls.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\common\IScannerControls.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\common\navigator-utils.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\common\navigator-utils.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\index.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\index.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserAztecCodeReader.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserAztecCodeReader.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserCodeReader.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserCodeReader.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserDatamatrixCodeReader.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserDatamatrixCodeReader.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserMultiFormatOneDReader.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserMultiFormatOneDReader.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserMultiFormatReader.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserMultiFormatReader.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserPDF417Reader.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserPDF417Reader.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserQRCodeReader.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\BrowserQRCodeReader.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\IBrowserCodeReaderOptions.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\readers\IBrowserCodeReaderOptions.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\writers\BrowserCodeSvgWriter.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\writers\BrowserCodeSvgWriter.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\writers\BrowserQRCodeSvgWriter.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\@zxing\src\writers\BrowserQRCodeSvgWriter.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\capacitor-native-biometric\src\definitions.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\capacitor-native-biometric\src\definitions.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\capacitor-native-biometric\src\index.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\capacitor-native-biometric\src\index.ts'
+
+Failed to parse source map from 'C:\Users\DMUMO\sacco-dashboard\node_modules\capacitor-native-biometric\src\web.ts' file: Error: ENOENT: no such file or directory, open 'C:\Users\DMUMO\sacco-dashboard\node_modules\capacitor-native-biometric\src\web.ts'
+
+[eslint] 
+src\Pages\Admin\AdminLayout.js
+  Line 13:30:  'MORE_MODULE' is defined but never used                                                                                                             no-unused-vars
+  Line 102:6:  React Hook useEffect has missing dependencies: 'activeModule?.children' and 'activeModule.key'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\Pages\Admin\BalanceSheet.js
+  Line 19:16:  'setAsOf' is assigned a value but never used  no-unused-vars
+
+src\Pages\Admin\CashBankManagement.js
+  Line 37:86:  React Hook useEffect has a missing dependency: 'fetchLedger'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src\Pages\Admin\Dashboard.jsx
+  Line 135:6:  React Hook useMemo has missing dependencies: 'ACC.CASH', 'ACC.LOANS', 'ACC.SAVINGS', 'ACC.SHARES', and 'calcAccount'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 147:6:  React Hook useMemo has missing dependencies: 'ACC.EXPENSE', 'ACC.INTEREST_INCOME', and 'calcAccount'. Either include them or remove the dependency array                  react-hooks/exhaustive-deps
+
+src\Pages\Admin\ERPDashboard.jsx
+  Line 38:6:  React Hook useEffect has a missing dependency: 'load'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src\Pages\Admin\LoanApplication.js
+  Line 394:6:  React Hook useEffect has a missing dependency: 'loadStaticData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src\Pages\Admin\LoanApproval.js
+  Line 6:18:   'setMember' is assigned a value but never used  no-unused-vars
+  Line 13:10:  'loading' is assigned a value but never used    no-unused-vars
+
+src\Pages\Admin\LoanDisbursement.js
+  Line 70:21:  'loan' is assigned a value but never used  no-unused-vars
+
+src\Pages\Admin\Settings.jsx
+  Line 56:10:  'loading' is assigned a value but never used                                                                 no-unused-vars
+  Line 109:6:  React Hook useEffect has a missing dependency: 'saveToDB'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src\Pages\Admin\TrialBalance.js
+  Line 13:3:   'CheckCircle2' is defined but never used                                                                             no-unused-vars
+  Line 14:3:   'AlertTriangle' is defined but never used                                                                            no-unused-vars
+  Line 15:3:   'Calendar' is defined but never used                                                                                 no-unused-vars
+  Line 16:3:   'Wallet' is defined but never used                                                                                   no-unused-vars
+  Line 17:3:   'Landmark' is defined but never used                                                                                 no-unused-vars
+  Line 23:10:  'loading' is assigned a value but never used                                                                         no-unused-vars
+  Line 45:6:   React Hook useEffect has a missing dependency: 'loadTrialBalance'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src\chama-erp-advanced\DashboardOverview.js
+  Line 5:3:  'Wallet' is defined but never used  no-unused-vars
+
+src\chama-erp-advanced\MembersDirectory.js
+  Line 5:33:  'Wallet' is defined but never used  no-unused-vars
+
+src\chama-erp-advanced\loans\LoanApprovalQueue.js
+  Line 1:28:  'useMemo' is defined but never used  no-unused-vars
+
+src\chama-erp-advanced\shell\useCachedQuery.js
+  Line 64:77:  React Hook useEffect has a missing dependency: 'reload'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src\chama-erp-advanced\welfare\WelfareCaseDesk.js
+  Line 5:15:  'Eye' is defined but never used  no-unused-vars
+
+src\chama-erp-advanced\welfare\WelfareEventPlanner.js
+  Line 43:43:   'PAYMENT_METHODS' is defined but never used   no-unused-vars
+  Line 714:81:  'loading' is assigned a value but never used  no-unused-vars
+
+src\chama-erp-advanced\welfare\WelfareInsightsReport.js
+  Line 75:6:  React Hook useMemo has a missing dependency: 'memberName'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Auth\SetPassword.js
+  Line 123:6:  React Hook useEffect has missing dependencies: 'location.search' and 'verifying'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Dashboard\Profile.js
+  Line 7:28:  'Phone' is defined but never used                                                                                    no-unused-vars
+  Line 7:35:  'FileText' is defined but never used                                                                                 no-unused-vars
+  Line 80:6:  React Hook useEffect has a missing dependency: 'fetchProfileData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Dashboard\ShareCapital.js
+  Line 8:3:  'ArrowUpRight' is defined but never used  no-unused-vars
+
+src\pos-erp\components\ScanPermissionGate.jsx
+  Line 1:8:  'React' is defined but never used  no-unused-vars
+
+src\pos-erp\hooks\useMpesaPayment.js
+  Line 16:28:  'posStaffId' is assigned a value but never used  no-unused-vars
+
+src\pos-erp\pages\CashPage.jsx
+  Line 22:24:  'shifts' is assigned a value but never used   no-unused-vars
+  Line 22:32:  'loading' is assigned a value but never used  no-unused-vars
+
+src\pos-erp\pages\FoliosPage.jsx
+  Line 20:25:   'SectionTitle' is defined but never used  no-unused-vars
+  Line 121:77:  Unexpected comma in middle of array       no-sparse-arrays
+
+src\pos-erp\pages\GoodsReceivingPage.jsx
+  Line 137:6:  React Hook useCallback has missing dependencies: 'buildLine' and 'checkOverReceive'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pos-erp\pages\StaysPage.jsx
+  Line 11:53:  'nightsBetween' is defined but never used  no-unused-vars
+
+src\pos-erp\services\receiptService.js
+  Line 37:27:  'communicationLogService' is defined but never used  no-unused-vars
+
+src\services\storyService.js
+  Line 11:11:  'data' is assigned a value but never used  no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+File sizes after gzip:
+
+  565.94 kB  build\static\js\main.e0f6fdc2.js
+  125.08 kB  build\static\js\701.c3028acc.chunk.js
+  46.35 kB   build\static\js\239.a1b9a73e.chunk.js
+  46.27 kB   build\static\js\170.73d05be6.chunk.js
+  40.26 kB   build\static\css\main.887fd7a4.css
+  33.55 kB   build\static\js\732.a3efcadf.chunk.js
+  10.69 kB   build\static\js\495.fb2f794f.chunk.js
+  8.74 kB    build\static\js\977.c4f2ecf6.chunk.js
+  6.53 kB    build\static\js\288.7930e3a0.chunk.js
+  4.47 kB    build\static\js\771.0e051656.chunk.js
+  4.08 kB    build\static\css\495.38fafe7a.chunk.css
+  3.78 kB    build\static\js\991.e89a10ad.chunk.js
+  3.32 kB    build\static\js\201.1b18b07a.chunk.js
+  3.3 kB     build\static\js\126.f41701db.chunk.js
+  2.85 kB    build\static\js\603.2ec324f5.chunk.js
+  2.64 kB    build\static\js\468.522f8032.chunk.js
+  2.61 kB    build\static\js\108.90254cf3.chunk.js
+  2.54 kB    build\static\js\87.b23efc4d.chunk.js
+  2.5 kB     build\static\js\95.67d71ff8.chunk.js
+  2.48 kB    build\static\js\28.35a19035.chunk.js
+  2.48 kB    build\static\js\400.78c3b091.chunk.js
+  2.37 kB    build\static\js\386.b1a46b99.chunk.js
+  2.25 kB    build\static\js\979.9a9547e8.chunk.js
+  2.14 kB    build\static\js\372.dc293dc5.chunk.js
+  2.11 kB    build\static\js\203.cee70f34.chunk.js
+  2.06 kB    build\static\js\708.7d76d113.chunk.js
+  2.04 kB    build\static\css\288.4d4b8d94.chunk.css
+  1.95 kB    build\static\js\116.60836111.chunk.js
+  1.62 kB    build\static\css\201.00d1fd23.chunk.css
+  1.61 kB    build\static\js\398.a5476594.chunk.js
+  1.58 kB    build\static\js\185.bc9defa2.chunk.js
+  1.57 kB    build\static\js\870.b8611b73.chunk.js
+  1.54 kB    build\static\js\960.bcc82438.chunk.js
+  1.51 kB    build\static\js\493.ffa0a848.chunk.js
+  1.4 kB     build\static\js\156.dd3b0489.chunk.js
+  1.38 kB    build\static\css\126.32c3098f.chunk.css
+  1.32 kB    build\static\js\19.7a8f0566.chunk.js
+  1.26 kB    build\static\css\108.4bee8504.chunk.css
+  1.23 kB    build\static\css\95.10d8ec1f.chunk.css
+  1.15 kB    build\static\css\28.073b1459.chunk.css
+  1.09 kB    build\static\js\983.2e79499e.chunk.js
+  1.09 kB    build\static\css\372.491ce4db.chunk.css
+  1.02 kB    build\static\css\960.c1af9fc8.chunk.css
+  982 B      build\static\css\400.f212fbcc.chunk.css
+  916 B      build\static\css\603.4f82cac8.chunk.css
+  853 B      build\static\css\398.8336514e.chunk.css
+  661 B      build\static\js\828.03a9a156.chunk.js
+  601 B      build\static\css\185.668c5bbd.chunk.css
+  561 B      build\static\js\142.60e34785.chunk.js
+  482 B      build\static\js\551.cf864701.chunk.js
+  292 B      build\static\js\290.e1162b3f.chunk.js
+  236 B      build\static\js\358.e68915c9.chunk.js
+  225 B      build\static\js\205.4794d47b.chunk.js
+
+The bundle size is significantly larger than recommended.
+Consider reducing it with code splitting: https://goo.gl/9VhYWB
+You can also analyze the project dependencies: https://goo.gl/LeUzfb
+
+The project was built assuming it is hosted at /.
+You can control this with the homepage field in your package.json.
+
+The build folder is ready to be deployed.
+You may serve it with a static server:
+
+  npm install -g serve
+  serve -s build
+
+Find out more about deployment here:
+
+  https://cra.link/deployment
+

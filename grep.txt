@@ -1,0 +1,32 @@
+src/Pages/Admin/AdminLayout.js:135:    <AppLock service="finance" client={supabase} onSignOut={logout}>
+src/Public/PublicSite.js:126:            Umova brings your sacco, your chama, and your shop together in one trusted
+src/Public/UmovaFinancialPage.js:399:          <p>A trusted financial system for individuals and communities to save, lend, and grow together with confidence.</p>
+Binary file src/asset/logo/umovalogo.png matches
+src/chama-erp-advanced/MembersDirectory.js:13:// this is a small trusted group, not a public listing). Officials get
+src/chama-erp-advanced/README.md:114:small trusted group, not a public listing. Officials additionally see
+src/chama-erp-advanced/auth/ChamaLock.js:6:// localStorage), so the server-checked trusted-device RPCs used by Finance / My Business cannot apply here.
+src/chama-erp-advanced/auth/ChamaLock.js:115:    <AppLock service={SERVICE} adapter={adapter} onSignOut={logout}>
+src/chama-erp-advanced/platform-admin/PlatformAdminGate.js:17:// handing this screen to more than one trusted person, replace it with a
+src/components/Home.jsx:202:            <p>Be East Africa's most trusted community-owned financial partner.</p>
+src/member-app/MemberAppShell.js:77:    <AppLock service="finance" client={supabase} onSignOut={handleLogout}>
+src/pos-erp/AUDIT.md:65:  i.e. session validity is resolved server-side, not trusted from
+src/pos-erp/AUDIT.md:1151:both optional per section 26. `navigator.onLine` alone isn't trusted; a
+src/pos-erp/POSApp.jsx:102:    <AppLock service="business" client={posSupabase} onSignOut={logout}>
+src/pos-erp/schema/phase10_supplier_messaging.sql:43:-- trusted to the two services that write this table.
+src/pos-erp/supabase/functions/mpesa-stk-push/index.ts:79:    // Rent invoice: the amount is checked against the DATABASE, never trusted from the browser.
+src/security/AppLock.js:13://   * Supabase mode (Finance, My Business): pass `client`. Unlock is confirmed against the trusted_devices RPCs.
+src/security/deviceTrust.js:3:// Trusted-device logic, reusable by Finance, My Business (and Chama once its adapter exists).
+src/security/deviceTrust.js:6:// Model:  account (already authenticated)  ->  trusted device  ->  biometric-protected device secret.
+src/security/deviceTrust.js:8://   * The server stores only SHA-256(secret) in trusted_devices. No biometric data exists anywhere in Umova.
+src/security/deviceTrust.js:10://     trusted (not revoked, secret matches) and belongs to the signed-in account.
+src/security/deviceTrust.js:73:  const { data, error } = await client.rpc("register_trusted_device", {
+src/security/deviceTrust.js:86:    await client.rpc("revoke_trusted_device", { p_device_id: deviceId, p_service: service, p_row_id: null });
+src/security/deviceTrust.js:117:  const { data, error } = await client.rpc("verify_trusted_device", {
+src/security/deviceTrust.js:143:  try { await client.rpc("revoke_trusted_device", { p_device_id: deviceId, p_service: service, p_row_id: null }); } catch { /* best effort */ }
+src/security/deviceTrust.js:148:export async function listDevices({ service, client }) {
+src/security/deviceTrust.js:149:  const { data, error } = await client.rpc("list_trusted_devices", { p_service: service, p_current_device: await getDeviceId() });
+src/security/deviceTrust.js:155:  const { data, error } = await client.rpc("revoke_trusted_device", { p_device_id: null, p_service: null, p_row_id: rowId });
+src/security/deviceTrust.js:160:/** "Log out all devices": revoke every trusted device, then invalidate every refresh token for the account. */
+src/security/deviceTrust.js:162:  await client.rpc("revoke_all_trusted_devices", { p_service: service });
+src/security/secureVault.js:10:// vault entry is never trusted (enable() deletes any stale entry before writing a new one).
+src/supabaseClient.js:38: * trusted-device/app-unlock layer.

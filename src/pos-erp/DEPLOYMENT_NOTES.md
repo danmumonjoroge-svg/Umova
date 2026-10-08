@@ -61,6 +61,8 @@ phase20_rooms_stays.sql     -- Rooms & Stays. Needs phase19. No enum change. Saf
 phase21_services_activities.sql -- Adds lb_service_details.kind (SERVICE/ACTIVITY); folio lines from activities are typed ACTIVITY. Needs phase19. Safe to re-run.
 phase22a_production_enums.sql -- OPTIONAL, run BEFORE phase22 and by itself (enum ALTER TYPE). No-op if movement columns are text.
 phase22_production.sql      -- Recipes, production runs, yield/wastage/cost. Needs lb_inventory, lb_stock_movements, lb_warehouses. Safe to re-run.
+phase23_packages.sql        -- Packages (bundles at one price) on folios. Needs phase19, 20, 21 and 22 (uses _col_accepts). Redefines void_folio_line (keeps the room guard). Safe to re-run.
+phase24_efficiency.sql      -- efficiency_report(): read-only figures. Needs phase19, 20, 22 (23 optional). Safe to re-run.
 ```
 
 `phase19_folios.sql` is tested against a scratch Postgres (`schema/tests/phase19_scenarios.py`, 24 checks) but NOT against your live

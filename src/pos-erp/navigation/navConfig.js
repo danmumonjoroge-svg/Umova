@@ -35,6 +35,8 @@ export const CAPABILITIES = {
   folios: { label: 'Customer Folios', hint: 'Keep one running bill per customer and settle it all at once', optIn: true },
   services: { label: 'Services & Activities', hint: 'Sell swimming, gym, massage, a conference room and more. Charge them to a guest\'s folio', optIn: true },
   production: { label: 'Production', hint: 'Make things from your materials: bakery, butchery, kitchen, juice. See yield, wastage and real cost', optIn: true },
+  packages: { label: 'Packages', hint: 'Sell a bundle at one price (Family Package, Bed & Breakfast). Needs Customer Folios', optIn: true, requires: ['folios'] },
+  efficiency: { label: 'How we are doing', hint: 'Occupancy, guest spend, yield and wastage, worked out from your real records', optIn: true },
   rooms: { label: 'Rooms & Stays', hint: 'Rooms, bookings, check-in and check-out. Each guest gets one bill (turns on Customer Folios too)', optIn: true, requires: ['folios'] },
 };
 
@@ -112,6 +114,16 @@ export const MODULES = [
     // Same page as the Salon module's Services, reached from its own entry for businesses that are not salons.
     key: 'activities', label: 'Services', icon: Dumbbell, to: '/pos/activities', capability: 'services',
     blurb: 'Swimming, gym, massage, hall hire and other things you sell by the hour or visit',
+    children: [],
+  },
+  {
+    key: 'packages', label: 'Packages', icon: Package, to: '/pos/packages', capability: 'packages',
+    blurb: 'Bundles sold at one price',
+    children: [],
+  },
+  {
+    key: 'efficiency', label: 'How We Are Doing', icon: Gauge, to: '/pos/efficiency', capability: 'efficiency',
+    blurb: 'Real numbers from your rooms, bills and production',
     children: [],
   },
   {
