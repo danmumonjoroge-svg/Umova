@@ -22,7 +22,7 @@ import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package, Boxes, Truck, Users, UserRound,
   Wallet, Receipt, Building2, Home, Repeat, Gauge, FileText, Wrench, Scissors, CalendarClock, MessageSquare,
   Settings, ShieldCheck, Landmark, Smartphone, BarChart3, FileBarChart, HardHat, ClipboardList,
-  Bell, MoreHorizontal, BookUser, BedDouble, DoorOpen,
+  Bell, MoreHorizontal, BookUser, BedDouble, DoorOpen, Dumbbell, Factory, ChefHat,
 } from 'lucide-react';
 
 // `optIn: true` -- a capability that is NEVER on just because the owner hasn't chosen yet. Existing
@@ -33,6 +33,8 @@ export const CAPABILITIES = {
   rentals: { label: 'Rentals', hint: 'Manage rental units, rent charges and meter readings' },
   salon: { label: 'Salon & Services', hint: 'Sell services and manage appointments' },
   folios: { label: 'Customer Folios', hint: 'Keep one running bill per customer and settle it all at once', optIn: true },
+  services: { label: 'Services & Activities', hint: 'Sell swimming, gym, massage, a conference room and more. Charge them to a guest\'s folio', optIn: true },
+  production: { label: 'Production', hint: 'Make things from your materials: bakery, butchery, kitchen, juice. See yield, wastage and real cost', optIn: true },
   rooms: { label: 'Rooms & Stays', hint: 'Rooms, bookings, check-in and check-out. Each guest gets one bill (turns on Customer Folios too)', optIn: true, requires: ['folios'] },
 };
 
@@ -97,6 +99,20 @@ export const MODULES = [
       { to: '/pos/room-list', label: 'Rooms', icon: BedDouble },
       { to: '/pos/stays', label: 'Stays & Bookings', icon: DoorOpen },
     ],
+  },
+  {
+    key: 'production', label: 'Production', icon: Factory, to: '/pos/production', capability: 'production',
+    blurb: 'Recipes, batches, yield and wastage',
+    children: [
+      { to: '/pos/production-runs', label: 'Production Runs', icon: Factory },
+      { to: '/pos/recipes', label: 'Recipes', icon: ChefHat },
+    ],
+  },
+  {
+    // Same page as the Salon module's Services, reached from its own entry for businesses that are not salons.
+    key: 'activities', label: 'Services', icon: Dumbbell, to: '/pos/activities', capability: 'services',
+    blurb: 'Swimming, gym, massage, hall hire and other things you sell by the hour or visit',
+    children: [],
   },
   {
     key: 'money', label: 'My Money', icon: Landmark, to: '/pos/money',

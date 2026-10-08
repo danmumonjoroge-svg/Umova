@@ -1946,3 +1946,8 @@ throughout this session.
 
 ## Phase 20 (hospitality upgrade, Phase 3): Rooms & Stays
 Added `phase20_rooms_stays.sql` (rooms, room types, stays/reservations, room board and stay views, stay functions), `roomService`, Rooms / Stays pages, opt-in `rooms` capability (also switches on `folios`). Room nights are ordinary ROOM lines on the Phase 2 folio. Nothing in login, auth or tenant isolation changed. See PHASE3_NOTES.md for decisions, tests and what is unverified.
+
+---
+
+## Phases 21-22 (hospitality upgrade, Phases 4-5): Activities and Production
+Added `phase21_services_activities.sql` (service `kind`, ACTIVITY folio lines), opt-in `services` and `production` capabilities, Activities page (reuses ServicesPage), `phase22_production.sql` (recipes, runs, stock in/out through `lb_stock_movements`), `productionService`, Recipes / Production pages. Quick-pick of services on the folio charge sheet. Login, auth and tenant isolation untouched; all new tables have tenant RLS and no client write grants. See PHASE4_5_NOTES.md.

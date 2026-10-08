@@ -71,6 +71,18 @@ db.version(3).stores({
   meta: 'key',
 });
 
+// v4 (phase22): recipes, so staff can still see what a batch needs with no signal.
+// READ cache only -- starting and posting a run change stock and cost, so they need the server.
+db.version(4).stores({
+  outbox: '++id, kind, status, clientReference, createdAt',
+  products_cache: 'id, sku, barcode, name',
+  customers_cache: 'id, name, phone, customer_type',
+  folios_cache: 'id, customer_id',
+  rooms_cache: 'id, room_number',
+  recipes_cache: 'id, name',
+  meta: 'key',
+});
+
 /** Small helper -- get/set a single meta value without exposing the whole table shape everywhere. */
 export async function getMeta(key) {
   const row = await db.meta.get(key);

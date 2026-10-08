@@ -58,6 +58,9 @@ phase14_receipts.sql
 phase15_business_logo.sql   -- run AFTER creating the storage bucket, see §5 below
 phase19_folios.sql          -- Customer Folios. Needs phase17 (next_doc_number). No enum change.
 phase20_rooms_stays.sql     -- Rooms & Stays. Needs phase19. No enum change. Safe to re-run.
+phase21_services_activities.sql -- Adds lb_service_details.kind (SERVICE/ACTIVITY); folio lines from activities are typed ACTIVITY. Needs phase19. Safe to re-run.
+phase22a_production_enums.sql -- OPTIONAL, run BEFORE phase22 and by itself (enum ALTER TYPE). No-op if movement columns are text.
+phase22_production.sql      -- Recipes, production runs, yield/wastage/cost. Needs lb_inventory, lb_stock_movements, lb_warehouses. Safe to re-run.
 ```
 
 `phase19_folios.sql` is tested against a scratch Postgres (`schema/tests/phase19_scenarios.py`, 24 checks) but NOT against your live

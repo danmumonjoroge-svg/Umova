@@ -14,6 +14,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Printer, BookUser, Loader2 } from 'lucide-react';
 import { folioService } from '../services/folioService';
 import { customerService } from '../services/customerService';
+import { serviceDetailsService } from '../services/salonService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useNetStatus } from '../offline/useNetStatus';
 import { WorkspacePage, SectionTitle, kes } from '../components/workspace/WorkspaceKit';
@@ -33,8 +34,13 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
   const [error, setError] = useState('');
   const [sheet, setSheet] = useState(null); // 'charge' | 'discount' | 'settle'
   const [busy, setBusy] = useState(false);
+  const [services, setServices] = useState([]); // quick picks for "Add charge"
   const [form, setForm] = useState({ type: 'OTHER', description: '', quantity: '1', price: '', method: 'CASH', code: '' });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  useEffect(() => {
+    if (sheet !== 'charge' || services.length) return;
+    serviceDetailsService.listServices({ businessId: tenant?.business_id }).then(setServices).catch(() => { /* quick picks are optional */ });
+  }, [sheet, services.length, tenant?.business_id]);
 
   const load = useCallback(async () => {
     try { setFolio(await folioService.getById(folioId)); setError(''); }
@@ -139,6 +145,14 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
       {sheet === 'charge' && (
         <Sheet title="Add a charge" onClose={() => setSheet(null)}>
           <div className="space-y-2">
+            {services.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                {services.map((sv) => (
+                  <button key={sv.id} type="button" onClick={() => setForm((f) => ({ ...f, type: sv.service_details?.kind === 'ACTIVITY' ? 'ACTIVITY' : 'SERVICE', description: sv.name, price: String(Number(sv.selling_price)), quantity: '1' }))}
+                    className="shrink-0 min-h-[40px] px-3 rounded-full text-sm font-semibold border border-[#DDE3DD] bg-white">{sv.name} · {Number(sv.selling_price).toLocaleString()}</button>
+                ))}
+              </div>
+            )}
             <select className={field} value={form.type} onChange={set('type')}>{CHARGE_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
             <input className={field} placeholder="What is it for? (e.g. Swimming)" value={form.description} onChange={set('description')} />
             <div className="flex gap-2">

@@ -36,7 +36,7 @@ export function useServices() {
    * perspective. sku is auto-generated — services have no real SKU/
    * barcode use case, but lb_products.sku is NOT NULL.
    */
-  const create = useCallback(async ({ name, selling_price, duration_minutes, default_staff_id, commission_rate }) => {
+  const create = useCallback(async ({ name, selling_price, duration_minutes, default_staff_id, commission_rate, kind }) => {
     const product = await productService.create({
       tenant_id: tenant?.id,
       business_id: tenant?.business_id ?? null,
@@ -54,6 +54,7 @@ export function useServices() {
       durationMinutes: duration_minutes ? Number(duration_minutes) : null,
       defaultStaffId: default_staff_id || null,
       commissionRate: commission_rate ? Number(commission_rate) : 0,
+      kind,
     });
     const result = { ...product, service_details: details };
     setServices(prev => [...prev, result]);

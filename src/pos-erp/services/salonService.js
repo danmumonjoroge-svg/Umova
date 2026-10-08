@@ -16,7 +16,7 @@ export const serviceDetailsService = {
   async listServices({ businessId } = {}) {
     let q = supabase
       .from('lb_products')
-      .select('*, service_details:lb_service_details(id, duration_minutes, default_staff_id, commission_rate, staff:pos_staff(id, name))')
+      .select('*, service_details:lb_service_details(id, kind, duration_minutes, default_staff_id, commission_rate, staff:pos_staff(id, name))')
       .eq('track_inventory', false)
       .eq('is_active', 'active')
       .order('name');
@@ -38,7 +38,7 @@ export const serviceDetailsService = {
   // One row per service product — upsert on the unique product_id rather
   // than separate create/update, since the caller (ServicesPage) doesn't
   // need to know whether details already exist for a given product.
-  async upsert({ tenantId, businessId, productId, durationMinutes, defaultStaffId, commissionRate }) {
+  async upsert({ tenantId, businessId, productId, durationMinutes, defaultStaffId, commissionRate, kind = 'SERVICE' }) {
     const { data, error } = await supabase
       .from('lb_service_details')
       .upsert({
@@ -48,6 +48,7 @@ export const serviceDetailsService = {
         duration_minutes: durationMinutes || null,
         default_staff_id: defaultStaffId || null,
         commission_rate: commissionRate || 0,
+        kind: kind === 'ACTIVITY' ? 'ACTIVITY' : 'SERVICE',
         updated_at: new Date().toISOString(),
       }, { onConflict: 'product_id' })
       .select()

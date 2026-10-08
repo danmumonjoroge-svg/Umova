@@ -81,6 +81,20 @@ ok('/pos/folios still belongs to Customers', nav.resolveLocation('/pos/folios').
 ok('Rooms has two pages, not a pile of sidebar entries', nav.MODULES.find((m) => m.key === 'rooms').children.length === 2);
 ok('Rooms lives under More on a phone (no bottom tab added)', !nav.MOBILE_TABS.some((t) => t.key === 'rooms') && nav.MOBILE_TABS.length === 5);
 
+
+// ---- Phase 4 / 5: Activities and Production are opt-in and routed ----
+ok('Production is opt-in', nav.CAPABILITIES.production?.optIn === true);
+ok('Services & Activities is opt-in', nav.CAPABILITIES.services?.optIn === true);
+ok('default menu has no Production or Activities', !keys(nav.DEFAULT_CAPABILITY_KEYS).includes('production') && !keys(nav.DEFAULT_CAPABILITY_KEYS).includes('activities'));
+ok('a bakery (Production on) sees Production', keys(nav.withRequired(['retail', 'production'])).includes('production'));
+ok('a retailer does not see Production', !keys(['retail']).includes('production'));
+const prod = nav.MODULES.find((m) => m.key === 'production');
+ok('Production has Runs + Recipes pages', eq(prod.children.map((c) => c.to).sort(), ['/pos/production-runs', '/pos/recipes']));
+ok('/pos/recipes belongs to Production', nav.resolveLocation('/pos/recipes').module?.key === 'production');
+ok('/pos/production-runs belongs to Production', nav.resolveLocation('/pos/production-runs').module?.key === 'production');
+ok('/pos/activities belongs to Activities', nav.resolveLocation('/pos/activities').module?.key === 'activities');
+ok('Production and Activities add no bottom tab', nav.MOBILE_TABS.length === 5 && !nav.MOBILE_TABS.some((t) => ['production', 'activities'].includes(t.key)));
+
 // ---- every menu link has a route ----
 const app = fs.readFileSync(path.join(root, 'POSApp.jsx'), 'utf8');
 const routes = new Set([...app.matchAll(/<Route\s+(?:index|path="([^"]*)")/g)].map((m) => (m[1] === undefined ? '' : m[1])));
