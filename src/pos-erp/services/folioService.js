@@ -85,7 +85,15 @@ export const folioService = {
       supabase.from('lb_folio_payments').select('*').eq('folio_id', id).order('created_at', { ascending: true }),
     ]);
     if (lErr) throw lErr; if (pErr) throw pErr;
-    return { ...folio, lines: lines || [], payments: payments || [] };
+    // The guest's room stay(s), for the heading of the invoice/receipt. Optional: a business without rooms
+    // (or a database without phase20) simply has none, and the bill reads the same without the heading.
+    let stays = [];
+    try {
+      const { data: st, error: sErr } = await supabase.from('lb_stay_summary')
+        .select('id, room_number, room_type_name, check_in_date, expected_check_out, nights_charged, nights_booked, status').eq('folio_id', id).neq('status', 'CANCELLED').order('check_in_date');
+      if (!sErr) stays = st || [];
+    } catch (e) { /* no stays: fine */ }
+    return { ...folio, lines: lines || [], payments: payments || [], stays };
   },
 
   /** Opens a folio, or returns the customer's existing open one. Returns the folio id. */
@@ -160,5 +168,43 @@ export const folioService = {
       g.lines.push(l); g.subtotal += Number(l.amount);
     }
     return order.filter((t) => groups.has(t)).map((t) => groups.get(t));
+  },
+
+  /**
+   * The bill the way a guest reads it (phase 8): Room, Food, Drinks, Items, Services, Activities,
+   * then each package as ONE block, then other charges and discounts. Food and Drinks come from the
+   * line's real category (the product category for till sales); a line with no category keeps its
+   * line-type group (Items/Services), exactly as before. Same result for screen, invoice and receipt.
+   */
+  sections(lines) {
+    const FOOD = /food|meal|kitchen|restaurant|breakfast|lunch|dinner|snack/i;
+    const DRINK = /drink|beverage|bar\b|soda|juice|beer|wine|spirit|water|tea|coffee/i;
+    const map = new Map();
+    const add = (key, label, rank, line, shown) => {
+      if (!map.has(key)) map.set(key, { key, label, rank, lines: [], subtotal: 0, isPackage: false });
+      const g = map.get(key);
+      g.lines.push({ ...line, shown }); g.subtotal += Number(line.amount);
+      return g;
+    };
+    for (const l of lines || []) {
+      if (l.package_charge_id) {
+        const qty = Number(l.package_qty) > 1 ? ` × ${l.package_qty}` : '';
+        const g = add(`pkg:${l.package_charge_id}`, `${l.package_name || 'Package'}${qty}`, 70, l, String(l.description).replace(`${l.package_name} · `, ''));
+        g.isPackage = true; continue;
+      }
+      const t = l.line_type; const cat = l.category || '';
+      if (t === 'ROOM') add('room', 'Room', 10, l, l.description);
+      else if (t === 'ACTIVITY') add('activity', 'Activities', 60, l, l.description);
+      else if (t === 'ADJUSTMENT') add('adj', 'Discounts & adjustments', 90, l, l.description);
+      else if (t === 'PRODUCT' || t === 'SERVICE' || t === 'OTHER') {
+        if (FOOD.test(cat)) add('food', 'Food', 20, l, l.description);
+        else if (DRINK.test(cat)) add('drinks', 'Drinks', 30, l, l.description);
+        else if (t === 'PRODUCT') add('items', 'Items', 40, l, l.description);
+        else if (t === 'SERVICE') add('services', 'Services', 50, l, l.description);
+        else add('other', 'Other charges', 80, l, l.description);
+      } else add('other', 'Other charges', 80, l, l.description);
+    }
+    // packages keep the order they were sold in; everything else by rank
+    return [...map.values()].sort((a, b) => a.rank - b.rank);
   },
 };

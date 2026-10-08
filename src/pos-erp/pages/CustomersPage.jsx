@@ -20,6 +20,8 @@
 // because the owner is the one who presses Send inside WhatsApp.
 
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { folioService } from '../services/folioService';
 import { useCustomers } from '../hooks/useCustomers';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { paymentService } from '../services/paymentService';
@@ -110,6 +112,7 @@ export default function CustomersPage() {
   const [statementCustomer, setStatementCustomer] = useState(null);
   const [statementRows, setStatementRows] = useState([]);
   const [statementLoading, setStatementLoading] = useState(false);
+  const [statementFolios, setStatementFolios] = useState([]); // guest bills (folios), when the business uses them
 
   const openCreateForm = () => {
     setEditingCustomer(null);
@@ -188,6 +191,8 @@ export default function CustomersPage() {
 
   const openStatement = async (customer) => {
     setStatementCustomer(customer);
+    setStatementFolios([]);
+    folioService.listForCustomer(customer.id).then((rows) => setStatementFolios(rows.filter((f) => f.status !== 'CANCELLED'))).catch(() => setStatementFolios([])); // no folios (or not set up): nothing to show
     setStatementLoading(true);
     try {
       const rows = await receivablesService.getStatement(customer.id);
@@ -434,6 +439,21 @@ export default function CustomersPage() {
                 <div className="font-bold text-amber-700 text-sm">{fmt(statementCustomer.outstanding_balance)}</div>
               </div>
             </div>
+
+            {statementFolios.length > 0 && (
+              <div className="mb-3">
+                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Bills &amp; stays</div>
+                <div className="border border-slate-100 rounded-lg divide-y divide-slate-100">
+                  {statementFolios.slice(0, 5).map((f) => (
+                    <Link key={f.id} to={`/pos/folios?folio=${f.id}`} className="flex justify-between items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50">
+                      <span className="min-w-0 truncate">{f.title || f.folio_number}<span className="text-xs text-slate-500"> · {f.status === 'OPEN' ? 'open' : `paid ${f.settled_at ? new Date(f.settled_at).toLocaleDateString() : ''}`}</span></span>
+                      <span className={`font-semibold shrink-0 ${f.status === 'OPEN' ? 'text-amber-700' : 'text-slate-700'}`}>{fmt(f.status === 'OPEN' ? f.balance_due : f.total_charges)}</span>
+                    </Link>
+                  ))}
+                </div>
+                {statementFolios.length > 5 && <div className="text-xs text-slate-500 mt-1">and {statementFolios.length - 5} older</div>}
+              </div>
+            )}
 
             <div className="flex-1 overflow-y-auto min-h-0">
               {statementLoading ? (

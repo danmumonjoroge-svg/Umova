@@ -16,6 +16,7 @@ import { folioService } from '../services/folioService';
 import { customerService } from '../services/customerService';
 import { serviceDetailsService } from '../services/salonService';
 import { packageService } from '../services/packageService';
+import { useCashierShifts } from '../hooks/useCashierShifts';
 import { useCapabilities } from '../navigation/CapabilitiesContext';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useNetStatus } from '../offline/useNetStatus';
@@ -37,6 +38,7 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
   const [sheet, setSheet] = useState(null); // 'charge' | 'discount' | 'settle'
   const [busy, setBusy] = useState(false);
   const [services, setServices] = useState([]); // quick picks for "Add charge"
+  const { activeShift } = useCashierShifts(); // folio payments are tied to the open till shift when there is one
   const { enabled } = useCapabilities();
   const packagesOn = enabled.includes('packages');
   const [packages, setPackages] = useState([]);
@@ -73,7 +75,7 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
 
   if (!folio) return <p className="text-sm text-[#68756D]">{error || 'Loading…'}</p>;
   const open = folio.status === 'OPEN';
-  const groups = folioService.groupLines(folio.lines);
+  const groups = folioService.sections(folio.lines);
 
   const print = (kind) => {
     try { printDocument(`${kind === 'receipt' ? 'Receipt' : 'Invoice'} ${folio.customer?.name || ''}`, buildFolioDocumentHtml(folio, kind)); }
@@ -85,9 +87,9 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
     if (form.method === 'MOBILE_MONEY') {
       const code = normalizeMpesaCode(form.code);
       if (!isValidMpesaCode(code)) throw new Error('Enter the M-Pesa code from the SMS (like SHK7X9ABCD).');
-      return folioService.settle({ folioId, settledBy: staffId, tenantId: tenant?.id, payments: [{ payment_method: 'MOBILE_MONEY', amount: balance, reference_no: code }] });
+      return folioService.settle({ folioId, settledBy: staffId, shiftId: activeShift?.id || null, tenantId: tenant?.id, payments: [{ payment_method: 'MOBILE_MONEY', amount: balance, reference_no: code }] });
     }
-    return folioService.settle({ folioId, settledBy: staffId, tenantId: tenant?.id, payments: [{ payment_method: form.method, amount: balance }] });
+    return folioService.settle({ folioId, settledBy: staffId, shiftId: activeShift?.id || null, tenantId: tenant?.id, payments: [{ payment_method: form.method, amount: balance }] });
   });
 
   return (
@@ -105,14 +107,14 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
 
         {groups.length === 0 && <p className="text-sm text-[#68756D] mt-4">Nothing on this bill yet.</p>}
         {groups.map((g) => (
-          <div key={g.type} className="mt-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-1">{g.label}</div>
+          <div key={g.key} className="mt-4">
+            <div className="flex items-baseline justify-between text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-1"><span>{g.label}{g.isPackage ? ' · package' : ''}</span><span className="tabular-nums">{kes(g.subtotal)}</span></div>
             <div className="divide-y divide-[#DDE3DD]">
               {g.lines.map((l) => (
                 <div key={l.id} className="flex items-start justify-between gap-3 py-2">
                   <div className="min-w-0">
-                    <div className="text-sm text-[#26352D]">{l.description}</div>
-                    {Number(l.quantity) !== 1 && <div className="text-xs text-[#68756D]">{Number(l.quantity).toLocaleString()} × {kes(l.unit_price)}</div>}
+                    <div className="text-sm text-[#26352D]">{l.shown}</div>
+                    {Number(l.quantity) !== 1 && !g.isPackage && <div className="text-xs text-[#68756D]">{Number(l.quantity).toLocaleString()} × {kes(l.unit_price)}</div>}
                     {open && l.package_charge_id && isOnline && folio.lines.find((x) => x.package_charge_id === l.package_charge_id)?.id === l.id && (
                       <button className="text-xs text-red-600 min-h-[32px]" onClick={() => { const r = window.prompt('Why remove the whole package?'); if (r) act(() => packageService.removeFromFolio({ folioId, chargeId: l.package_charge_id, reason: r, by: staffId })); }}>Remove the whole package</button>
                     )}
@@ -120,7 +122,7 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
                       <button className="text-xs text-red-600 min-h-[32px]" onClick={() => { const r = window.prompt('Why remove this line?'); if (r) act(() => folioService.voidLine(l.id, r)); }}>Remove</button>
                     )}
                   </div>
-                  <div className="text-sm font-semibold tabular-nums shrink-0">{kes(l.amount)}</div>
+                  {!g.isPackage && <div className="text-sm font-semibold tabular-nums shrink-0">{kes(l.amount)}</div>}
                 </div>
               ))}
             </div>

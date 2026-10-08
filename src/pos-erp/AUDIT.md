@@ -1956,3 +1956,8 @@ Added `phase21_services_activities.sql` (service `kind`, ACTIVITY folio lines), 
 
 ## Phases 23-24 (hospitality upgrade, Phases 6-7): Packages and Efficiency
 Added `phase23_packages.sql` (packages, components, folio-line package columns, save/sell/remove functions, stock issue via lb_stock_movements), `phase24_efficiency.sql` (read-only `efficiency_report`, SECURITY INVOKER so RLS applies), opt-in `packages` (also switches on folios) and `efficiency` capabilities, Packages and "How We Are Doing" pages, package picker on the folio charge sheet. Login, auth and tenant isolation untouched. See PHASE6_7_NOTES.md.
+
+---
+
+## Phases 25-26 (hospitality upgrade, Phase 8 + leftovers): Unified receipts, reversal
+`phase25_unified_receipts.sql` (till sales keep the product category on the guest's bill), `phase26_production_reverse.sql` (reverse a posted run once, with a reason). Invoice/receipt/bill now read as one account: Room, Food, Drinks, Items, Services, Activities, each package as one block, discounts, payment (`folioService.sections`, `folioDocument.js`). Folio settlement now records the open till shift. Customer statement lists the customer's bills and stays. Login, auth and tenant isolation untouched. See PHASE8_NOTES.md.

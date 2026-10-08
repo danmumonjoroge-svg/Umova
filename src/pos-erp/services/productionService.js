@@ -113,4 +113,11 @@ export const productionService = {
     const { error } = await supabase.rpc('cancel_production_run', { p_run_id: runId });
     if (error) throw error;
   },
+
+  /** Undo a posted run (once, with a reason): materials go back, finished goods come out. Refused if the goods are gone. */
+  async reverseRun(runId, reason, by = null) {
+    const { data, error } = await supabase.rpc('reverse_production_run', { p_run_id: runId, p_reason: reason, p_by: by });
+    if (error) throw error;
+    return data;
+  },
 };

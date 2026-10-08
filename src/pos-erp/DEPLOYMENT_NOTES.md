@@ -63,6 +63,8 @@ phase22a_production_enums.sql -- OPTIONAL, run BEFORE phase22 and by itself (enu
 phase22_production.sql      -- Recipes, production runs, yield/wastage/cost. Needs lb_inventory, lb_stock_movements, lb_warehouses. Safe to re-run.
 phase23_packages.sql        -- Packages (bundles at one price) on folios. Needs phase19, 20, 21 and 22 (uses _col_accepts). Redefines void_folio_line (keeps the room guard). Safe to re-run.
 phase24_efficiency.sql      -- efficiency_report(): read-only figures. Needs phase19, 20, 22 (23 optional). Safe to re-run.
+phase25_unified_receipts.sql -- till sales posted to a folio carry the product category (Food / Drinks on the receipt). Needs phase19, 21. Safe to re-run.
+phase26_production_reverse.sql -- reverse_production_run + REVERSED status. Needs phase22. Safe to re-run.
 ```
 
 `phase19_folios.sql` is tested against a scratch Postgres (`schema/tests/phase19_scenarios.py`, 24 checks) but NOT against your live

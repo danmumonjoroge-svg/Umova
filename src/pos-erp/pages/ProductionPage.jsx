@@ -16,7 +16,7 @@ import { todayLocal, formatDay } from '../services/roomService';
 
 const num = (n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const lab = 'block text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-1';
-const TABS = [['draft', 'To do', ['DRAFT']], ['done', 'Done', ['POSTED']]];
+const TABS = [['draft', 'To do', ['DRAFT']], ['done', 'Done', ['POSTED', 'REVERSED']]];
 
 function StartSheet({ recipes, onClose, onDone }) {
   const { staffId } = usePosErpAuth();
@@ -164,6 +164,7 @@ function Row({ k, v, strong }) {
 
 export default function ProductionPage() {
   const { isOnline } = useNetStatus();
+  const { staffId } = usePosErpAuth();
   const [tab, setTab] = useState('draft');
   const [rows, setRows] = useState(null);
   const [recipes, setRecipes] = useState([]);
@@ -181,6 +182,11 @@ export default function ProductionPage() {
     setError('');
     try { setRecipes((await productionService.listRecipes()).rows); setSheet({ kind: 'start' }); }
     catch (err) { setError(err.message || 'Could not load the recipes.'); }
+  };
+  const reverse = async (r) => {
+    const reason = window.prompt(`Why reverse ${r.run_number}? Materials go back into stock and the finished goods come out.`);
+    if (!reason) return;
+    try { await productionService.reverseRun(r.id, reason, staffId); setError(''); load(); } catch (err) { setError(err.message || 'That did not work.'); }
   };
   const cancel = async (r) => { try { await productionService.cancelRun(r.id); load(); } catch (err) { setError(err.message || 'That did not work.'); } };
 
@@ -202,6 +208,7 @@ export default function ProductionPage() {
         {(rows || []).map((r) => (
           <div key={r.id} className="bg-white border border-[#DDE3DD] rounded-xl p-4 min-w-0">
             <div className="flex justify-between gap-3"><div className="min-w-0"><div className="font-bold text-[#26352D] truncate">{r.recipe?.name}</div><div className="text-xs text-[#68756D]">{r.run_number} · {formatDay(r.run_date)}</div></div>
+              {r.status === 'REVERSED' && <span className="shrink-0 self-start text-xs font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-700">Reversed</span>}
               {r.status === 'POSTED' && <span className={`shrink-0 self-start text-xs font-bold px-2.5 py-1 rounded-full ${Number(r.yield_pct) >= 100 ? 'bg-[#237A52]/10 text-[#1B5138]' : 'bg-[#C6A15B]/20 text-[#7a5f1f]'}`}>{num(r.yield_pct)}% yield</span>}</div>
             {r.status === 'DRAFT' ? (<>
               <div className="text-sm mt-2">Plan: <span className="font-semibold">{num(r.planned_quantity)}</span></div>
@@ -213,6 +220,8 @@ export default function ProductionPage() {
                 <Row k="Made / planned" v={`${num(r.actual_output)} / ${num(r.expected_output)}`} />
                 <Row k="Lost" v={`${num(r.wastage_qty)} · ${kes(r.wastage_cost)}${r.wastage_reason ? ` · ${r.wastage_reason}` : ''}`} />
                 <Row k="Cost per unit" v={`${kes(r.cost_per_actual_unit)} (planned ${kes(r.cost_per_expected_unit)})`} strong />
+                {r.status === 'REVERSED' && <div className="text-xs text-red-700">Reversed: {r.reverse_reason}. Not counted in yield or wastage.</div>}
+                {r.status === 'POSTED' && <button onClick={() => reverse(r)} disabled={!isOnline} className="mt-2 w-full min-h-[44px] rounded-xl text-sm font-semibold border border-[#DDE3DD] bg-white text-red-600 disabled:opacity-50">Reverse this run</button>}
               </div>)}
           </div>
         ))}
