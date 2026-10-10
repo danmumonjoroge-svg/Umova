@@ -2,6 +2,12 @@
 // FILE: src/components/Auth/AdminLogin.js
 // USERS TABLE LOGIN
 // USER_NO + PASSWORD
+//
+// Phone app only: if fingerprint was turned on for this phone, <FingerprintLogin> shows
+// a "Use fingerprint" button under the Login button. The fingerprint releases a device secret from the Android
+// Keystore, the server verifies it and returns a one-time token, and verifyOtp() makes a normal Supabase
+// session (src/security/deviceTrust.js). Roles, StaffGuard and RLS apply exactly as for a password login.
+// On the web nothing changes. The password form below is always the fallback.
 // ============================================================================
 
 import React, { useState } from "react";
@@ -15,10 +21,12 @@ import {
   CheckCircle2,
   CreditCard,
   Lock,
-  UserCog,
 } from "lucide-react";
 
 import { resolveStaffLogin } from "./loginHelpers";
+import FingerprintLogin from "../../security/FingerprintLogin";
+import { supabase } from "../../supabaseClient";
+import umovaEmblem from "../../assets/brand/umova-emblem-small.png";
 
 export default function AdminLogin() {
 
@@ -117,9 +125,9 @@ export default function AdminLogin() {
 
           <div className="flex items-center gap-4">
 
-            <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center">
+            <div className="w-16 h-16 rounded-2xl bg-white shadow-md flex items-center justify-center p-1.5">
 
-              <UserCog size={30} />
+              <img src={umovaEmblem} alt="Umova" className="w-full h-full object-contain" />
 
             </div>
 
@@ -287,6 +295,17 @@ export default function AdminLogin() {
             </button>
 
           </form>
+
+          {/* Phone app only, and only after fingerprint was turned on for this phone; renders nothing otherwise. */}
+          <FingerprintLogin
+            service="finance"
+            client={supabase}
+            onSignedIn={() => {
+              setError("");
+              setSuccess("Signed in with fingerprint.");
+              setTimeout(() => navigate(from, { replace: true }), 600);
+            }}
+          />
 
         </div>
 

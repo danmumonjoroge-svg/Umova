@@ -13,13 +13,22 @@
 // if there's truly nothing else to show. Same pattern as
 // POSTenantSignup.jsx now, so neither screen can silently swallow a
 // real server-side failure behind a canned message again.
+//
+// Inside the phone app, <FingerprintLogin service="business"> shows a "Use fingerprint" button under the Sign in
+// button once fingerprint has been turned on for this phone. It signs in on posSupabase (the POS client) through
+// the device-auth-verify edge function; POSAuthContext's SIGNED_IN listener then runs get_pos_profile(), so a
+// fingerprint login passes exactly the same business/staff checks as a password login. The form below stays
+// fully usable and is always the fallback.
 
 import React, { useState } from "react";
-import { Loader2, Store, Fingerprint } from "lucide-react";
+import { Loader2, Fingerprint } from "lucide-react";
 import { usePOSAuth } from "../context/POSAuthContext";
 import { posPasskeys } from "./posPasskeys";
 import { isNativeApp } from "../../security/nativeBiometric";
+import FingerprintLogin from "../../security/FingerprintLogin";
+import { posSupabase } from "../services/posSupabaseClient";
 import { DEMO_BUSINESS_CODE, DEMO_USERNAME, DEMO_PASSWORD } from "./demoAccount";
+import umovaEmblem from "../../assets/brand/umova-emblem-small.png";
 
 const REASON_MESSAGES = {
   BUSINESS_NOT_FOUND: "No business found with that code.",
@@ -31,7 +40,7 @@ const REASON_MESSAGES = {
 };
 
 export default function POSLogin({ onGoToSignup, logoutNotice }) {
-  const { login, loginWithPasskey } = usePOSAuth();
+  const { login, loginWithPasskey, validateSession } = usePOSAuth();
   const [passkeyBusy, setPasskeyBusy] = useState(false);
 
   const [businessCode, setBusinessCode] = useState("");
@@ -97,8 +106,8 @@ export default function POSLogin({ onGoToSignup, logoutNotice }) {
         onSubmit={submit}
         className="bg-white rounded-3xl shadow-xl p-10 w-[380px] border border-slate-100"
       >
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-800 to-emerald-950 ring-2 ring-amber-400/50 flex items-center justify-center mb-5">
-          <Store size={22} className="text-amber-400" />
+        <div className="w-14 h-14 rounded-2xl bg-white ring-2 ring-amber-400/60 shadow-sm flex items-center justify-center mb-5 p-1.5">
+          <img src={umovaEmblem} alt="Umova" className="w-full h-full object-contain" />
         </div>
         <h2 className="text-2xl font-black text-slate-800 tracking-tight">POS Sign In</h2>
         <p className="text-slate-500 text-sm mt-2 mb-6">
@@ -154,6 +163,13 @@ export default function POSLogin({ onGoToSignup, logoutNotice }) {
           {submitting ? "Signing in…" : "Sign in"}
         </button>
 
+        {/* Phone app only, and only after fingerprint was turned on for this phone; renders nothing otherwise. */}
+        <FingerprintLogin
+          service="business"
+          client={posSupabase}
+          onSignedIn={() => { setError(""); validateSession(); }}
+        />
+
         <button
           type="button"
           onClick={tryDemo}
@@ -163,8 +179,8 @@ export default function POSLogin({ onGoToSignup, logoutNotice }) {
           Try the demo — no sign-up needed
         </button>
 
-        {/* Web only. In the phone app, fingerprint is the native lock (src/security); this button would open
-            Android's own passkey chooser instead. */}
+        {/* Web only. In the phone app, fingerprint sign-in is <FingerprintLogin> above (and the lock screen handles
+            unlocking); this button would open Android's own passkey chooser instead. */}
         {!isNativeApp() && posPasskeys.supported() && (
           <button
             type="button"

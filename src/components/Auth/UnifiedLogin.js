@@ -27,6 +27,14 @@
 // If the identifier field happens to be filled in it's passed along as a
 // hint, which keeps older non-discoverable passkeys working; otherwise it
 // falls back silently to the password field.
+//
+// Inside the phone app (Android) the web passkey button is hidden and
+// <FingerprintLogin> is shown instead: if fingerprint was turned on for this
+// phone, a "Use fingerprint" button appears under the Login button.
+// The fingerprint releases a device secret from the Android Keystore, the
+// server verifies it and returns a one-time token, and verifyOtp() turns that
+// into a normal Supabase session (src/security/deviceTrust.js). The password
+// form stays fully usable and is always the fallback.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from "react";
@@ -46,6 +54,9 @@ import { useChama } from "../../chama-erp-advanced/ChamaContext";
 import { resolveStaffLogin, resolveMemberLogin, looksLikePhoneNumber } from "./loginHelpers";
 import { loginWithPasskey, passkeysSupported } from "./webauthnHelpers";
 import { isNativeApp } from "../../security/nativeBiometric";
+import FingerprintLogin from "../../security/FingerprintLogin";
+import { supabase } from "../../supabaseClient";
+import umovaEmblem from "../../assets/brand/umova-emblem-small.png";
 
 export default function UnifiedLogin() {
   const navigate = useNavigate();
@@ -201,8 +212,8 @@ export default function UnifiedLogin() {
         {/* HEADER */}
         <div className="bg-gradient-to-r from-green-800 to-emerald-700 p-8 text-white">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center">
-              <UserCircle2 size={30} />
+            <div className="w-16 h-16 rounded-2xl bg-white shadow-md flex items-center justify-center p-1.5">
+              <img src={umovaEmblem} alt="Umova" className="w-full h-full object-contain" />
             </div>
             <div>
               <h1 className="text-3xl font-black">UMOVA</h1>
@@ -284,8 +295,8 @@ export default function UnifiedLogin() {
               )}
             </button>
 
-            {/* Web only. Inside the phone app, fingerprint is handled by the native lock (src/security),
-                and showing the passkey button would open Android's own passkey chooser. */}
+            {/* Web only. Inside the phone app, fingerprint sign-in is <FingerprintLogin> below, and the lock
+                screen handles unlocking; showing this passkey button there would open Android's own passkey chooser. */}
             {!isNativeApp() && passkeysSupported() && (
               <button
                 type="button"
@@ -302,6 +313,17 @@ export default function UnifiedLogin() {
               </button>
             )}
           </form>
+
+          {/* Phone app only, and only after fingerprint was turned on for this phone; renders nothing otherwise. */}
+          <FingerprintLogin
+            service="finance"
+            client={supabase}
+            onSignedIn={() => {
+              setError("");
+              setSuccess("Signed in with fingerprint.");
+              setTimeout(() => navigate(location.state?.from || "/redirect", { replace: true }), 500);
+            }}
+          />
 
           <div className="mt-6 text-center text-sm text-slate-500">
             First time logging in, or forgot your password?{" "}

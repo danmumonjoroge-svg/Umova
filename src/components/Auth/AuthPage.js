@@ -13,6 +13,7 @@ import {
   Lock, User, ArrowLeft, RefreshCcw, CreditCard,
 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
+import umovaEmblem from "../../assets/brand/umova-emblem-small.png";
 
 // ─────────────────────────────────────────────
 // HELPERS
@@ -384,10 +385,10 @@ export default function AuthPage() {
 
         {/* HEADER */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 mx-auto rounded-3xl bg-green-700 flex items-center justify-center text-white mb-4 shadow-lg">
-            <Shield size={36} />
+          <div className="w-28 h-24 mx-auto flex items-center justify-center mb-3">
+            <img src={umovaEmblem} alt="Umova" className="w-full h-full object-contain" />
           </div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">SACCO ERP</h1>
+          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Umova SACCO</h1>
           <p className="text-slate-500 mt-1 text-sm">
             {mode === "login"  && "Secure Member Authentication"}
             {mode === "setup"  && "First Time Account Setup"}

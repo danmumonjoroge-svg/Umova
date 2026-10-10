@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { useChama } from "../ChamaContext";
-import { Phone, Lock, LogIn, Loader2, AlertCircle, Coins, Fingerprint } from "lucide-react";
+import { Phone, Lock, LogIn, Loader2, AlertCircle, Fingerprint } from "lucide-react";
 import { chamaPasskeys } from "./chamaPasskeys";
 import DemoLogin from "./DemoLogin";
+import umovaEmblem from "../../assets/brand/umova-emblem-small.png";
 import "./LoginPhone.css";
 
 // -----------------------------------------------------------------------------
@@ -28,7 +29,9 @@ export default function LoginPhone({ onRegisterClick, onNewChamaClick }) {
     <div className="lgp-wrapper">
       <div className="lgp-card">
         <div className="lgp-brand">
-          <span className="lgp-logo"><Coins size={20} /></span>
+          <span className="lgp-logo" style={{ background: "#fff", width: 48, height: 48, padding: 4, borderRadius: 14, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+            <img src={umovaEmblem} alt="Umova" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          </span>
           <h1>Chama ERP</h1>
         </div>
 

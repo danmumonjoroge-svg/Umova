@@ -25,6 +25,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
+import umovaEmblem from "../../assets/brand/umova-emblem-small.png";
 
 // ============================================================================
 // PASSWORD STRENGTH EVALUATOR
@@ -186,6 +187,7 @@ export default function SetPassword() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-100 via-green-50 to-slate-200 flex items-center justify-center px-4">
         <div className="text-center">
+          <img src={umovaEmblem} alt="Umova" className="h-16 mx-auto mb-4 object-contain" />
           <Loader2 className="animate-spin mx-auto text-green-700 mb-4" size={40} />
           <p className="text-slate-600 font-medium">Verifying your recovery link...</p>
         </div>
@@ -201,8 +203,8 @@ export default function SetPassword() {
       <div className="min-h-screen bg-gradient-to-br from-slate-100 via-green-50 to-slate-200 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white rounded-[30px] shadow-2xl border border-slate-200 overflow-hidden">
           <div className="bg-gradient-to-r from-green-700 to-emerald-700 p-8 text-white text-center">
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center mb-3">
-              <ShieldCheck size={32} />
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-white shadow-md flex items-center justify-center mb-3 p-1.5">
+              <img src={umovaEmblem} alt="Umova" className="w-full h-full object-contain" />
             </div>
             <h1 className="text-2xl font-black tracking-tight">Password Updated</h1>
             <p className="text-green-100 text-xs mt-1">Your credentials have been secured.</p>
@@ -271,8 +273,8 @@ export default function SetPassword() {
 
         {/* HEADER */}
         <div className="bg-gradient-to-r from-green-700 to-emerald-700 p-8 text-white text-center relative">
-          <div className="mx-auto w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center mb-3">
-            <KeyRound size={28} />
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-white shadow-md flex items-center justify-center mb-3 p-1.5">
+            <img src={umovaEmblem} alt="Umova" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-black tracking-tight">Set New Password</h1>
           <p className="text-green-100 text-xs mt-1">
