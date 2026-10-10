@@ -8,12 +8,15 @@
 //
 // Props:  service  "finance" | "business" | "chama"
 //         client   the Supabase client that service uses (supabase / posSupabase)
-//         adapter  optional (Chama): { enable(), disable() } used instead of the Supabase-backed versions
+//         adapter  optional (Chama): { enable(), disable() } used instead of the Supabase-backed versions.
+//                  If adapter.requiresPassword is set, turning ON first asks for the password (once) and calls
+//                  adapter.enable({ password }). Finance / My Business are unaffected.
 
 import React, { useCallback, useEffect, useState } from "react";
 import { checkBiometry, isNativeApp, bioMessage, BioStatus } from "./nativeBiometric";
 import { enable, disable, isEnabled } from "./deviceTrust";
 import { useAppLock } from "./AppLock";
+import { enableErrorMessage } from "./EnableBiometricPrompt";
 
 const FRIENDLY_SERVER = "Couldn't turn on fingerprint login right now. Please try again.";
 
@@ -25,6 +28,8 @@ export default function FingerprintToggle({ service, client, adapter }) {
   const [canUse, setCanUse] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [askPw, setAskPw] = useState(false);   // Chama: show the one-time password box
+  const [pw, setPw] = useState("");
 
   const load = useCallback(async () => {
     const [info, enabled] = await Promise.all([checkBiometry(), isEnabled(service)]);
@@ -44,11 +49,11 @@ export default function FingerprintToggle({ service, client, adapter }) {
 
   if (!native) return null;
 
-  const turnOn = async () => {
+  const runEnable = async (args) => {
     setBusy(true); setNote("");
-    const r = adapter?.enable ? await adapter.enable() : await enable({ service, client });
+    const r = adapter?.enable ? await adapter.enable(args) : await enable({ service, client });
     setBusy(false);
-    if (r.ok) { setOn(true); await refreshTrust(); return; }
+    if (r.ok) { setOn(true); setAskPw(false); await refreshTrust(); return; }
     if (r.status === BioStatus.CANCELLED || r.status === BioStatus.FALLBACK) {
       setNote("Fingerprint login cancelled. You can use your password instead.");
     } else if (r.status === "server_error" || r.status === "vault_error") {
@@ -56,8 +61,22 @@ export default function FingerprintToggle({ service, client, adapter }) {
     } else if (r.status === BioStatus.LOCKED_OUT) {
       setNote("Fingerprint temporarily unavailable. Please use your password.");
     } else {
-      setNote(bioMessage(r.status) || "Fingerprint login isn't available on this device. Please use your password.");
+      setNote(enableErrorMessage(r.status) || "Fingerprint login isn't available on this device. Please use your password.");
     }
+  };
+
+  // Chama asks for the password first; everyone else turns on straight away, exactly as before.
+  const turnOn = async () => {
+    if (adapter?.requiresPassword) { setNote(""); setAskPw(true); return; }
+    await runEnable(undefined);
+  };
+
+  const confirmEnable = async (e) => {
+    e.preventDefault();
+    if (!pw) return;
+    const password = pw;
+    setPw("");                                   // never keep the password around after it was used
+    await runEnable({ password });
   };
 
   const turnOff = async () => {
@@ -94,6 +113,30 @@ export default function FingerprintToggle({ service, client, adapter }) {
           <span style={{ width: 24, height: 24, borderRadius: 12, background: "#fff", display: "block" }} />
         </button>
       </div>
+      {askPw && !on && (
+        <form onSubmit={confirmEnable} style={{ marginTop: 10 }}>
+          <input
+            type="password" autoComplete="current-password" autoFocus value={pw}
+            onChange={(e) => setPw(e.target.value)} placeholder="Enter your password to confirm" disabled={busy}
+            style={{ width: "100%", height: 44, padding: "0 12px", borderRadius: 12, border: "1px solid #B8C1BB", boxSizing: "border-box" }}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button
+              type="submit" disabled={busy || !pw}
+              style={{ flex: 1, height: 40, borderRadius: 12, border: 0, background: "#237A52", color: "#fff", fontWeight: 700, opacity: busy || !pw ? 0.6 : 1 }}
+            >
+              Turn on
+            </button>
+            <button
+              type="button" disabled={busy}
+              onClick={() => { setAskPw(false); setPw(""); setNote(""); }}
+              style={{ height: 40, padding: "0 16px", borderRadius: 12, border: "1px solid #B8C1BB", background: "#fff", fontWeight: 600 }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
       {note && <p style={{ fontSize: 13, margin: "8px 0 0", color: "#8A5A00" }}>{note}</p>}
     </div>
   );

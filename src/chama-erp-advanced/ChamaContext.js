@@ -151,6 +151,25 @@ export function ChamaProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---- Step 1 (alternative): fingerprint in the phone app ----
+  // src/security/chamaDevice.js has already checked the fingerprint AND the server (chama_device_login), and hands
+  // us the same { user_id, full_name, phone_number } that authenticate_user() returns. From here it is exactly the
+  // password login: memberships, licence check, role. Fingerprint grants nothing extra.
+  const loginWithDevice = useCallback(async (verifiedUser) => {
+    setAuthBusy(true);
+    setAuthError(null);
+    try {
+      if (!verifiedUser?.user_id) throw new Error("Fingerprint sign-in failed. Use your password instead.");
+      await finishLogin(verifiedUser);
+    } catch (err) {
+      setAuthError(err.message || "Fingerprint sign-in failed. Use your password instead.");
+      setAuthStage("phone");
+    } finally {
+      setAuthBusy(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ---- Step 2: pick a chama (only shown when there are 2+) ----
   const chooseMembershipInternal = async (activeUser, membership) => {
     if (!isLicenseValid(membership)) {
@@ -254,7 +273,7 @@ export function ChamaProvider({ children }) {
   const value = {
     // auth flow
     authStage, user, memberships, authError, licenseError, authBusy,
-    loginWithPhone, loginWithPasskey, chooseMembership, backToChamaList, logout, registerUser,
+    loginWithPhone, loginWithPasskey, loginWithDevice, chooseMembership, backToChamaList, logout, registerUser,
     // active session
     chama, member, loading, setLoading,
     hasRole, api,
