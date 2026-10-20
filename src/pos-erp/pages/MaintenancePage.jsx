@@ -6,6 +6,7 @@ import { Wrench, Loader2, Plus, X, Camera } from 'lucide-react';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useUnits } from '../hooks/useProperty';
 import { maintenanceService, CATEGORIES, PRIORITIES, STATUS_LABEL, label } from '../services/maintenanceService';
+import { singleFlight } from '../utils/singleFlight';
 
 const kes = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { maximumFractionDigits: 2 })}`;
 const day = (d) => (d ? new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' }) : '—');
@@ -105,11 +106,11 @@ function Modal({ title, onClose, children }) {
 function NewJob({ units, tenant, staffId, onClose }) {
   const [f, setF] = useState({ unitId: '', description: '', category: 'PLUMBING', priority: 'NORMAL', reportedDate: new Date().toISOString().slice(0, 10) });
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
-  const submit = async () => {
+  const submit = singleFlight('MaintenancePage.submit', async () => {
     setBusy(true); setErr('');
     try { await maintenanceService.create({ tenantId: tenant.id, businessId: tenant.business_id, unit: units.find((u) => u.id === f.unitId), ...f, createdBy: staffId }); onClose(true); }
     catch (e) { setErr(e.message); setBusy(false); }
-  };
+  });
   const unit = units.find((u) => u.id === f.unitId);
   return (<Modal title="New maintenance job" onClose={onClose}>
     <select value={f.unitId} onChange={(e) => setF({ ...f, unitId: e.target.value })} className={inp}><option value="">Choose unit…</option>{units.map((u) => <option key={u.id} value={u.id}>Unit {u.unit_number}{u.customer?.name ? ` — ${u.customer.name}` : ''}</option>)}</select>

@@ -14,6 +14,7 @@ import { roomService, todayLocal, addDays, nightsBetween, formatDay } from '../s
 import { customerService } from '../services/customerService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useNetStatus } from '../offline/useNetStatus';
+import { singleFlight } from '../utils/singleFlight';
 
 const primary = 'w-full min-h-[52px] rounded-xl bg-[#237A52] hover:bg-[#1B5138] text-white font-bold disabled:opacity-50';
 const label = 'block text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-1';
@@ -49,7 +50,7 @@ export function NewStaySheet({ rooms, presetRoomId = '', onClose, onDone }) {
   const canGo = isOnline && !busy && room && guestOk && datesOk && rate > 0;
   const usable = (r) => form.mode === 'later' || ['AVAILABLE', 'RESERVED'].includes(r.display_status);
 
-  const submit = async () => {
+  const submit = singleFlight('StaySheets.submit', async () => {
     setBusy(true); setError('');
     try {
       let customerId = form.customerId;
@@ -64,7 +65,7 @@ export function NewStaySheet({ rooms, presetRoomId = '', onClose, onDone }) {
       onDone?.(stayId, { checkedIn: form.mode === 'now' });
     } catch (err) { setError(err.message || 'Could not save the stay.'); }
     finally { setBusy(false); }
-  };
+  });
 
   return (
     <Sheet title="Guest and room" onClose={onClose}>
@@ -146,14 +147,14 @@ export function ChangeStaySheet({ stay, onClose, onDone }) {
   const nights = nightsBetween(arrival, form.checkOut);
   const ok = form.checkOut > arrival && Number(form.rate) > 0;
 
-  const submit = async () => {
+  const submit = singleFlight('StaySheets.submit', async () => {
     setBusy(true); setError('');
     try {
       await roomService.update(stay.id, { checkOut: form.checkOut, rate: form.rate, notes: form.notes, checkIn: inHouse ? null : form.checkIn, by: staffId });
       onDone?.();
     } catch (err) { setError(err.message || 'Could not change the stay.'); }
     finally { setBusy(false); }
-  };
+  });
 
   return (
     <Sheet title={`Change · Room ${stay.room_number}`} onClose={onClose}>
@@ -183,14 +184,14 @@ export function CheckOutSheet({ stay, onClose, onDone }) {
   const preview = useMemo(() => roomService.previewCheckOut(stay, { chargeBooked }), [stay, chargeBooked]);
   const otherCharges = Number(stay.folio_total) - Number(stay.nights_booked) * Number(stay.rate);
 
-  const submit = async () => {
+  const submit = singleFlight('StaySheets.submit', async () => {
     setBusy(true); setError('');
     try {
       const r = await roomService.checkOut(stay.id, { chargeBooked, by: staffId });
       onDone?.(r);
       if (Number(r.folio_total) > 0) navigate(`/pos/folios?folio=${r.folio_id}&settle=1`);
     } catch (err) { setError(err.message || 'Could not check the guest out.'); setBusy(false); }
-  };
+  });
 
   return (
     <Sheet title={`Check out · Room ${stay.room_number}`} onClose={onClose}>
@@ -219,12 +220,12 @@ export function CancelStaySheet({ stay, onClose, onDone }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const submit = async () => {
+  const submit = singleFlight('StaySheets.submit', async () => {
     setBusy(true); setError('');
     try { await roomService.cancel(stay.id, reason); onDone?.(); }
     catch (err) { setError(err.message || 'Could not cancel the booking.'); }
     finally { setBusy(false); }
-  };
+  });
   return (
     <Sheet title={`Cancel booking · Room ${stay.room_number}`} onClose={onClose}>
       <p className="text-sm text-[#68756D] mb-3">{stay.customer_name} · {formatDay(stay.check_in_date)} to {formatDay(stay.expected_check_out)}</p>

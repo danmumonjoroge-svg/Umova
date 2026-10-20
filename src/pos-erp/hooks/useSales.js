@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { saleService } from '../services/saleService';
+import { reversalService } from '../services/reversalService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 
 export function useSales() {
@@ -41,11 +42,8 @@ export function useSales() {
     return result;
   }, [staffId, tenant]);
 
-  const voidSale = useCallback(async (id, reason) => {
-    const result = await saleService.voidSale(id, reason, { voidedBy: staffId });
-    setSales(prev => prev.map(s => (s.id === id ? result : s)));
-    return result;
-  }, [staffId]);
+  // Asks for a reversal; it is approved (or refused) on the Sale corrections page. Nothing changes until then.
+  const requestReversal = useCallback((id, reason) => reversalService.request(id, reason), []);
 
-  return { sales, loading, error, pagination, fetch, create, voidSale };
+  return { sales, loading, error, pagination, fetch, create, requestReversal };
 }

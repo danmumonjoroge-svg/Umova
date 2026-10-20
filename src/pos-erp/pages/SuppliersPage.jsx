@@ -19,6 +19,7 @@ import { supplierService } from "../services/supplierService";
 // file (replaces the old flat "print statement" that mixed POs into the
 // amounts).
 import SupplierStatementModal from "./SupplierStatementModal";
+import { singleFlight } from '../utils/singleFlight';
 
 export default function SuppliersPage() {
   const { suppliers, loading, error, create, update, deactivate, reactivate, fetch } = useSuppliers();
@@ -174,7 +175,7 @@ function SupplierFormModal({ initial, onClose, onSave }) {
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  const submit = async (e) => {
+  const submit = singleFlight('SuppliersPage.submit', async (e) => {
     e.preventDefault();
     if (!form.name.trim()) {
       setFormError("Supplier name is required.");
@@ -189,7 +190,7 @@ function SupplierFormModal({ initial, onClose, onSave }) {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
@@ -385,7 +386,7 @@ function RecordPaymentModal({ supplier, onClose, onRecorded }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
 
-  const submit = async (e) => {
+  const submit = singleFlight('SuppliersPage.submit', async (e) => {
     e.preventDefault();
     if (!amount || Number(amount) <= 0) {
       setErr("Enter a valid amount.");
@@ -410,7 +411,7 @@ function RecordPaymentModal({ supplier, onClose, onRecorded }) {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">

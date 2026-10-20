@@ -17,7 +17,7 @@ const PREVIEW_BUSINESS_ID = "35ee4d25-6189-4670-b9a8-32b5ef36fae4";
 const PREVIEW_BRANCH_ID = "1cada3b3-be37-4a3c-97ed-2d8c009cd604";
 
 const TABS = {
-  pos: { label: "POS / Till", Component: POSPage },
+  pos: { label: "Sell (till)", Component: POSPage },
   products: { label: "Products", Component: ProductsPage },
   goods: { label: "Goods Receiving", Component: GoodsReceivingPage },
 };

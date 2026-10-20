@@ -14,7 +14,7 @@
 //   - The catalogue is no longer capped at the first 50 items: it loads
 //     up to 500 and searches the server as you type.
 //   - Forest / Emerald / Gold styling, 44px+ touch targets.
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useProducts } from '../hooks/useProducts';
 import { useCashierShifts } from '../hooks/useCashierShifts';
 import { useCustomers } from '../hooks/useCustomers';
@@ -25,8 +25,10 @@ import { usePosErpAuth } from '../auth/usePosErpAuth';
 // still calls the existing saleService.create() when online, so nothing
 // about a normal, connected sale changes.
 import { useNetStatus } from '../offline/useNetStatus';
-import { createOfflineAwareSale } from '../offline/offlineSaleService';
-import { cacheProducts } from '../offline/offlineCache';
+import { createOfflineAwareSale, findQueuedMpesaCode } from '../offline/offlineSaleService';
+import { nextLocalId } from '../offline/idGenerator';
+import { cacheProducts, cacheValue, readCachedValue } from '../offline/offlineCache';
+import { isNetworkFailure } from '../offline/netErrors';
 // Stage 2 (M-Pesa STK) -- see AUDIT.md Phase 12 and the stage-order note
 // there. Kept to its own hook/modal so the existing CASH/CARD/CREDIT
 // checkout path above (completeSale) is completely unchanged.
@@ -41,7 +43,8 @@ import { Image as ImageIcon, Camera, Search, ArrowLeft, Minus, Plus, Loader2, Sh
 import MpesaPayPanel from '../components/MpesaPayPanel';
 import MpesaPromptModal from '../components/MpesaPromptModal';
 import { mpesaService } from '../services/mpesaService';
-import { normalizeMpesaCode, isValidMpesaCode, isWholeShillings } from '../utils/mpesa';
+import { normalizeMpesaCode, isValidMpesaCode, isWholeShillings, resolveMpesa } from '../utils/mpesa';
+import { singleFlight } from '../utils/singleFlight';
 
 const VARIABLE_MODES = ['WEIGHT', 'VOLUME', 'CUSTOM'];
 
@@ -74,8 +77,16 @@ export default function POSPage() {
   const [receiptModal, setReceiptModal] = useState(null); // { receipt, customer, isOffline } | null
   useEffect(() => {
     if (!tenant?.business_id) return;
-    settingsService.getBusinessProfile(tenant.business_id).then(setBusiness).catch(() => {});
-    settingsService.getPosSettings(tenant.business_id).then(setPosSettings).catch(() => {});
+    // Online: fetch and remember a copy. No internet: use the copy from the last online session, so offline receipts
+    // still carry the business name/logo and the payment methods the owner chose.
+    const bKey = `business:${tenant.business_id}`;
+    const sKey = `posSettings:${tenant.business_id}`;
+    settingsService.getBusinessProfile(tenant.business_id)
+      .then((b) => { setBusiness(b); cacheValue(bKey, b); })
+      .catch(() => { readCachedValue(bKey).then((b) => { if (b) setBusiness(b); }); });
+    settingsService.getPosSettings(tenant.business_id)
+      .then((v) => { setPosSettings(v); cacheValue(sKey, v); })
+      .catch(() => { readCachedValue(sKey).then((v) => { if (v) setPosSettings(v); }); });
   }, [tenant?.business_id]);
   const [mpesaPhone, setMpesaPhone] = useState('');
   const [showMpesaModal, setShowMpesaModal] = useState(false);
@@ -98,10 +109,8 @@ export default function POSPage() {
       .catch(() => { if (alive) setMpesaConfig(null); });
     return () => { alive = false; };
   }, [tenant?.business_id, isOnline]);
-  const stkConfigured = !!(mpesaConfig?.is_active && mpesaConfig.has_consumer_key && mpesaConfig.has_consumer_secret && mpesaConfig.has_passkey);
-  const stkStatus = !isOnline ? 'offline' : mpesaConfig === undefined ? 'checking' : stkConfigured ? 'ready' : 'not_setup';
-  // When a prompt isn't possible the till quietly uses "Already paid".
-  const effectiveMpesaMode = stkStatus === 'ready' ? mpesaMode : 'MANUAL';
+  // "Already paid" (type the SMS code) always works: no setup, no internet. Only "Send prompt" needs both.
+  const { stkStatus, effectiveMode: effectiveMpesaMode } = resolveMpesa({ isOnline, config: mpesaConfig, chosenMode: mpesaMode });
 
   // Payment methods follow Settings (default: all four).
   const enabledMethods = (() => {
@@ -455,6 +464,13 @@ export default function POSPage() {
   // owner can review it on the M-Pesa page once it syncs. A failed lookup
   // never blocks a real sale.
   const codeAlreadyUsed = async (code) => {
+    // Same phone, still waiting to be sent: catches the same SMS code typed on two offline sales (works with no internet).
+    try {
+      if (await findQueuedMpesaCode(code, tenant?.id)) {
+        setSaleError(`M-Pesa code ${code} was already used on a sale saved on this phone. Check the buyer's SMS.`);
+        return true;
+      }
+    } catch (err) { console.error('[POS] queued M-Pesa code check failed (sale not blocked):', err); }
     if (!isOnline || !tenant?.business_id) return false;
     try {
       if (await mpesaService.isCodeUsed(tenant.business_id, code)) {
@@ -467,7 +483,8 @@ export default function POSPage() {
     return false;
   };
 
-  const completeSale = async () => {
+  const checkoutRef = useRef(null); // { sig, ref }: idempotency key for the checkout in progress
+  const completeSale = singleFlight('POSPage.completeSale', async () => {
     if (!activeShift) { alert('Open a shift first'); return; }
     if (cart.length === 0) return;
     setSaleError('');
@@ -581,8 +598,13 @@ export default function POSPage() {
       // Stage 1B: goes through saleService.create() when online (identical
       // to before this change) or the offline queue when it isn't. See
       // offlineSaleService.js's header for the three possible outcomes.
-      const fullSale = { ...sale, tenant_id: tenant?.id, business_id: tenant?.business_id ?? null, cashier_id: staffId };
+      // One key per distinct checkout. A retry of the SAME cart/payment (after an error or a lost reply)
+      // reuses it, so the server can tell it is the same sale and not post it twice.
+      const sig = JSON.stringify([sale.items, sale.payments, sale.customer_id, sale.folio_id, sale.shift_id]);
+      if (checkoutRef.current?.sig !== sig) checkoutRef.current = { sig, ref: await nextLocalId('SALE') };
+      const fullSale = { ...sale, client_reference: checkoutRef.current.ref, tenant_id: tenant?.id, business_id: tenant?.business_id ?? null, cashier_id: staffId };
       const result = await createOfflineAwareSale(fullSale, { isOnline });
+      checkoutRef.current = null; // sale is recorded: the next checkout gets a new key
       const selectedCustomer = customers.find(c => c.id === selectedCustomerId) || null;
       setCart([]); setCustomerAmount(''); setSearch(''); setSelectedCustomerId('');
       setSplitPayments([]); setSplitMode(false); setMpesaCode(''); setMobileView('items');
@@ -622,9 +644,9 @@ export default function POSPage() {
     } catch (err) {
       setSaleError(err.message || 'Failed to complete sale.');
     }
-  };
+  });
 
-  const submitCloseShift = async (e) => {
+  const submitCloseShift = singleFlight('POSPage.submitCloseShift', async (e) => {
     e.preventDefault();
     setCloseError('');
     if (closeActualCash === '' || Number(closeActualCash) < 0) {
@@ -643,11 +665,13 @@ export default function POSPage() {
       setCloseActualCash('');
       setCloseFloat('');
     } catch (err) {
-      setCloseError(err.message || 'Failed to close shift.');
+      setCloseError(isNetworkFailure(err)
+        ? 'Closing a shift needs internet, so the cash total is worked out from every sale. You can keep selling; close the shift when you are back online.'
+        : (err.message || 'Failed to close shift.'));
     } finally {
       setClosing(false);
     }
-  };
+  });
 
   const cartCount = cart.reduce((n, i) => n + (VARIABLE_MODES.includes(i.selling_mode) ? 1 : i.quantity), 0);
   const isMpesaSingle = !folioMode && !splitMode && paymentMethod === 'MOBILE_MONEY';

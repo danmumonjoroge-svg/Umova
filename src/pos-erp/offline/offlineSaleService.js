@@ -29,6 +29,7 @@ import { db } from './db';
 import { nextLocalId } from './idGenerator';
 import { saleService } from '../services/saleService';
 import { decrementCachedStock, searchCachedProducts } from './offlineCache';
+import { isNetworkFailure } from './netErrors';
 
 function computeTotals(items) {
   const subtotal = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
@@ -67,11 +68,19 @@ async function checkCachedStock(items) {
  *   becomes unstable").
  */
 export async function createOfflineAwareSale(sale, { isOnline }) {
+  // ONE idempotency key for this sale, used by the online attempt AND the offline fallback. If the online
+  // call actually reached the server but the reply was lost, the queued copy carries the same key, so
+  // when it syncs the server recognises it and does not create a second sale (saleService.create checks
+  // client_reference first). Before this, the online path sent no key at all.
+  const clientReference = sale.client_reference || await nextLocalId('SALE');
+  sale = { ...sale, client_reference: clientReference };
   if (isOnline) {
     try {
       return { ...(await saleService.create(sale)), _offlineStatus: 'SYNCED' };
     } catch (err) {
-      const looksOffline = err?.name === 'TypeError' && /fetch|network/i.test(err.message || '');
+      // supabase-js reports a dropped connection as a plain error whose MESSAGE says "Failed to fetch" (its name is not
+      // "TypeError"), so the check is on the message -- see netErrors.js.
+      const looksOffline = isNetworkFailure(err);
       if (!looksOffline) throw err; // a REAL rejection (bad data, RLS, insufficient stock server-side) -- surface it, don't silently queue a sale that's actually invalid
       // else fall through to the offline path below
     }
@@ -92,16 +101,19 @@ export async function createOfflineAwareSale(sale, { isOnline }) {
     throw new Error('A sale charged to a folio needs the customer and takes no payment now.');
   }
 
-  const clientReference = await nextLocalId('SALE');
   const totals = computeTotals(sale.items);
-  const payload = { ...sale, client_reference: clientReference };
+  // completed_at is the moment of the SALE, not of the upload: a sale made yesterday and sent today must still
+  // land on yesterday's takings and daily closing.
+  const soldAt = new Date().toISOString();
+  const payload = { ...sale, client_reference: clientReference, completed_at: soldAt };
 
   await db.outbox.add({
     kind: 'sale',
     status: 'PENDING',
     clientReference,
+    tenantId: sale.tenant_id ?? null,
     payload,
-    createdAt: new Date().toISOString(),
+    createdAt: soldAt,
   });
 
   for (const item of sale.items) {
@@ -131,8 +143,22 @@ export async function createOfflineAwareSale(sale, { isOnline }) {
     customer_id: sale.customer_id ?? null,
     items: sale.items,
     payments: sale.payments,
-    completed_at: new Date().toISOString(),
+    completed_at: soldAt,
   };
+}
+
+/**
+ * Is this M-Pesa code already on a sale saved on THIS phone that the server has not accepted yet? (Offline the server cannot
+ * be asked, so this is the only guard against typing one SMS code on two sales.) Sent sales are covered by the server check.
+ */
+export async function findQueuedMpesaCode(code, tenantId) {
+  const want = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!want) return false;
+  const rows = await db.outbox.where('status').anyOf('PENDING', 'SYNCING', 'FAILED').toArray();
+  return rows.some((r) => r.kind === 'sale'
+    && (!tenantId || !r.tenantId || r.tenantId === tenantId)
+    && (r.payload?.payments || []).some((p) => p.payment_method === 'MOBILE_MONEY'
+      && String(p.reference_no || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === want));
 }
 
 export { searchCachedProducts };

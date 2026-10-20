@@ -39,7 +39,7 @@ export const cashierService = {
   async openShift(shift) {
     const { data, error } = await supabase
       .from(SHIFTS_TABLE)
-      .insert({ ...shift, opened_at: new Date().toISOString() })
+      .insert({ opened_at: new Date().toISOString(), ...shift }) // a shift opened offline keeps the time (and id) it was really opened with
       .select()
       .single();
     if (error) throw error;

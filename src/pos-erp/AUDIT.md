@@ -1961,3 +1961,31 @@ Added `phase23_packages.sql` (packages, components, folio-line package columns, 
 
 ## Phases 25-26 (hospitality upgrade, Phase 8 + leftovers): Unified receipts, reversal
 `phase25_unified_receipts.sql` (till sales keep the product category on the guest's bill), `phase26_production_reverse.sql` (reverse a posted run once, with a reason). Invoice/receipt/bill now read as one account: Room, Food, Drinks, Items, Services, Activities, each package as one block, discounts, payment (`folioService.sections`, `folioDocument.js`). Folio settlement now records the open till shift. Customer statement lists the customer's bills and stays. Login, auth and tenant isolation untouched. See PHASE8_NOTES.md.
+
+---
+
+## Phase 27 (branding, Priority 1): My Business naming and per-business logo
+Logo manager (`BusinessBrandingCard`, `utils/logoImage.js`), fixed the broken logo save, business header on customer/supplier statements (`utils/businessHeader.js`), sidebar stale-logo fix, POS -> "My Business" wording. Interim UI-only role gate on Settings (NOT a security control). `phase27_business_branding.sql` (bucket size/type limits) is NOT deployed. Role/permission enforcement, reversals, reconciliation and HR are not started — see MY_BUSINESS_BRANDING_PLAN.md.
+
+---
+
+## Phase 28 (Priority 2): owner control on top of the EXISTING permission system (reworked)
+First version duplicated a permission system the live database already has (found when it failed with 42P13 on `pos_has_permission(p_perm)`). Rewritten after reading the live definitions: `phase28_staff_permissions.sql` now only adds token helpers `pos28_staff_id/tenant_id`, `pos_my_access()`, extra `settings.manage` checks on `lb_businesses` for columns the existing `guard_business_identity()` misses, a restrictive logo-bucket policy (older permissive `_own` policies bypass settings.manage), and append-only audit for staff. It creates no table and redefines no function. Phases 29-32 and the app now use the live keys (refunds.request/approve, finance.view, payments.approve, employees.manage, payroll.access, audit.view, settings.manage). Tested on scratch Postgres 16 with copies of the live functions (37 checks). Live finding: `pos_guard_sale_update` is not attached to `lb_sales`, so direct voids are currently possible; phase 29 blocks them. NOT deployed.
+---
+
+## Phase 29 (Priority 3): Sale reversals with approval and audit
+`phase29_sale_reversals.sql` (NOT deployed, needs phase28): request -> approve/refuse -> one atomic reversal (sale VOIDED, stock back, credit balance reduced by what the ledger shows the sale added, payments marked refunded, audit row). One live request per sale, sale row locked, so a sale cannot be reversed twice. Staff sessions can no longer set a sale to VOIDED, delete finished sales, or edit/delete payment rows directly. `saleService.voidSale` (client-side, unsafe) removed; folio-failure rollback uses `pos_rollback_new_sale`. New Sale corrections page. Tested on scratch Postgres: 65 checks, plus a variant where lb_payments.status refuses REFUNDED/VOIDED/CANCELLED (reversal still works, with a warning). Not automated: paying M-Pesa/card money back, cash paid out on a later day, folio-charged sales (refused; remove the folio line), partial refunds (lb_refunds unconfirmed).
+
+---
+
+## Double posting fix (after Phase 29)
+Reported: picking one item posted two transactions on a folio; stock adds/subtractions also posted twice. Root cause found in the app: `POSPage.completeSale` had NO in-flight guard and sent NO idempotency key on the online path, and ~35 other save buttons relied only on a React state flag (`setBusy(true)`), which is asynchronous: two taps within milliseconds both ran. For a sale that is two sales, each with its own stock movements and folio lines. The database was checked and is NOT the cause for folio posting: `post_sale_to_folio` posted twice for one sale gives one line, and a repeated folio charge key gives one line.
+Fix: `utils/singleFlight.js` (synchronous guard) wrapped around 39 handlers (sale checkout, close shift, stock adjust, folio add/settle/open, goods receiving, customer payment, expenses, purchase orders, production, stays, sale corrections, and more); one idempotency key per checkout shared by the online attempt and the offline fallback (so a lost reply no longer creates a second sale on sync); an idempotency key on folio charges. Stock adjustments rely on the guard only (no server key exists for lb_stock_movements). NOT verified: whether the live database has triggers that also post stock/folio lines (run schema/diagnostics/find_double_posting.sql). Existing duplicates already in your data are not fixed automatically.
+
+## Phases 30-32 (Priorities 4-6): reconciliation, HR and payroll, control report
+Tested on a scratch Postgres 16 only, against copies of the live permission functions (26 + 65 + 25 + 110 + 28 database checks, 6 JS check suites, tsc scan with no real errors). Not tested on live Supabase or in a browser. Role enforcement for sales, expenses, stock and cash tables is still not in the database; page guards cover navigation routes only. Statutory rates are partly unverified (see DEPLOYMENT_NOTES section 12).
+
+---
+
+## Offline mode, Module 1: POS
+Full-offline pass over the till (see OFFLINE_MODE.md). Added app-shell service worker, saved sign-in (14-day grace, erased on sign-out, never stores secrets), offline shifts (queued, sent before their sales; closing still needs internet), stock/customer/settings/permission caches, offline barcode lookup, a "Saved on this phone" screen (retry / set aside, nothing deleted), and a "this page needs internet" gate. Fixed: network errors misread as refusals, stranded SYNCING rows, concurrent senders, cache wipe on refresh, sale time recorded as upload time, offline sales rejected on stock. Auth touched (required: otherwise the app cannot open offline) — changes are additive in `POSAuthContext.validate`. No schema change. Tested on a Dexie stand-in (60 checks) + real Chromium for the worker; not tested on real Dexie, a browser build, or live Supabase. Chama and Finance modules not started.

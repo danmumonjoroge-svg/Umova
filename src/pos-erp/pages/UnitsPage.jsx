@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { Home, Loader2, Plus, X } from 'lucide-react';
 import { useUnits } from '../hooks/useProperty';
 import { useCustomers } from '../hooks/useCustomers';
+import { singleFlight } from '../utils/singleFlight';
 
 const EMPTY_FORM = { unit_number: '', rent_amount: '', customer_id: '' };
 
@@ -24,7 +25,7 @@ export default function UnitsPage() {
   const [saving, setSaving] = useState(false);
   const [assigningId, setAssigningId] = useState(null);
 
-  const submit = async (e) => {
+  const submit = singleFlight('UnitsPage.submit', async (e) => {
     e.preventDefault();
     setFormError('');
     if (!form.unit_number.trim()) { setFormError('Enter a unit number.'); return; }
@@ -42,7 +43,7 @@ export default function UnitsPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   return (
     <div className="p-8 max-w-5xl mx-auto">

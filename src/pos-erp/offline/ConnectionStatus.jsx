@@ -22,19 +22,39 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useNetStatus } from './useNetStatus';
-import { runSync, countPending } from './syncEngine';
+import { runSync, countPending, needsSignIn } from './syncEngine';
 import { db } from './db';
+import OfflineQueuePanel from './OfflineQueuePanel';
+import { useWarmPosCache } from './warmCache';
+import { usePosErpAuth } from '../auth/usePosErpAuth';
+import { usePermissions } from '../navigation/PermissionsContext';
+import { ROUTE_PERMISSIONS } from '../navigation/navConfig';
 
-const salesWord = (n) => `${n} sale${n === 1 ? '' : 's'}`;
+// The count is mostly sales; a shift opened offline is also queued, so say "items" only when something else is in the mix.
+let wordForItems = 'sale';
+const salesWord = (n) => `${n} ${wordForItems}${n === 1 ? '' : 's'}`;
 
 export default function ConnectionStatus() {
   const { isOnline, pendingCount, refreshPendingCount } = useNetStatus();
+  const { tenant } = usePosErpAuth();
+  const [showPanel, setShowPanel] = useState(false);
+  const [signInNeeded, setSignInNeeded] = useState(false);
+  // Keep the phone's offline copy (items, stock, customers, settings) fresh while there is internet.
+  const { canAny, loaded: permsLoaded } = usePermissions();
+  // only copy to this phone what this person is allowed to look at (screens use the same permission lists as the menu)
+  useWarmPosCache({ isOnline, tenant, allow: permsLoaded ? { retail: canAny(ROUTE_PERMISSIONS.inventory), money: canAny(ROUTE_PERMISSIONS.expenses) } : { retail: false, money: false } });
+  // (until the permission list has loaded nothing extra is copied; the till's own data is unaffected)
   const [phase, setPhase] = useState('idle'); // 'idle' | 'syncing' | 'justUpdated'
   const [syncingCount, setSyncingCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
 
   const refreshFailed = useCallback(async () => {
-    try { setFailedCount(await db.outbox.where('status').equals('FAILED').count()); } catch { /* Dexie not ready yet */ }
+    try {
+      setFailedCount(await db.outbox.where('status').equals('FAILED').count());
+      const unsent = await db.outbox.where('status').anyOf('PENDING', 'SYNCING', 'FAILED').toArray();
+      wordForItems = unsent.every(r => r.kind === 'sale') ? 'sale' : 'item';
+      setSignInNeeded(await needsSignIn());
+    } catch { /* Dexie not ready yet */ }
   }, []);
 
   const trySync = useCallback(async () => {
@@ -43,7 +63,7 @@ export default function ConnectionStatus() {
     if (pendingNow === 0) { refreshFailed(); return; }
     setSyncingCount(pendingNow);
     setPhase('syncing');
-    const result = await runSync();
+    const result = await runSync({ tenantId: tenant?.id });
     await refreshPendingCount();
     await refreshFailed();
     if (!result.skipped && result.synced > 0) {
@@ -52,9 +72,15 @@ export default function ConnectionStatus() {
     } else {
       setPhase('idle');
     }
-  }, [isOnline, refreshPendingCount, refreshFailed]);
+  }, [isOnline, refreshPendingCount, refreshFailed, tenant?.id]);
 
   useEffect(() => { trySync(); }, [isOnline, trySync]);
+  // Also send when the phone is picked up again (tab shown) -- a till left in a pocket may have regained signal.
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') trySync(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [trySync]);
 
   // Keep the "N sales saved" count live while OFFLINE too. Nothing else
   // refreshes it then (trySync only runs online), so without this the
@@ -111,6 +137,15 @@ export default function ConnectionStatus() {
         )}
       </>
     );
+  } else if (signInNeeded && waiting > 0) {
+    dot = 'bg-red-500';
+    tone = 'bg-red-50 text-red-700 border-red-200';
+    content = (
+      <>
+        <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+        <span>Sign in again<span className="hidden sm:inline"> to send {salesWord(waiting)}</span></span>
+      </>
+    );
   } else if (failedCount > 0) {
     dot = 'bg-red-500';
     tone = 'bg-red-50 text-red-700 border-red-200';
@@ -145,12 +180,25 @@ export default function ConnectionStatus() {
   }
 
   return (
-    <span
-      role="status"
-      aria-live="polite"
-      className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full border whitespace-nowrap shrink-0 ${tone}`}
-    >
-      {content}
-    </span>
+    <>
+      <button
+        type="button"
+        onClick={() => setShowPanel(true)}
+        role="status"
+        aria-live="polite"
+        aria-label="Connection status. Tap to see what is saved on this phone."
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full border whitespace-nowrap shrink-0 ${tone}`}
+      >
+        {content}
+      </button>
+      {showPanel && (
+        <OfflineQueuePanel
+          onClose={() => setShowPanel(false)}
+          isOnline={isOnline}
+          busy={phase === 'syncing'}
+          onSendNow={trySync}
+        />
+      )}
+    </>
   );
 }

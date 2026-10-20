@@ -22,12 +22,16 @@ import React, { useMemo, useState } from 'react';
 import { X, Printer, Loader2 } from 'lucide-react';
 import { useSupplierDetail } from '../hooks/useSuppliers';
 import { printDocument, escapeHtml } from '../utils/printDocument';
+import { usePosErpAuth } from '../auth/usePosErpAuth';
+import { settingsService } from '../services/settingsService';
+import { businessHeaderHtml } from '../utils/businessHeader';
 
 const fmt = (n) => (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const day = (d) => new Date(d).toLocaleDateString();
 const ts = (d) => new Date(d).getTime();
 
 export default function SupplierStatementModal({ supplier, onClose }) {
+  const { tenant } = usePosErpAuth();
   const { grns, payments, returns, loading, error } = useSupplierDetail(supplier.id);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -82,7 +86,9 @@ export default function SupplierStatementModal({ supplier, onClose }) {
   const periodLabel = from || to ? `${from ? day(from) : 'Start'} – ${to ? day(to) : 'Today'}` : 'All activity';
   const showBF = Math.abs(view.opening) > 0.005;
 
-  const print = () => {
+  const print = async () => {
+    // the statement is FROM the active business: its own logo, name and contact details (nothing if they cannot be loaded, e.g. offline)
+    const biz = await settingsService.getBusinessProfile(tenant?.business_id).catch(() => null);
     const rowsHtml = view.rows.map(r => `
       <tr>
         <td>${day(r.date)}</td><td>${escapeHtml(r.ref || '')}</td><td>${escapeHtml(r.desc)}</td>
@@ -93,12 +99,13 @@ export default function SupplierStatementModal({ supplier, onClose }) {
 
     try {
       printDocument(`Statement — ${supplier.name}`, `
-        <div class="center bold" style="font-size:16px;">${escapeHtml(supplier.name)}</div>
-        <div class="center muted">${[supplier.phone, supplier.email].filter(Boolean).map(escapeHtml).join(' · ')}</div>
-        ${supplier.address ? `<div class="center muted">${escapeHtml(supplier.address)}</div>` : ''}
+        ${businessHeaderHtml(biz)}
         <div class="divider"></div>
         <div class="center bold" style="font-size:14px;">Supplier Statement</div>
         <div class="center muted">${escapeHtml(periodLabel)} · printed ${new Date().toLocaleDateString()}</div>
+        <div style="margin-top:6px;">Supplier:<br/><span class="bold">${escapeHtml(supplier.name)}</span></div>
+        <div class="muted">${[supplier.phone, supplier.email].filter(Boolean).map(escapeHtml).join(' · ')}</div>
+        ${supplier.address ? `<div class="muted">${escapeHtml(supplier.address)}</div>` : ''}
         <div class="divider"></div>
         <table class="sum">
           <tr><td>Opening balance</td><td class="right">${fmt(view.opening)}</td></tr>

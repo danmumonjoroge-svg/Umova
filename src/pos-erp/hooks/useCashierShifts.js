@@ -18,6 +18,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cashierService } from '../services/cashierService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
+// Offline mode: the till can find, open and keep selling on a shift with no internet. See offline/offlineShift.js.
+import { isNetworkFailure } from '../offline/netErrors';
+import { cacheActiveShift, getCachedActiveShift, queueShiftOpen, unsentForShift } from '../offline/offlineShift';
 
 function generateShiftNumber(tenant) {
   const now = new Date();
@@ -34,23 +37,48 @@ export function useCashierShifts() {
 
   const fetch = useCallback(async () => {
     setLoading(true);
-    const data = await cashierService.getShifts();
-    setShifts(data || []);
-    setActiveShift(data?.find(s => s.status === 'OPEN' && s.cashier_id === staffId) || null);
-    setLoading(false);
+    try {
+      const data = await cashierService.getShifts();
+      let active = data?.find(s => s.status === 'OPEN' && s.cashier_id === staffId) || null;
+      // A shift opened offline that the server does not have yet is still the active one.
+      if (!active) {
+        const cached = await getCachedActiveShift(staffId);
+        if (cached?._local && cached.status === 'OPEN' && !data?.some(s => s.id === cached.id)) active = cached;
+      }
+      setShifts(data || []);
+      setActiveShift(active);
+      await cacheActiveShift(staffId, active); // remembered for the next time the phone has no internet
+    } catch (err) {
+      if (!isNetworkFailure(err)) { console.error('[useCashierShifts] fetch failed:', err); }
+      // No internet: carry on with the shift this phone last knew about, so selling is not blocked.
+      const cached = await getCachedActiveShift(staffId);
+      if (cached?.status === 'OPEN') { setActiveShift(cached); setShifts((prev) => (prev.length ? prev : [cached])); }
+    } finally {
+      setLoading(false);
+    }
   }, [staffId]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
   const openShift = useCallback(async (openingFloat) => {
-    const result = await cashierService.openShift({
-      cashier_id: staffId,
-      tenant_id: tenant?.id,
-      business_id: tenant?.business_id ?? null,
-      shift_number: generateShiftNumber(tenant),
-      opening_float: openingFloat,
-      status: 'OPEN'
-    });
+    const shift_number = generateShiftNumber(tenant);
+    let result;
+    try {
+      if (isNetworkFailure(null)) throw new Error('Failed to fetch'); // phone says it has no connection: do not wait for a timeout
+      result = await cashierService.openShift({
+        cashier_id: staffId,
+        tenant_id: tenant?.id,
+        business_id: tenant?.business_id ?? null,
+        shift_number,
+        opening_float: openingFloat,
+        status: 'OPEN'
+      });
+      await cacheActiveShift(staffId, result);
+    } catch (err) {
+      if (!isNetworkFailure(err)) throw err; // a real refusal is shown to the cashier as before
+      // No internet: open the shift on this phone. It is sent to the server first, before the sales that use it.
+      result = await queueShiftOpen({ tenant, staffId, openingFloat, shiftNumber: shift_number });
+    }
     setActiveShift(result);
     setShifts(prev => [result, ...prev]);
     return result;
@@ -58,11 +86,18 @@ export function useCashierShifts() {
 
   const closeShift = useCallback(async (actualCash, closingFloat, notes) => {
     if (!activeShift) return;
+    // The server works out the expected cash from the sales IT has received, so every sale (and the shift itself) must
+    // be sent first -- otherwise the figure would look fine while real sales were missing from it.
+    const waiting = await unsentForShift(activeShift.id);
+    if (waiting > 0) {
+      throw new Error(`${waiting} saved item${waiting === 1 ? ' is' : 's are'} still waiting to be sent. Connect to the internet and wait for "Online · Up to date", then close the shift.`);
+    }
     const result = await cashierService.closeShift(activeShift.id, { actualCash, closingFloat, notes });
     setActiveShift(null);
+    await cacheActiveShift(staffId, null);
     setShifts(prev => prev.map(s => s.id === result.id ? result : s));
     return result;
-  }, [activeShift]);
+  }, [activeShift, staffId]);
 
   // FIXED: was never stamping business_id — see the fuller explanation in
   // schema/phase4_daily_closing_cash_fix.sql, which fixes the matching

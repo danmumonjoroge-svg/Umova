@@ -12,6 +12,7 @@ import App from "./App";
 import { AuthProvider } from "./Context/AuthContext";
 import { ChamaProvider } from "./chama-erp-advanced/ChamaContext";
 import "./index.css";
+import { registerServiceWorker } from "./offline/registerServiceWorker";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 
@@ -27,3 +28,6 @@ root.render(
     </AuthProvider>
   </BrowserRouter>
 );
+
+// Offline mode: lets the app open with no internet (see src/offline/registerServiceWorker.js and public/service-worker.js).
+registerServiceWorker();

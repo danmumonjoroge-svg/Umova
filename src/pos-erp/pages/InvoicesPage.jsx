@@ -9,6 +9,7 @@ import { templateService, communicationLogService, whatsappService, renderTempla
 import { mpesaService } from '../services/mpesaService';
 import { useMpesaPayment } from '../hooks/useMpesaPayment';
 import { normalizeMpesaCode, isValidMpesaCode, isWholeShillings } from '../utils/mpesa';
+import { singleFlight } from '../utils/singleFlight';
 
 const kes = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { maximumFractionDigits: 2 })}`;
 const day = (d) => (d ? new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
@@ -34,7 +35,7 @@ export default function InvoicesPage() {
   }, [businessId, month]);
   useEffect(() => { load(); }, [load]);
 
-  const generate = async () => {
+  const generate = singleFlight('InvoicesPage.generate', async () => {
     setBusy(true); setMsg(null);
     try {
       const r = await invoiceService.generateMonthly({ businessId, period: `${month}-01`, createdBy: staffId });
@@ -42,7 +43,7 @@ export default function InvoicesPage() {
       await load();
     } catch (e) { setMsg({ kind: 'err', text: e.message }); }
     setBusy(false);
-  };
+  });
 
   const live = rows.filter((r) => r.display_status !== 'CANCELLED');
   const totals = useMemo(() => ({

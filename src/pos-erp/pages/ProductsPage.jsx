@@ -23,6 +23,7 @@ import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { checkBarcodeAvailable } from '../services/productResolverService';
 import { productService } from '../services/productService';
 import { Image as ImageIcon } from 'lucide-react';
+import { singleFlight } from '../utils/singleFlight';
 
 const EMPTY_FORM = {
   name: '', sku: '', barcode: '', selling_price: '', cost_price: '',
@@ -82,7 +83,7 @@ export default function ProductsPage() {
     setShowForm(true);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = singleFlight('ProductsPage.handleSubmit', async (e) => {
     e.preventDefault();
     setFormError('');
 
@@ -120,7 +121,7 @@ export default function ProductsPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   const handleImageChange = async (e) => {
     const file = e.target.files?.[0];

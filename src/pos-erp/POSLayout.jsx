@@ -29,27 +29,36 @@ import { settingsService } from "./services/settingsService";
 import POSTopbar from "./POSTopbar";
 import BottomNav from "./components/BottomNav";
 import { CapabilitiesProvider, useCapabilities } from "./navigation/CapabilitiesContext";
+import { PermissionsProvider, usePermissions } from "./navigation/PermissionsContext";
 import { resolveLocation, visibleModules } from "./navigation/navConfig";
 import { LogOut, Store, X } from "lucide-react";
+import OfflinePageGate from "./offline/OfflinePageGate";
+import { readCachedValue } from "./offline/offlineCache";
 
 function Shell() {
-  const { staffName, role, tenant, logout } = usePosErpAuth();
+  const { staffName, role, tenant, logout, offlineSession } = usePosErpAuth();
   const location = useLocation();
   const { count: notificationCount } = useNotifications();
   const { enabled } = useCapabilities();
+  const { canAny } = usePermissions();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState(null);
 
   useEffect(() => {
+    setLogoUrl(null); // never keep the previous business's logo while this one loads (or if it cannot load)
     if (!tenant?.business_id) return;
-    settingsService.getBusinessProfile(tenant.business_id).then((p) => setLogoUrl(p?.logo_url || null)).catch(() => {});
+    let current = true;
+    settingsService.getBusinessProfile(tenant.business_id).then((p) => { if (current) setLogoUrl(p?.logo_url || null); })
+      // no internet: use the details saved on this phone (see offline/warmCache.js)
+      .catch(() => readCachedValue(`business:${tenant.business_id}`).then((p) => { if (current && p) setLogoUrl(p.logo_url || null); }));
+    return () => { current = false; };
   }, [tenant?.business_id]);
 
   // Close the drawer whenever the route changes (only ever visible below md).
   useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
 
   const loc = resolveLocation(location.pathname);
-  const modules = visibleModules(enabled);
+  const modules = visibleModules(enabled, canAny);
   const title = loc.page?.label || loc.module?.label
     || (location.pathname.startsWith("/pos/communication") ? "Notifications" : "My Business");
   const parent = loc.page && loc.module ? { label: loc.module.label, to: loc.module.to } : null;
@@ -130,8 +139,13 @@ function Shell() {
         </div>
         {/* Bottom padding on phones keeps the last of every page clear of
             the fixed bottom bar (plus the device's safe-area inset). */}
+        {offlineSession && (
+          <div className="print:hidden bg-[#C6A15B]/15 text-[#7a5f1f] text-xs font-semibold px-4 py-1.5 text-center border-b border-[#C6A15B]/30">
+            Working offline as {staffName || "staff"}. Your sign-in is checked again when the internet returns.
+          </div>
+        )}
         <main className="flex-1 min-w-0 overflow-y-auto pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:pb-0 print:overflow-visible print:pb-0">
-          <Outlet />
+          <OfflinePageGate><Outlet /></OfflinePageGate>
         </main>
       </div>
 
@@ -142,8 +156,10 @@ function Shell() {
 
 export default function POSLayout() {
   return (
-    <CapabilitiesProvider>
-      <Shell />
-    </CapabilitiesProvider>
+    <PermissionsProvider>
+      <CapabilitiesProvider>
+        <Shell />
+      </CapabilitiesProvider>
+    </PermissionsProvider>
   );
 }

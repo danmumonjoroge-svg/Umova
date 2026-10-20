@@ -13,6 +13,7 @@ import { useNetStatus } from '../offline/useNetStatus';
 import { WorkspacePage, kes } from '../components/workspace/WorkspaceKit';
 import Sheet, { fieldClass as field } from '../components/workspace/Sheet';
 import { todayLocal, formatDay } from '../services/roomService';
+import { singleFlight } from '../utils/singleFlight';
 
 const num = (n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const lab = 'block text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-1';
@@ -25,11 +26,11 @@ function StartSheet({ recipes, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const r = recipes.find((x) => x.id === form.recipeId);
-  const go = async () => {
+  const go = singleFlight('ProductionPage.go', async () => {
     setBusy(true); setError('');
     try { onDone(await productionService.startRun({ recipeId: form.recipeId, plannedQuantity: form.qty, runDate: form.date, createdBy: staffId })); }
     catch (err) { setError(err.message || 'Could not start the run.'); setBusy(false); }
-  };
+  });
   return (
     <Sheet title="Start production" onClose={onClose}>
       <div className="space-y-3">
@@ -82,7 +83,7 @@ function ResultSheet({ runId, onClose, onPosted }) {
   const allIn = run.inputs.every((i) => inp[i.product_id] !== '' && Number(inp[i.product_id]) >= 0);
   const changedInputs = run.inputs.filter((i) => Number(inp[i.product_id]) !== Number(i.planned_quantity));
 
-  const post = async () => {
+  const post = singleFlight('ProductionPage.post', async () => {
     setBusy(true); setError('');
     try {
       const r = await productionService.postRun({
@@ -93,7 +94,7 @@ function ResultSheet({ runId, onClose, onPosted }) {
       setResult(r); onPosted();
     } catch (err) { setError(err.message || 'Could not post the run.'); }
     finally { setBusy(false); }
-  };
+  });
 
   if (result) {
     const dearer = Number(result.cost_per_actual_unit) > Number(result.cost_per_expected_unit) + 0.005;

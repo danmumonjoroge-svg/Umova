@@ -14,6 +14,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supplierService } from '../services/supplierService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
+import { readThrough } from '../offline/readThrough';
 
 export function useSuppliers() {
   const { staffId, tenant } = usePosErpAuth();
@@ -21,12 +22,15 @@ export function useSuppliers() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({ count: 0, page: 1, limit: 50 });
+  const [copyInfo, setCopyInfo] = useState({ fromCache: false, savedAt: null, complete: true }); // saved copy from this phone?
 
   const fetch = useCallback(async (params = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await supplierService.getAll(params);
+      const rt = await readThrough('suppliers', () => supplierService.getAll(params), { tenantId: tenant?.id, params, searchFields: ['name'], where: (r, p) => !p.activeOnly || r.is_active === true });
+      const result = rt.result;
+      setCopyInfo({ fromCache: rt.fromCache, savedAt: rt.savedAt, complete: rt.complete });
       setSuppliers(result.data || []);
       setPagination({ count: result.count || 0, page: result.page || 1, limit: result.limit || 50 });
     } catch (err) {
@@ -36,7 +40,7 @@ export function useSuppliers() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenant?.id]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -69,7 +73,7 @@ export function useSuppliers() {
     return result;
   }, []);
 
-  return { suppliers, loading, error, pagination, fetch, create, update, deactivate, reactivate };
+  return { suppliers, loading, error, pagination, copyInfo, fetch, create, update, deactivate, reactivate };
 }
 
 /**

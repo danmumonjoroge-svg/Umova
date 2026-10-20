@@ -156,8 +156,8 @@ function Shell({ children }) {
             <Store size={22} className="text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">Umova POS</h1>
-            <p className="text-xs text-slate-500">Business registration</p>
+            <h1 className="text-lg font-bold text-slate-900 leading-tight">My Business</h1>
+            <p className="text-xs text-slate-500">by Umova · Business registration</p>
           </div>
         </div>
         {children}

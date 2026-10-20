@@ -13,6 +13,7 @@ import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useNetStatus } from '../offline/useNetStatus';
 import { WorkspacePage, kes } from '../components/workspace/WorkspaceKit';
 import Sheet, { fieldClass as field } from '../components/workspace/Sheet';
+import { singleFlight } from '../utils/singleFlight';
 
 const lab = 'block text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-1';
 function ProductSelect({ value, onChange, list, placeholder }) {
@@ -56,7 +57,7 @@ function RecipeSheet({ recipeId, products, onClose, onSaved }) {
     && inputs.length > 0 && inputs.every((i) => i.product_id && Number(i.quantity) > 0)
     && extras.every((o) => o.product_id && Number(o.quantity) > 0) && Math.abs(shareSum - 100) < 0.01;
 
-  const save = async () => {
+  const save = singleFlight('RecipesPage.save', async () => {
     setBusy(true); setError('');
     try {
       await productionService.saveRecipe({
@@ -66,7 +67,7 @@ function RecipeSheet({ recipeId, products, onClose, onSaved }) {
       onSaved();
     } catch (err) { setError(err.message || 'Could not save the recipe.'); }
     finally { setBusy(false); }
-  };
+  });
 
   return (
     <Sheet title={recipeId ? 'Edit recipe' : 'New recipe'} onClose={onClose}>

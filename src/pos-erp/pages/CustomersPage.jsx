@@ -22,6 +22,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { folioService } from '../services/folioService';
+import { settingsService } from '../services/settingsService';
+import { businessHeaderHtml } from '../utils/businessHeader';
 import { useCustomers } from '../hooks/useCustomers';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { paymentService } from '../services/paymentService';
@@ -34,6 +36,7 @@ import { normalizePhoneForWhatsApp } from '../services/communicationService';
 // (utils/printDocument.js) rather than a second print implementation.
 import { printDocument, escapeHtml } from '../utils/printDocument';
 import { Printer } from 'lucide-react';
+import { singleFlight } from '../utils/singleFlight';
 
 const CUSTOMER_TYPES = ['WALK_IN', 'REGISTERED', 'BUSINESS', 'CREDIT'];
 const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK', 'VOUCHER', 'OTHER'];
@@ -135,7 +138,7 @@ export default function CustomersPage() {
     setShowForm(true);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = singleFlight('CustomersPage.handleSubmit', async (e) => {
     e.preventDefault();
     setFormError('');
     setSaving(true);
@@ -154,7 +157,7 @@ export default function CustomersPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   const openPaymentModal = (customer) => {
     setPayingCustomer(customer);
@@ -162,11 +165,11 @@ export default function CustomersPage() {
     setPaymentError('');
   };
 
-  const submitPayment = async (e) => {
+  const submitPayment = singleFlight('CustomersPage.submitPayment', async (e) => {
     e.preventDefault();
     setPaymentError('');
     if (!tenant?.business_id) {
-      setPaymentError('No business is linked to this POS tenant yet — cannot record a payment.');
+      setPaymentError('No business is linked to this account yet — cannot record a payment.');
       return;
     }
     setPayingBusy(true);
@@ -187,7 +190,7 @@ export default function CustomersPage() {
     } finally {
       setPayingBusy(false);
     }
-  };
+  });
 
   const openStatement = async (customer) => {
     setStatementCustomer(customer);
@@ -215,8 +218,10 @@ export default function CustomersPage() {
     return acc;
   }, { purchased: 0, paid: 0 });
 
-  const printStatement = () => {
+  const printStatement = async () => {
     const c = statementCustomer;
+    // the statement is FROM the active business: its own logo, name and contact details (nothing if they cannot be loaded, e.g. offline)
+    const biz = await settingsService.getBusinessProfile(tenant?.business_id).catch(() => null);
     const rowsHtml = statementRows.map(r => `
       <tr>
         <td>${new Date(r.created_at).toLocaleDateString()}</td>
@@ -225,13 +230,12 @@ export default function CustomersPage() {
         <td class="right bold">${fmt(r.balance_after)}</td>
       </tr>`).join('');
     printDocument(`Statement — ${c.name}`, `
-      <div class="center bold" style="font-size:16px;">${escapeHtml(c.name)}</div>
-      <div class="center muted">
-        ${c.phone ? escapeHtml(c.phone) : ''}${c.phone && c.email ? ' · ' : ''}${c.email ? escapeHtml(c.email) : ''}
-      </div>
+      ${businessHeaderHtml(biz)}
       <div class="divider"></div>
       <div class="center bold" style="font-size:14px;">Account Statement</div>
       <div class="center muted">${new Date().toLocaleDateString()}</div>
+      <div style="margin-top:6px;">Customer:<br/><span class="bold">${escapeHtml(c.name)}</span></div>
+      <div class="muted">${c.phone ? escapeHtml(c.phone) : ''}${c.phone && c.email ? ' · ' : ''}${c.email ? escapeHtml(c.email) : ''}</div>
       <div class="divider"></div>
       <table>
         <tr><td>Total Purchases</td><td class="right">${fmt(statementTotals.purchased)}</td></tr>

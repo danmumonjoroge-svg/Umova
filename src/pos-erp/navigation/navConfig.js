@@ -22,12 +22,18 @@ import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package, Boxes, Truck, Users, UserRound,
   Wallet, Receipt, Building2, Home, Repeat, Gauge, FileText, Wrench, Scissors, CalendarClock, MessageSquare,
   Settings, ShieldCheck, Landmark, Smartphone, BarChart3, FileBarChart, HardHat, ClipboardList,
-  Bell, MoreHorizontal, BookUser, BedDouble, DoorOpen, Dumbbell, Factory, ChefHat,
+  Bell, UserCog, RotateCcw, Calculator, Briefcase, ClipboardCheck, Banknote, MoreHorizontal, BookUser, BedDouble, DoorOpen, Dumbbell, Factory, ChefHat,
 } from 'lucide-react';
 
 // `optIn: true` -- a capability that is NEVER on just because the owner hasn't chosen yet. Existing
 // businesses (which have no saved choice) therefore see exactly the menu they had before; a new
 // capability only appears once the owner switches it on in Settings.
+// Which of YOUR existing permission keys opens each area. The database refuses the action
+// regardless; this only decides what to show. '@owner' = business owner only.
+const RETAIL_PERMS = ['products.manage', 'inventory.view', 'inventory.scan', 'inventory.receive', 'inventory.adjust', 'inventory.stocktake', 'inventory.transfer', 'purchases.create'];
+const MONEY_PERMS = ['finance.view', 'balances.view', 'expenses.record', 'reports.export'];
+const PEOPLE_PERMS = ['sales.view', 'sales.create', 'balances.view', 'payments.record'];
+
 export const CAPABILITIES = {
   retail: { label: 'Retail', hint: 'Sell items and manage stock, suppliers and purchases' },
   rentals: { label: 'Rentals', hint: 'Manage rental units, rent charges and meter readings' },
@@ -58,13 +64,13 @@ export const MODULES = [
     children: [],
   },
   {
-    key: 'sell', label: 'Sell', icon: ShoppingCart, to: '/pos', exact: true,
+    key: 'sell', perm: ['sales.create'], label: 'Sell', icon: ShoppingCart, to: '/pos', exact: true,
     blurb: 'Ring up a sale',
     tab: { label: 'Sell' },
     children: [],
   },
   {
-    key: 'retail', label: 'Retail', icon: ShoppingBag, to: '/pos/retail', capability: 'retail',
+    key: 'retail', perm: RETAIL_PERMS, label: 'Retail', icon: ShoppingBag, to: '/pos/retail', capability: 'retail',
     blurb: 'Items, stock, suppliers and purchases',
     children: [
       { to: '/pos/products', label: 'My Items', icon: Package },
@@ -127,7 +133,7 @@ export const MODULES = [
     children: [],
   },
   {
-    key: 'money', label: 'My Money', icon: Landmark, to: '/pos/money',
+    key: 'money', perm: MONEY_PERMS, label: 'My Money', icon: Landmark, to: '/pos/money',
     blurb: 'Cash, M-Pesa, spending and reports',
     tab: { label: 'Money' },
     children: [
@@ -140,7 +146,7 @@ export const MODULES = [
     ],
   },
   {
-    key: 'people', label: 'Customers', icon: UserRound, to: '/pos/people',
+    key: 'people', perm: PEOPLE_PERMS, label: 'Customers', icon: UserRound, to: '/pos/people',
     blurb: 'Customers, who owes you, statements',
     tab: { label: 'People' },
     children: [
@@ -161,8 +167,14 @@ export const MODULES = [
     blurb: 'Settings, audit and everything else',
     tab: { label: 'More' },
     children: [
-      { to: '/pos/settings', label: 'Settings', icon: Settings },
-      { to: '/pos/audit', label: 'Audit', icon: ShieldCheck },
+      { to: '/pos/settings', label: 'Settings', icon: Settings, perm: ['settings.manage'] },
+      { to: '/pos/reversals', label: 'Sale corrections', icon: RotateCcw, perm: ['refunds.request', 'refunds.approve'] },
+      { to: '/pos/reconcile', label: 'Close the day', icon: Calculator, perm: ['finance.view'] },
+      { to: '/pos/staff', label: 'Staff', icon: UserCog, perm: ['@owner'] },
+      { to: '/pos/hr', label: 'Staff records', icon: Briefcase, perm: ['employees.manage'] },
+      { to: '/pos/payroll', label: 'Payroll', icon: Banknote, perm: ['payroll.access'] },
+      { to: '/pos/control', label: 'Control report', icon: ClipboardCheck, perm: ['audit.view'] },
+      { to: '/pos/audit', label: 'Audit', icon: ShieldCheck, perm: ['audit.view'] },
     ],
   },
 ];
@@ -197,14 +209,26 @@ export function resolveLocation(pathname) {
 }
 
 /** Modules to show in navigation given the enabled capability keys. */
-export function visibleModules(enabledCapabilities) {
-  return MODULES.filter((m) => !m.capability || enabledCapabilities.includes(m.capability));
+export function visibleModules(enabledCapabilities, canAny) {
+  return MODULES.filter((m) => (!m.capability || enabledCapabilities.includes(m.capability)) && (!canAny || !m.perm || canAny(m.perm)));
 }
 
 /** A module's pages that are switched on (a child without a `capability` is always shown). */
-export function visibleChildren(module, enabledCapabilities) {
-  return (module?.children || []).filter((c) => !c.capability || enabledCapabilities.includes(c.capability));
+export function visibleChildren(module, enabledCapabilities, canAny) {
+  return (module?.children || []).filter((c) => (!c.capability || enabledCapabilities.includes(c.capability)) && (!canAny || !c.perm || canAny(c.perm)));
 }
+
+/** Route -> permission (page level). Gated in POSApp with RequirePermission; the database enforces the data. */
+export const ROUTE_PERMISSIONS = {
+  products: RETAIL_PERMS, inventory: RETAIL_PERMS, 'goods-receiving': RETAIL_PERMS,
+  'purchase-orders': RETAIL_PERMS, suppliers: RETAIL_PERMS, payables: RETAIL_PERMS,
+  cash: MONEY_PERMS, mpesa: MONEY_PERMS, expenses: MONEY_PERMS,
+  reports: MONEY_PERMS, financials: MONEY_PERMS,
+  customers: PEOPLE_PERMS, folios: PEOPLE_PERMS,
+  reversals: ['refunds.request', 'refunds.approve'],
+  settings: ['settings.manage'], audit: ['audit.view'], staff: ['@owner'],
+  reconcile: ['finance.view'], hr: ['employees.manage'], payroll: ['payroll.access'], control: ['audit.view'],
+};
 
 /** Which bottom tab should look active for this module? Modules that live under "More" light up More. */
 export function activeTabKey(moduleKey) {

@@ -1,6 +1,11 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
+import useCachedQuery from "../shell/useCachedQuery";
+import useOnlineStatus from "../shell/useOnlineStatus";
+import {
+  useContributionOutbox, enqueueContribution, newClientRequestId, isNetworkError,
+} from "../shell/contributionOutbox";
 import { Send, Clock, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react";
 import "./MemberContributionForm.css";
 
@@ -10,6 +15,12 @@ import "./MemberContributionForm.css";
 // This is purely a declaration — nothing is posted to the ledger or the
 // member's balance until a treasurer verifies it against the real account
 // and approves in TreasurerReconciliation.js.
+//
+// OFFLINE: if the phone has no connection (or the send fails because of the network), the declaration is saved on the
+// phone and sent automatically when the connection returns (shell/contributionOutbox.js). While it waits it is shown as
+// "Saved on this phone — not sent yet": it is never called sent, pending review or confirmed until the server has it.
+// Each declaration carries a random client_request_id so a retry can never create it twice.
+// The account and loan lists are kept on the phone (useCachedQuery) so the form still works offline once it was opened online.
 // -----------------------------------------------------------------------------
 
 const TYPES = [
@@ -35,31 +46,38 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
   const { chama, member } = useChama();
   const chamaId = chamaIdProp || chama?.id;
 
-  const [accounts, setAccounts] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [myLoans, setMyLoans] = useState([]); // loans this member can repay (needed for loan_repayment)
-  const [loading, setLoading] = useState(true);
+  const online = useOnlineStatus();
+  const enabled = !!chamaId && !!member?.id;
+  // Each list is kept on the phone, so the form still opens offline (shown from the last time it was loaded online).
+  // The fetchers THROW on failure so a failed refresh never overwrites a good saved copy.
+  const accountsQ = useCachedQuery(`contrib:accounts:${chamaId}`, async () => {
+    const { data, error: e } = await supabase.from("chama_bank_accounts").select("*").eq("chama_id", chamaId).eq("is_active", true);
+    if (e) throw e;
+    return data || [];
+  }, enabled);
+  const historyQ = useCachedQuery(`contrib:history:${chamaId}:${member?.id}`, async () => {
+    const { data, error: e } = await supabase.from("chama_contribution_requests").select("*").eq("chama_id", chamaId).eq("member_id", member.id).order("created_at", { ascending: false }).limit(25);
+    if (e) throw e;
+    return data || [];
+  }, enabled);
+  const loansQ = useCachedQuery(`contrib:loans:${chamaId}:${member?.id}`, async () => {
+    const { data, error: e } = await supabase.from("chama_loans").select("id,amount,balance").eq("chama_id", chamaId).eq("member_id", member.id).eq("disbursed", true).eq("status", "active");
+    if (e) throw e;
+    return data || [];
+  }, enabled);
+  const accounts = accountsQ.data || [];
+  const history = historyQ.data || [];
+  const myLoans = loansQ.data || []; // loans this member can repay (needed for loan_repayment)
+  const loading = historyQ.loading && !historyQ.data;
+
+  // Declarations saved while offline: shown first, sent automatically, history refreshed once they reach the server.
+  const outbox = useContributionOutbox({ supabase, memberId: member?.id, onSent: () => { historyQ.reload(); } });
+
   const startForm = { ...emptyForm, contribution_type: TYPES.some((t) => t.value === initialType) ? initialType : emptyForm.contribution_type };
   const [form, setForm] = useState(startForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
-
-  const load = useCallback(async () => {
-    if (!chamaId || !member?.id) return;
-    setLoading(true);
-    const [accRes, histRes, loanRes] = await Promise.all([
-      supabase.from("chama_bank_accounts").select("*").eq("chama_id", chamaId).eq("is_active", true),
-      supabase.from("chama_contribution_requests").select("*").eq("chama_id", chamaId).eq("member_id", member.id).order("created_at", { ascending: false }).limit(25),
-      supabase.from("chama_loans").select("id,amount,balance").eq("chama_id", chamaId).eq("member_id", member.id).eq("disbursed", true).eq("status", "active"),
-    ]);
-    setMyLoans(loanRes.data || []);
-    setAccounts(accRes.data || []);
-    setHistory(histRes.data || []);
-    setLoading(false);
-  }, [chamaId, member?.id]);
-
-  useEffect(() => { load(); }, [load]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -69,11 +87,10 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
     if (form.payment_method !== "CASH" && !form.transaction_ref.trim()) return setError("Enter the transaction reference.");
     // A loan repayment must say WHICH loan (sql/006 refuses to post one without it).
     if (form.contribution_type === "loan_repayment" && !form.loan_id) return setError(myLoans.length ? "Choose which loan you are repaying." : "You have no active loan to repay.");
-    // Nothing is queued while offline, so say plainly that nothing was sent.
-    if (typeof navigator !== "undefined" && navigator.onLine === false) return setError("You're offline, so this was NOT sent. Connect and try again.");
 
-    setSubmitting(true);
-    const { error: err } = await supabase.from("chama_contribution_requests").insert([{
+    // One random id per declaration: if the connection drops mid-send and it is retried, the database refuses the repeat.
+    const clientRequestId = newClientRequestId();
+    const row = {
       chama_id: chamaId,
       member_id: member.id,
       bank_account_id: form.bank_account_id,
@@ -85,14 +102,33 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
       member_notes: form.member_notes || null,
       loan_id: form.contribution_type === "loan_repayment" ? form.loan_id : null,
       status: "PENDING",
-    }]);
+    };
+
+    // No connection (or the send failed because of the network): keep it on the phone and say so plainly. It is NOT sent yet.
+    const saveOnPhone = () => {
+      const saved = enqueueContribution({ clientRequestId, memberId: member.id, chamaId, row });
+      if (!saved.ok) return setError("Couldn't save this on your phone (its storage may be full). Free some space, or connect and try again.");
+      setToast("Saved on this phone, NOT sent yet. It will be sent automatically when you are back online.");
+      setTimeout(() => setToast(null), 7000);
+      setForm(startForm);
+    };
+
+    if (!online) return saveOnPhone();
+
+    setSubmitting(true);
+    let err = null;
+    try {
+      ({ error: err } = await supabase.from("chama_contribution_requests").insert([{ ...row, client_request_id: clientRequestId }]));
+    } catch (ex) {
+      err = ex;
+    }
     setSubmitting(false);
-    if (err) return setError(err.message);
+    if (err) return isNetworkError(err) ? saveOnPhone() : setError(err.message);
 
     setToast("Contribution submitted — the treasurer will verify it against the account.");
     setTimeout(() => setToast(null), 4000);
     setForm(startForm);
-    load();
+    historyQ.reload();
   };
 
   return (
@@ -107,6 +143,9 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
 
       <form className="mcf-form" onSubmit={submit}>
         {error && <div className="mcf-error"><AlertCircle size={14} /> {error}</div>}
+        {!online && (
+          <div className="mcf-error" role="status"><AlertCircle size={14} /> You're offline. You can still fill this in: it will be saved on this phone and sent automatically when you're back online.</div>
+        )}
 
         <div className="mcf-grid">
           <label>
@@ -168,6 +207,34 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
           {submitting ? <Loader2 size={16} className="spin" /> : <Send size={16} />} {submitting ? "Submitting..." : "Submit contribution"}
         </button>
       </form>
+
+      {outbox.items.length > 0 && (
+        <>
+          <h3 className="mcf-history-title">Waiting to send</h3>
+          <div className="mcf-history">
+            {outbox.items.map((it) => (
+              <div className="mcf-row" key={it.clientRequestId}>
+                <div>
+                  <strong>{formatKES(it.row.amount)}</strong>
+                  <span className="mcf-row-sub">{String(it.row.contribution_type || "").replace("_", " ")} · {it.row.contributed_on}</span>
+                  {it.status === "failed" && <span className="mcf-row-sub">The server did not accept it: {it.reason}</span>}
+                </div>
+                {it.status === "failed" ? (
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="mcf-badge rejected"><XCircle size={12} /> Not accepted</span>
+                    <button type="button" onClick={() => outbox.discard(it.clientRequestId)} style={{ background: "none", border: 0, textDecoration: "underline", cursor: "pointer" }}>Remove</button>
+                  </span>
+                ) : (
+                  <span className="mcf-badge pending"><Clock size={12} /> {outbox.syncing ? "Sending…" : "Saved on this phone — not sent yet"}</span>
+                )}
+              </div>
+            ))}
+          </div>
+          {online && outbox.hasWaiting && !outbox.syncing && (
+            <p className="mcf-empty"><button type="button" onClick={outbox.sync} style={{ background: "none", border: 0, textDecoration: "underline", cursor: "pointer" }}>Try sending now</button></p>
+          )}
+        </>
+      )}
 
       <h3 className="mcf-history-title">Your recent submissions</h3>
       {loading ? (

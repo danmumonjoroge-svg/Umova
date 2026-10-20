@@ -98,11 +98,9 @@ export async function resolveStaffLogin(userNo, password) {
  * @returns {Promise<{ok: true, member: object} | {ok: false, reason: string, message: string, member?: object}>}
  */
 export async function resolveMemberLogin(memberNo, password) {
+  // Server-side lookup: returns only what login needs. The members table is not readable by the browser.
   const { data: member, error: memberError } = await supabase
-    .from("members")
-    .select("id, member_no, name, email, auth_id, auth_user_id, password_set, status")
-    .eq("member_no", memberNo.trim().toUpperCase())
-    .maybeSingle();
+    .rpc("member_login_lookup", { p_member_no: memberNo.trim().toUpperCase() });
 
   if (memberError) {
     return { ok: false, reason: "LOOKUP_FAILED", message: "Failed to look up member. Please try again." };
@@ -116,7 +114,7 @@ export async function resolveMemberLogin(memberNo, password) {
   if (member.status === "suspended") {
     return { ok: false, reason: "SUSPENDED", message: "Your account is suspended. Contact the SACCO office." };
   }
-  if (!member.password_set) {
+  if (!(member.password_set === true || member.password_set === "true")) {
     return { ok: false, reason: "NEEDS_SETUP", message: "You haven't activated your account yet.", member };
   }
   if (!member.email) {

@@ -61,34 +61,39 @@ export const settingsService = {
   },
 
   /**
-   * Uploads a new business logo to the public `business-logos` bucket
-   * (phase14) and returns its public URL — does NOT save it onto
-   * lb_businesses itself; call updateBusinessProfile with the returned
-   * url (or let useSettings.uploadLogo below do both in one step).
-   *
-   * Fixed filename (logo.<ext>) with upsert:true — one logo per
-   * business, replaced in place rather than accumulating timestamped
-   * files. Bucket name and this path shape (businessId/logo.<ext>,
-   * one folder level) match the phase14 v2 migration and what was
-   * actually observed live in the browser network trace, not this
-   * function's first version.
+   * Uploads a PROCESSED logo (see utils/logoImage.js: already checked, resized and re-encoded)
+   * to the public `business-logos` bucket and returns its public URL. Path is always
+   * `<business_id>/logo.<ext>`; the storage policies (phase15) only let a business write inside
+   * its own folder. The other extension is removed so a business never keeps two logos.
+   * This does NOT touch lb_businesses: call setLogoUrl() with the returned URL.
    */
-  async uploadLogo(businessId, file) {
+  async uploadLogo(businessId, blob, { ext, contentType }) {
     if (!businessId) throw new Error('settingsService.uploadLogo: businessId is required.');
-    if (!file) throw new Error('settingsService.uploadLogo: file is required.');
-    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    if (!blob || !['png', 'jpg'].includes(ext)) throw new Error('settingsService.uploadLogo: a processed logo is required.');
     const path = `${businessId}/logo.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('business-logos')
-      .upload(path, file, { contentType: file.type, upsert: true });
+    const { error: uploadError } = await supabase.storage.from('business-logos').upload(path, blob, { contentType, upsert: true });
     if (uploadError) throw uploadError;
-
+    const other = `${businessId}/logo.${ext === 'png' ? 'jpg' : 'png'}`;
+    await supabase.storage.from('business-logos').remove([other]).catch(() => {}); // best effort: a leftover file is harmless
     const { data } = supabase.storage.from('business-logos').getPublicUrl(path);
-    // Cache-bust: same path every time (upsert), so append a version
-    // query param or a stale browser/CDN cache would keep showing the
-    // old logo after a change.
+    // Same path every time (upsert): add a version so a browser/CDN does not keep showing the old logo.
     return `${data.publicUrl}?v=${Date.now()}`;
+  },
+
+  /** Saves ONLY the logo address on the business (or null = no logo). Returns the updated business row. */
+  async setLogoUrl(businessId, url) {
+    if (!businessId) throw new Error('settingsService.setLogoUrl: businessId is required.');
+    const { data, error } = await supabase.from('lb_businesses')
+      .update({ logo_url: url || null, updated_at: new Date().toISOString() }).eq('id', businessId).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  /** Removes the logo files and clears the address: the business goes back to the default look. */
+  async removeLogo(businessId) {
+    if (!businessId) throw new Error('settingsService.removeLogo: businessId is required.');
+    await supabase.storage.from('business-logos').remove([`${businessId}/logo.png`, `${businessId}/logo.jpg`, `${businessId}/logo.jpeg`, `${businessId}/logo.webp`, `${businessId}/logo.svg`]).catch(() => {});
+    return this.setLogoUrl(businessId, null);
   },
 
   async getPosSettings(businessId) {

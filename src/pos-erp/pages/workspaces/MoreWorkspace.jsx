@@ -11,7 +11,8 @@ import { Link } from 'react-router-dom';
 import { ChevronRight, LogOut, SlidersHorizontal } from 'lucide-react';
 import { usePosErpAuth } from '../../auth/usePosErpAuth';
 import { useCapabilities } from '../../navigation/CapabilitiesContext';
-import { MODULES, visibleModules } from '../../navigation/navConfig';
+import { usePermissions } from '../../navigation/PermissionsContext';
+import { MODULES, visibleModules, visibleChildren } from '../../navigation/navConfig';
 import { WorkspacePage, SectionTitle } from '../../components/workspace/WorkspaceKit';
 
 function Row({ to, icon: Icon, label, blurb }) {
@@ -30,9 +31,10 @@ function Row({ to, icon: Icon, label, blurb }) {
 export default function MoreWorkspace() {
   const { staffName, role, tenant, logout } = usePosErpAuth();
   const { enabled } = useCapabilities();
+  const { canAny } = usePermissions();
 
   // Everything that is not a bottom-bar tab and not More itself.
-  const others = visibleModules(enabled).filter((m) => !m.tab);
+  const others = visibleModules(enabled, canAny).filter((m) => !m.tab);
   const more = MODULES.find((m) => m.key === 'more');
 
   return (
@@ -44,7 +46,7 @@ export default function MoreWorkspace() {
 
       <SectionTitle>Manage</SectionTitle>
       <div className="bg-white border border-[#DDE3DD] rounded-xl divide-y divide-[#DDE3DD] overflow-hidden">
-        {more.children.map((c) => <Row key={c.to} to={c.to} icon={c.icon} label={c.label} />)}
+        {visibleChildren(more, enabled, canAny).map((c) => <Row key={c.to} to={c.to} icon={c.icon} label={c.label} />)}
         <Row to="/pos/settings" icon={SlidersHorizontal} label="What my business does" blurb="Choose what shows in your menu" />
       </div>
 

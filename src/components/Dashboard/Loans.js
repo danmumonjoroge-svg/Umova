@@ -10,6 +10,17 @@ const LOAN_ACCOUNT     = 1011;
 const SAVINGS_ACCOUNT  = 1018;
 const INTEREST_ACCOUNT = 1020;
 
+// Optional: add your ledger account codes for loan fees/penalties and for
+// waivers/discounts here. Same convention as interest: CREDIT = charged to the
+// member, DEBIT = settled/paid. Discount accounts: any posting reduces the balance.
+const FEE_ACCOUNTS      = [];   // e.g. [1021, 1022]
+const DISCOUNT_ACCOUNTS = [];   // e.g. [1023]
+
+// Fallback when no account code is configured: classify loan-account postings
+// by their description text.
+const FEE_WORDS      = /fee|charge|penalt|insurance|processing/i;
+const DISCOUNT_WORDS = /waiv|discount|rebate|write.?off|reversal/i;
+
 // ── Transaction charge schedule ──────────────────────────────────────────────
 const calcTxCharge = (amount) => {
   const a = Number(amount || 0);
@@ -95,6 +106,7 @@ export default function Loan() {
   const finance = useMemo(() => {
     let savings = 0, loanDisbursed = 0, loanPaid = 0;
     let interestCharged = 0, interestPaid = 0;
+    let feesCharged = 0, feesPaid = 0, discounts = 0;
     let lastActivityDate = null;
 
     ledger.forEach((t) => {
@@ -102,16 +114,28 @@ export default function Loan() {
       const txDate = new Date(t.transaction_date || t.created_at);
       const debit  = Number(t.debit_account_id);
       const credit = Number(t.credit_account_id);
+      const desc   = String(t.description || t.type || "");
 
       if (credit === SAVINGS_ACCOUNT) savings += amt;
       if (debit  === SAVINGS_ACCOUNT) savings -= amt;
 
+      // Explicit fee / discount accounts
+      if (FEE_ACCOUNTS.includes(credit))      feesCharged += amt;
+      if (FEE_ACCOUNTS.includes(debit))       feesPaid    += amt;
+      if (DISCOUNT_ACCOUNTS.includes(credit) || DISCOUNT_ACCOUNTS.includes(debit)) discounts += amt;
+
       if (debit === LOAN_ACCOUNT) {
-        loanDisbursed += amt;
+        // Debit on the loan account = amount added to what the member owes.
+        // A fee/penalty posted here is a charge, not new principal.
+        if (FEE_WORDS.test(desc)) feesCharged += amt;
+        else                      loanDisbursed += amt;
         if (!lastActivityDate || txDate > lastActivityDate) lastActivityDate = txDate;
       }
       if (credit === LOAN_ACCOUNT) {
-        loanPaid += amt;
+        // Credit on the loan account = amount reducing what the member owes.
+        // A waiver/discount posted here is not a cash repayment.
+        if (DISCOUNT_WORDS.test(desc)) discounts += amt;
+        else                           loanPaid   += amt;
         if (!lastActivityDate || txDate > lastActivityDate) lastActivityDate = txDate;
       }
 
@@ -121,7 +145,14 @@ export default function Loan() {
 
     const currentLoan         = Math.max(0, loanDisbursed - loanPaid);
     const outstandingInterest = Math.max(0, interestCharged - interestPaid);
-    const totalOutstanding    = currentLoan + outstandingInterest;
+    const outstandingFees     = Math.max(0, feesCharged - feesPaid);
+
+    // NET loan balance = principal + fees/charges + interest charged
+    //                    − principal repaid − interest paid − fees paid − discounts
+    const grossCharged   = loanDisbursed + feesCharged + interestCharged;
+    const totalCredits   = loanPaid + interestPaid + feesPaid + discounts;
+    const netLoanBalance = Math.max(0, grossCharged - totalCredits);
+    const totalOutstanding = netLoanBalance;
 
     let daysInArrears = 0;
     let arrearsClass  = "Current";
@@ -233,6 +264,8 @@ export default function Loan() {
         complianceRemark = `REJECTED: Account in ${arrearsClass} arrears (${daysInArrears} days overdue). Regularize before applying.`;
       else if (outstandingInterest > 0)
         complianceRemark = `REJECTED: Unsettled interest of KES ${outstandingInterest.toLocaleString()} must be cleared first.`;
+      else if (outstandingFees > 0)
+        complianceRemark = `REJECTED: Unsettled loan fees/charges of KES ${outstandingFees.toLocaleString()} must be cleared first.`;
       else if (membershipMonths < p.minMonths)
         complianceRemark = `REJECTED: Minimum membership of ${p.minMonths} months required. You have ${membershipMonths} months.`;
       else if (reqAmount <= 0 || reqAmount > p.maxAmount)
@@ -254,6 +287,8 @@ export default function Loan() {
     return {
       savings, loanDisbursed, loanPaid, currentLoan,
       outstandingInterest, totalOutstanding, interestCharged, interestPaid,
+      outstandingFees, feesCharged, feesPaid, discounts,
+      grossCharged, totalCredits, netLoanBalance,
       daysInArrears, arrearsClass, membershipMonths,
       score, riskRating, multiplier,
       products: products,
@@ -342,7 +377,7 @@ export default function Loan() {
         ["Savings Balance (A/C 1018):",       `KES ${finance.savings.toLocaleString()}`,
          "Loan Principal (A/C 1011):",         `KES ${finance.currentLoan.toLocaleString()}`],
         ["Interest Outstanding (A/C 1020):",  `KES ${finance.outstandingInterest.toLocaleString()}`,
-         "Total Amount Owed:",                 `KES ${finance.totalOutstanding.toLocaleString()}`],
+         "Net Amount Owed:",                   `KES ${Math.round(finance.totalOutstanding).toLocaleString()}`],
         ["Risk Classification:",              finance.riskRating,
          "Multiplier Factor:",                `${finance.multiplier}x`],
         ["Days in Arrears:",                  `${finance.daysInArrears} Days (${finance.arrearsClass})`,
@@ -664,13 +699,22 @@ export default function Loan() {
       .filter((t) => {
         const d = Number(t.debit_account_id), c = Number(t.credit_account_id);
         return d === LOAN_ACCOUNT || c === LOAN_ACCOUNT ||
-               d === INTEREST_ACCOUNT || c === INTEREST_ACCOUNT;
+               d === INTEREST_ACCOUNT || c === INTEREST_ACCOUNT ||
+               FEE_ACCOUNTS.includes(d) || FEE_ACCOUNTS.includes(c) ||
+               DISCOUNT_ACCOUNTS.includes(d) || DISCOUNT_ACCOUNTS.includes(c);
       })
       .sort((a, b) => new Date(a.transaction_date || a.created_at) - new Date(b.transaction_date || b.created_at)),
   [ledger]);
 
   const getTxBadge = (t) => {
     const d = Number(t.debit_account_id), c = Number(t.credit_account_id);
+    const desc = String(t.description || t.type || "");
+    if (DISCOUNT_ACCOUNTS.includes(d) || DISCOUNT_ACCOUNTS.includes(c) || (c === LOAN_ACCOUNT && DISCOUNT_WORDS.test(desc)))
+      return { label: "Discount / Waiver", cls: "bg-sky-50 text-sky-700 border-sky-200" };
+    if (FEE_ACCOUNTS.includes(c) || (d === LOAN_ACCOUNT && FEE_WORDS.test(desc)))
+      return { label: "Fee / Charge", cls: "bg-amber-50 text-amber-700 border-amber-200" };
+    if (FEE_ACCOUNTS.includes(d))
+      return { label: "Fee Paid", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
     if (d === LOAN_ACCOUNT     && c !== LOAN_ACCOUNT)     return { label: "Loan Disbursement",      cls: "bg-amber-50 text-amber-700 border-amber-200" };
     if (c === LOAN_ACCOUNT     && d !== LOAN_ACCOUNT)     return { label: "Principal Repayment",    cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
     if (c === INTEREST_ACCOUNT)                           return { label: "Interest Charged",       cls: "bg-amber-50 text-amber-700 border-amber-200" };
@@ -713,10 +757,18 @@ export default function Loan() {
         </div>
 
         <div className="bg-white border border-amber-100 rounded-3xl p-5 border-l-4 border-l-amber-500 shadow-sm space-y-1">
-          <h4 className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Loan Principal (1011)</h4>
-          <h2 className="text-2xl font-black text-stone-800 font-mono">KES {finance.currentLoan.toLocaleString()}</h2>
-          <p className="text-[10px] text-stone-500 font-bold uppercase tracking-wider">
-            Disbursed: {finance.loanDisbursed.toLocaleString()} &nbsp;·&nbsp; Repaid: {finance.loanPaid.toLocaleString()}
+          <h4 className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Net Loan Balance</h4>
+          <h2 className={`text-2xl font-black font-mono ${finance.netLoanBalance > 0 ? "text-amber-700" : "text-stone-800"}`}>
+            KES {Math.round(finance.netLoanBalance).toLocaleString()}
+          </h2>
+          <p className="text-[10px] text-stone-500 font-bold uppercase tracking-wider leading-relaxed">
+            Charged: {Math.round(finance.grossCharged).toLocaleString()} &nbsp;·&nbsp; Settled: {Math.round(finance.totalCredits).toLocaleString()}
+          </p>
+          <p className="text-[9px] text-stone-400 font-medium leading-relaxed">
+            Principal {finance.loanDisbursed.toLocaleString()} + Fees {finance.feesCharged.toLocaleString()} + Interest {finance.interestCharged.toLocaleString()}
+            {" "}− Repaid {finance.loanPaid.toLocaleString()} − Interest paid {finance.interestPaid.toLocaleString()}
+            {finance.feesPaid > 0 ? ` − Fees paid ${finance.feesPaid.toLocaleString()}` : ""}
+            {" "}− Discounts {finance.discounts.toLocaleString()}
           </p>
         </div>
 
@@ -744,8 +796,8 @@ export default function Loan() {
       {/* TOTAL OWED BANNER */}
       {finance.totalOutstanding > 0 && (
         <div className="bg-green-900 text-white rounded-2xl px-5 py-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border border-amber-500/30">
-          <div className="text-[11px] font-bold uppercase tracking-widest text-amber-200">Total Amount Owed (Principal + Interest)</div>
-          <div className="text-xl font-black font-mono text-white">KES {finance.totalOutstanding.toLocaleString()}</div>
+          <div className="text-[11px] font-bold uppercase tracking-widest text-amber-200">Net Amount Owed (Principal + Fees + Interest − Payments − Discounts)</div>
+          <div className="text-xl font-black font-mono text-white">KES {Math.round(finance.totalOutstanding).toLocaleString()}</div>
           {finance.hasExistingLoan && (
             <div className={`text-[10px] font-bold uppercase px-3 py-1 rounded-full ${finance.canRefinance ? "bg-amber-500 text-green-950" : "bg-rose-500 text-white"}`}>
               {finance.canRefinance
@@ -1070,7 +1122,7 @@ export default function Loan() {
               {[
                 ["Principal Outstanding", `KES ${finance.currentLoan.toLocaleString()}`, finance.currentLoan > 0 ? "text-rose-600" : "text-emerald-700"],
                 ["Interest Outstanding",  `KES ${finance.outstandingInterest.toLocaleString()}`, finance.outstandingInterest > 0 ? "text-amber-700" : "text-emerald-700"],
-                ["Total Owed",            `KES ${finance.totalOutstanding.toLocaleString()}`, finance.totalOutstanding > 0 ? "text-stone-800" : "text-emerald-700"],
+                ["Net Amount Owed",       `KES ${Math.round(finance.totalOutstanding).toLocaleString()}`, finance.totalOutstanding > 0 ? "text-stone-800" : "text-emerald-700"],
               ].map(([label, val, cls]) => (
                 <div key={label} className="bg-white py-3 px-4">
                   <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">{label}</div>

@@ -109,9 +109,9 @@ export default function POSLogin({ onGoToSignup, logoutNotice }) {
         <div className="w-14 h-14 rounded-2xl bg-white ring-2 ring-amber-400/60 shadow-sm flex items-center justify-center mb-5 p-1.5">
           <img src={umovaEmblem} alt="Umova" className="w-full h-full object-contain" />
         </div>
-        <h2 className="text-2xl font-black text-slate-800 tracking-tight">POS Sign In</h2>
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">My Business sign in</h2>
         <p className="text-slate-500 text-sm mt-2 mb-6">
-          Staff / till access. This is separate from the admin dashboard login.
+          Sign in with your business code and username. This is separate from the Umova SACCO login.
         </p>
 
         {logoutNotice && (

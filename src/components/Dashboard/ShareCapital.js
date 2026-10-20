@@ -117,9 +117,14 @@ export default function ShareCapital({ memberNo: propMemberNo }) {
       String(tx.id || tx.code).toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    const totalContributions = transformedRows.reduce((s, r) => s + (r.displayCredit || 0), 0);
+    const totalWithdrawals   = transformedRows.reduce((s, r) => s + (r.displayDebit  || 0), 0);
+
     return {
       statementRows: filteredRows,
       aggregateBalance: runningAccumulator,
+      totalContributions,
+      totalWithdrawals,
     };
   }, [rows, searchTerm]);
 
@@ -163,7 +168,7 @@ export default function ShareCapital({ memberNo: propMemberNo }) {
     );
   }
 
-  const { statementRows, aggregateBalance } = processedLedger;
+  const { statementRows, aggregateBalance, totalContributions, totalWithdrawals } = processedLedger;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-1 main-content-fade">
@@ -174,11 +179,14 @@ export default function ShareCapital({ memberNo: propMemberNo }) {
         {/* TOTAL EQUITY CARD */}
         <div className="md:col-span-2 bg-gradient-to-br from-green-950 to-green-900 text-white p-6 rounded-3xl shadow-md flex items-center justify-between relative overflow-hidden group">
           <div className="space-y-2.5 z-10">
-            <span className="text-[11px] font-bold text-green-300/80 uppercase tracking-widest block">Total Equity Share Capital</span>
+            <span className="text-[11px] font-bold text-green-300/80 uppercase tracking-widest block">Net Share Capital</span>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight tabular-nums">
               KES {aggregateBalance.toLocaleString()}
             </h1>
-            <p className="text-xs text-green-200/60 font-medium">Account Portfolio Mapping ID Reference: <span className="font-mono font-bold text-white">1012</span></p>
+            <p className="text-xs text-green-200/70 font-medium">
+              Contributions {totalContributions.toLocaleString()} − Withdrawals {totalWithdrawals.toLocaleString()}
+              <span className="ml-2 text-green-200/50">A/C <span className="font-mono font-bold text-white">1012</span></span>
+            </p>
           </div>
           <div className="bg-white/10 text-white p-4 rounded-2xl backdrop-blur-md group-hover:scale-105 transition duration-200">
             <LineChart size={28} />

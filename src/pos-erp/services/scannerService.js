@@ -18,6 +18,10 @@
 import { posSupabase as supabase } from './posSupabaseClient';
 import { resolveBarcode } from './productResolverService';
 import { SCAN_RESULTS } from '../constants/scannerModes';
+// Offline mode: with no internet a scan is looked up in the item list saved on this phone.
+import { isNetworkFailure } from '../offline/netErrors';
+import { findCachedByBarcode } from '../offline/offlineCache';
+import { normalizeBarcode } from '../utils/barcodeUtils';
 
 // Error reasons surfaced to callers (never raw Supabase/PostgREST text).
 export const SCAN_ERROR_REASONS = {
@@ -94,6 +98,18 @@ export async function handleScan({
       };
     }
   } catch (err) {
+    const offlineHit = isNetworkFailure(err) ? await findCachedByBarcode(normalizeBarcode(barcode)).catch(() => null) : null;
+    if (offlineHit) {
+      // Found in the copy saved on this phone. Stock is the last known number (shown by the till as such).
+      return {
+        result: SCAN_RESULTS.RESOLVED,
+        barcode: normalizeBarcode(barcode),
+        product: offlineHit.product,
+        packQuantity: 1,
+        stock: offlineHit.stock,
+        fromOfflineCopy: true,
+      };
+    }
     logScanFailure('barcode resolution', err);
     outcome = {
       result: SCAN_RESULTS.ERROR,

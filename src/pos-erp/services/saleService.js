@@ -23,16 +23,14 @@
 // weight/volume/custom items, matching real lb_sale_items columns
 // directly now (POSPage.jsx updated alongside this file).
 //
-// KNOWN GAP (carried over from cashierService.js/reportsService.js):
-// void does not reverse any lb_refunds — that schema still isn't
-// confirmed. A void here is for an uncompleted/mistaken sale, not a
-// post-sale return; those should go through a refund flow once
-// lb_refunds is confirmed, not through voidSale.
+// REVERSALS: see reversalService.js / phase29_sale_reversals.sql. Partial refunds (lb_refunds)
+// are still not built: that schema is not confirmed.
 
 import { posSupabase as supabase } from './posSupabaseClient';
 import { applyStockMovement, getDefaultWarehouseId } from './purchaseService';
 import { auditService } from './auditService';
 import { folioService } from './folioService';
+import { reversalService } from './reversalService';
 
 async function generateSaleNumber() {
   // Same count-based caveat as PO/GRN/return numbering — collision-safe
@@ -74,6 +72,8 @@ export const saleService = {
    *   payments: [{ payment_method, amount, change_amount?, reference_no? }],
    *   notes?, client_reference? // phase11: offline-sync idempotency key
    *   folio_id?, stay_id?       // phase19: charge the sale to a customer folio (no payments)
+   *   completed_at?             // offline mode: when the sale really happened (defaults to now)
+   *   fromOfflineQueue?         // offline mode: set only by the sync engine -- skips the stock pre-check (see below)
    * }
    * shift_id is required — without it, cashierService.closeShift()'s
    * expected_cash calculation can never find this sale, and the till
@@ -96,7 +96,11 @@ export const saleService = {
     // a product that doesn't allow negative stock. Products with
     // track_inventory = false are exempt (nothing to check).
     const warehouseId = await getDefaultWarehouseId(sale.tenant_id);
-    for (const item of sale.items) {
+    // Offline mode: a sale that was made with no internet has ALREADY happened (the goods are gone), so refusing it now
+    // because the server's count did not yet know about it would only lose the record. When it comes from the offline
+    // queue the check is skipped and the sale is recorded; stock simply shows the true (possibly low/negative) number so
+    // the owner can see and fix it. Anything the database itself still refuses comes back as "needs attention".
+    for (const item of (sale.fromOfflineQueue ? [] : sale.items)) {
       const { data: product, error: productError } = await supabase
         .from('lb_products')
         .select('track_inventory, allow_negative_stock')
@@ -129,12 +133,20 @@ export const saleService = {
     // retry returns the ALREADY-SYNCED sale cleanly instead of a raw
     // constraint-violation error the sync engine would have to parse.
     if (sale.client_reference) {
+      // Scoped to THIS business (audit D-01): never rely on RLS alone to decide whose sale a reference belongs to.
       const { data: existing } = await supabase
         .from('lb_sales')
-        .select('id')
+        .select('id, total_amount')
+        .eq('tenant_id', sale.tenant_id)
         .eq('client_reference', sale.client_reference)
         .maybeSingle();
       if (existing) {
+        // Same reference but a different total = a DIFFERENT sale that collided with this key (e.g. an older phone that
+        // made the same local id). Treating it as "already saved" would silently lose a real sale, so refuse it loudly:
+        // it goes to "Needs attention" and the owner sees it.
+        if (Math.abs(Number(existing.total_amount) - totalAmount) > 0.005) {
+          throw new Error(`Sale reference ${sale.client_reference} is already used by a different sale (total ${existing.total_amount}, this one ${totalAmount}). It was NOT saved - please check it.`);
+        }
         // A retried offline sync that was cut off before the folio step finished must finish it now.
         if (sale.folio_id) await folioService.postSale(sale.folio_id, existing.id, sale.cashier_id);
         return this.getById(existing.id);
@@ -159,7 +171,7 @@ export const saleService = {
         tax_total: taxTotal,
         total_amount: totalAmount,
         notes: sale.notes || null,
-        completed_at: new Date().toISOString(),
+        completed_at: sale.completed_at || new Date().toISOString(), // offline sales keep the time they were made
         client_reference: sale.client_reference || null,
       })
       .select()
@@ -236,7 +248,7 @@ export const saleService = {
       try {
         await folioService.postSale(sale.folio_id, headerData.id, sale.cashier_id);
       } catch (folioErr) {
-        try { await this.voidSale(headerData.id, 'Could not be charged to the folio', { voidedBy: sale.cashier_id }); }
+        try { await reversalService.rollbackNewSale(headerData.id, 'Could not be charged to the folio'); }
         catch (voidErr) { console.error('[saleService.create] folio post failed AND void failed -- sale', headerData.id, 'needs manual review:', voidErr); }
         throw folioErr;
       }
@@ -298,66 +310,9 @@ export const saleService = {
     return this.getById(headerData.id);
   },
 
-  /**
-   * Voids an uncompleted/mistaken sale and reverses its stock impact.
-   * NOT for post-sale customer returns — see header note re: lb_refunds.
-   */
-  async voidSale(id, reason, { voidedBy } = {}) {
-    const { data: sale, error: saleError } = await supabase
-      .from('lb_sales')
-      .select('id, tenant_id, business_id, branch_id')
-      .eq('id', id)
-      .single();
-    if (saleError) throw saleError;
+  // voidSale() was removed: it changed the sale from the browser (not atomic, no permission, could run
+  // twice, never touched cash or the customer's balance). Reversals now go through reversalService
+  // (request -> approval -> one atomic database function). The only internal use left is
+  // rolling back a sale that could not be posted to its folio, via pos_rollback_new_sale.
 
-    const { data, error } = await supabase
-      .from('lb_sales')
-      .update({ status: 'VOIDED', notes: reason, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) throw error;
-
-    const { data: items, error: itemsError } = await supabase
-      .from('lb_sale_items')
-      .select('product_id, quantity, cost_price')
-      .eq('sale_id', id);
-    if (itemsError) throw itemsError;
-
-    const warehouseId = await getDefaultWarehouseId(sale.tenant_id);
-    for (const item of items || []) {
-      await applyStockMovement({
-        tenantId: sale.tenant_id,
-        businessId: sale.business_id,
-        branchId: sale.branch_id,
-        warehouseId,
-        productId: item.product_id,
-        movementType: 'STOCK_RETURN', // closest fit: stock coming back in from a reversed sale
-        quantity: item.quantity, // positive: stock back in
-        unitCost: item.cost_price || 0,
-        referenceId: id,
-        referenceType: 'SALE_VOID',
-        notes: reason,
-        createdBy: voidedBy,
-      });
-    }
-
-    // Same reasoning as create() above — the void itself already
-    // succeeded (status updated, stock reversed) by the time this runs,
-    // so a failed audit write is logged, not surfaced as a failed void.
-    try {
-      await auditService.log({
-        tenantId: sale.tenant_id,
-        actorId: voidedBy,
-        action: 'SALE_VOIDED',
-        entityType: 'lb_sales',
-        entityId: id,
-        metadata: { reason: reason ?? null },
-      });
-    } catch (auditErr) {
-      console.error('[saleService.voidSale] audit log failed (void itself succeeded):', auditErr);
-    }
-
-    return data;
-  },
 };

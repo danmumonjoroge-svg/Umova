@@ -30,8 +30,8 @@ const CONFIG = {
     color: "text-red-600",
     bg: "bg-red-50",
     ring: "border-red-200",
-    title: "POS Account Suspended",
-    body: "This POS account has been suspended. Contact Umova support for help resolving this.",
+    title: "Account Suspended",
+    body: "This business account has been suspended. Contact Umova support for help resolving this.",
   },
 };
 

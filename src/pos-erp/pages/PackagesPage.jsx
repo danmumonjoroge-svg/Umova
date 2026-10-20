@@ -13,6 +13,7 @@ import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useNetStatus } from '../offline/useNetStatus';
 import { WorkspacePage, kes } from '../components/workspace/WorkspaceKit';
 import Sheet, { fieldClass as field } from '../components/workspace/Sheet';
+import { singleFlight } from '../utils/singleFlight';
 
 const lab = 'block text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-1';
 const blankItem = () => ({ product_id: '', description: '', quantity: '1', list_price: '' });
@@ -45,12 +46,12 @@ function PackageSheet({ packageId, products, onClose, onSaved }) {
   const saving = normal - (Number(price) || 0);
   const ready = name.trim() && price !== '' && Number(price) >= 0 && items.length > 0 && items.every((i) => (i.product_id || i.description.trim()) && Number(i.quantity) > 0);
 
-  const save = async () => {
+  const save = singleFlight('PackagesPage.save', async () => {
     setBusy(true); setError('');
     try { await packageService.save({ id: packageId, businessId: tenant?.business_id, name, description, price, items, createdBy: staffId }); onSaved(); }
     catch (err) { setError(err.message || 'Could not save the package.'); }
     finally { setBusy(false); }
-  };
+  });
 
   return (
     <Sheet title={packageId ? 'Edit package' : 'New package'} onClose={onClose}>

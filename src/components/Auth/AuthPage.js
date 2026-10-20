@@ -1,10 +1,9 @@
 // src/components/Auth/AuthPage.js
-// FIRST-TIME SETUP FLOW (FIXED):
-//   1. Verify member_no + national_id in members table
-//   2. Check if an auth user record is already provisioned via database trigger (auth_id check)
-//      - If YES → Run resetPasswordForEmail directly to bypass Supabase 422 errors
-//      - If NO  → Attempt clean signUp with their email + chosen password
-//   3. Mark password_set = "true", update profiles, and guide to link verification
+// FIRST-TIME SETUP FLOW (SIMPLIFIED):
+//   Member enters: member number + national ID + new password + confirm. That's it.
+//   The `activate-member` edge function (service role) verifies the ID server-side,
+//   attaches the password to the EXISTING members row (no new member is ever created),
+//   and this page then signs the member in automatically. No email link, no second step.
 
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import umovaEmblem from "../../assets/brand/umova-emblem-small.png";
+import FingerprintLogin from "../../security/FingerprintLogin";
 
 // ─────────────────────────────────────────────
 // HELPERS
@@ -48,6 +48,25 @@ const validatePassword = (pass) => {
 const formatMemberNo = (val) => val.toUpperCase().replace(/[^A-Z0-9-]/g, "");
 
 const isPasswordSet = (val) => val === true || val === "true";
+
+const RESET_MESSAGES = {
+  INVALID_DETAILS:  "Member number and ID number do not match our records.",
+  NOT_ACTIVATED:    "No password set yet. Use First Time Setup instead.",
+  ACCOUNT_INACTIVE: "This account is not active. Contact the SACCO office.",
+  NO_EMAIL:         "No email on file. Contact the SACCO office.",
+  RATE_LIMITED:     "Too many attempts. Please wait 15 minutes and try again.",
+  SERVER_ERROR:     "Could not send the reset email right now. Please try again.",
+};
+
+const ACTIVATE_MESSAGES = {
+  INVALID_DETAILS: "Member number and National ID do not match our records.",
+  ALREADY_ACTIVE:  "This account is already activated. Log in, or use Forgot Password.",
+  ACCOUNT_INACTIVE:"This account is not active. Contact the SACCO office.",
+  NO_EMAIL:        "No email address is linked to your account. Contact the SACCO office to add one.",
+  WEAK_PASSWORD:   "Password must be at least 8 characters with an uppercase letter, a lowercase letter and a number.",
+  RATE_LIMITED:    "Too many attempts. Please wait 15 minutes and try again.",
+  SERVER_ERROR:    "Could not activate your account right now. Please try again, or contact the SACCO office.",
+};
 
 // ─────────────────────────────────────────────
 // PASSWORD INPUT
@@ -128,11 +147,9 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
+      // Server-side lookup returns only what login needs (no national_id, no other columns).
       const { data: member, error: memberError } = await supabase
-        .from("members")
-        .select("id, member_no, name, email, auth_id, auth_user_id, password_set, status")
-        .eq("member_no", memberNo.trim())
-        .maybeSingle();
+        .rpc("member_login_lookup", { p_member_no: memberNo.trim().toUpperCase() });
 
       if (memberError) { setError("Failed to look up member. Please try again."); return; }
       if (!member)     { setError("Member number not found."); return; }
@@ -177,7 +194,8 @@ export default function AuthPage() {
   };
 
   // ─────────────────────────────────────────────
-  // FIRST TIME SETUP FLOW (FIXED 422 WORKFLOW)
+  // FIRST TIME SETUP FLOW
+  // All verification happens on the server. The browser never reads national_id.
   // ─────────────────────────────────────────────
   const handleSetup = async (e) => {
     e.preventDefault();
@@ -192,127 +210,41 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
-      // ── Step 1: Identity verification ──────────────────
-      const { data: member, error: memberError } = await supabase
-        .from("members")
-        .select("id, member_no, name, email, national_id, password_set, auth_id, auth_user_id, status")
-        .eq("member_no", setupMemberNo.trim())
-        .maybeSingle();
-
-      if (memberError) { setError("Lookup failed. Please try again."); return; }
-      if (!member)     { setError("Member number not found. Check your card and try again."); return; }
-
-      if (!member.national_id || member.national_id.trim() !== setupIdNumber.trim()) {
-        setError("Member number and National ID do not match our records."); return;
-      }
-
-      if (member.status === "inactive" || member.status === "suspended") {
-        setError("This account is not active. Contact the SACCO office."); return;
-      }
-
-      if (isPasswordSet(member.password_set)) {
-        setError("This account is already activated. Use Forgot Password if you need to reset it.");
-        return;
-      }
-
-      if (!member.email) {
-        setError("No email address linked to your account. Contact the SACCO office to add one.");
-        return;
-      }
-
-      // ── Step 2: Deterministic Flow Divergence ──────────
-      // Check database to see if a row sync trigger has pre-built the account record
-      const hasAuthAccount = !!(member.auth_id || member.auth_user_id);
-
-      if (hasAuthAccount) {
-        // Direct Path: Account exists but needs recovery parameters set up
-        const { error: resetErr } = await supabase.auth.resetPasswordForEmail(member.email, {
-          redirectTo: `${window.location.origin}/set-password`,
-        });
-
-        if (resetErr) { setError("Failed to send setup email: " + resetErr.message); return; }
-
-        await supabase
-          .from("members")
-          .update({ password_set: "true", first_time_login: false })
-          .eq("id", member.id);
-
-        setSuccess(
-          `A password setup link has been sent to your email (${member.email.replace(/(.{2}).*@/, "$1***@")}). ` +
-          `Open the link to finish setting your password, then log in here.`
-        );
-        setSetupPassword(""); setConfirmPassword(""); setSetupIdNumber("");
-        return;
-      }
-
-      // ── Step 3: Pure Signup Fallback (No Auth Entity Found) ──
-      const { data: signupData, error: signupError } = await supabase.auth.signUp({
-        email:    member.email,
-        password: setupPassword,
-        options: {
-          data: {
-            member_id:  member.id,
-            member_no:  member.member_no,
-            name:  member.name || "",
-          },
+      const { data, error: fnError } = await supabase.functions.invoke("activate-member", {
+        body: {
+          memberNo:   setupMemberNo.trim().toUpperCase(),
+          nationalId: setupIdNumber.trim(),
+          password:   setupPassword,
         },
       });
 
-      if (signupError) {
-        // Catch-all safety verification fallback for race conditions (422 recovery handle)
-        if (signupError.status === 422 || signupError.message.toLowerCase().includes("registered")) {
-          const { error: resetErr } = await supabase.auth.resetPasswordForEmail(member.email, {
-            redirectTo: `${window.location.origin}/set-password`,
-          });
-          if (resetErr) { setError("Failed to send setup email: " + resetErr.message); return; }
+      // supabase-js hides the JSON body of non-2xx replies inside error.context
+      let res = data;
+      if (fnError) {
+        try { res = await fnError.context.json(); } catch { res = null; }
+      }
 
-          await supabase
-            .from("members")
-            .update({ password_set: "true", first_time_login: false })
-            .eq("id", member.id);
-
-          setSuccess(
-            `A password setup link has been sent to your email (${member.email.replace(/(.{2}).*@/, "$1***@")}). ` +
-            `Open the link to finish setting your password, then log in here.`
-          );
-          return;
-        }
-        setError("Account creation failed: " + signupError.message);
+      if (!res?.ok) {
+        setError(ACTIVATE_MESSAGES[res?.reason] || "Could not activate your account. Please try again.");
         return;
       }
 
-      const authUserId = signupData?.user?.id;
-      if (!authUserId) {
-        setError("Account creation incomplete. Please contact SACCO support.");
-        return;
-      }
-
-      // Bind newly populated auth id references back to database row
-      await supabase
-        .from("members")
-        .update({
-          auth_id:          authUserId,
-          auth_user_id:     authUserId,
-          password_set:     "true",
-          first_time_login: false,
-          first_login:      false,
-        })
-        .eq("id", member.id);
-
-      const needsConfirmation = !signupData?.session;
-
-      if (needsConfirmation) {
-        setSuccess(
-          `Account activated! A confirmation email has been sent to ` +
-          `${member.email.replace(/(.{2}).*@/, "$1***@")}. ` +
-          `Please verify your email before logging in.`
-        );
-      } else {
-        setSuccess("Account activated! You can now log in with your member number and password.");
-        setTimeout(() => switchMode("login"), 2000);
-      }
+      // Account is ready: sign straight in with the password they just chose.
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: res.email,
+        password: setupPassword,
+      });
 
       setSetupPassword(""); setConfirmPassword(""); setSetupIdNumber("");
+
+      if (signInError) {
+        setSuccess("Account activated! Please log in with your member number and password.");
+        setTimeout(() => switchMode("login"), 1500);
+        return;
+      }
+
+      setSuccess("Account activated! Signing you in…");
+      setTimeout(() => navigate("/redirect", { replace: true }), 600);
 
     } catch (err) {
       console.error("Setup error:", err);
@@ -335,37 +267,18 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
-      const { data: member, error: memberError } = await supabase
-        .from("members")
-        .select("email, member_no, national_id, password_set, status")
-        .eq("member_no", resetMemberNo.trim())
-        .maybeSingle();
-
-      if (memberError) { setError("Verification failed. Please try again."); return; }
-      if (!member)     { setError("Member number not found."); return; }
-
-      if (!member.national_id || member.national_id.trim() !== resetIdNumber.trim()) {
-        setError("Member number and ID number do not match our records."); return;
-      }
-
-      if (member.status === "inactive" || member.status === "suspended") {
-        setError("This account is not active. Contact the SACCO office."); return;
-      }
-
-      if (!isPasswordSet(member.password_set)) {
-        setError("No password set yet. Use First Time Setup instead."); return;
-      }
-
-      if (!member.email) { setError("No email on file. Contact the SACCO office."); return; }
-
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(member.email, {
-        redirectTo: `${window.location.origin}/set-password`,
+      // Verification and the email are handled on the server; the browser never sees national_id or the email.
+      const { data, error: fnError } = await supabase.functions.invoke("member-forgot-password", {
+        body: { memberNo: resetMemberNo.trim().toUpperCase(), nationalId: resetIdNumber.trim() },
       });
+      let res = data;
+      if (fnError) { try { res = await fnError.context.json(); } catch { res = null; } }
 
-      if (resetError) { setError(resetError.message); return; }
-
-      const masked = member.email.replace(/(.{2}).*@/, "$1***@");
-      setSuccess(`Reset link sent to ${masked}. Check your inbox and follow the link.`);
+      if (!res?.ok) {
+        setError(RESET_MESSAGES[res?.reason] || "Could not send the reset email. Please try again.");
+        return;
+      }
+      setSuccess(`Reset link sent to ${res.maskedEmail}. Check your inbox and follow the link.`);
       setResetMemberNo(""); setResetIdNumber("");
 
     } catch (err) {
@@ -446,6 +359,19 @@ export default function AuthPage() {
           </form>
         )}
 
+        {/* Phone app only, and only once fingerprint was turned on for this phone; renders nothing otherwise. */}
+        {mode === "login" && (
+          <FingerprintLogin
+            service="finance"
+            client={supabase}
+            onSignedIn={() => {
+              clearMessages();
+              setSuccess("Signed in with fingerprint.");
+              setTimeout(() => navigate("/redirect", { replace: true }), 500);
+            }}
+          />
+        )}
+
         {/* ── FIRST TIME SETUP FORM ── */}
         {mode === "setup" && (
           <form onSubmit={handleSetup} className="space-y-4" noValidate>
@@ -453,6 +379,10 @@ export default function AuthPage() {
               className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm mb-2 transition">
               <ArrowLeft size={16} />Back to Login
             </button>
+
+            <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 rounded-2xl p-4 border border-slate-200">
+              Enter your member number and National ID, then choose a password. That's all.
+            </p>
 
             <div>
               <label className="block mb-1.5 font-semibold text-sm text-slate-700">Member Number</label>
@@ -507,7 +437,7 @@ export default function AuthPage() {
 
             <button type="submit" disabled={loading}
               className="w-full h-14 rounded-2xl bg-green-700 hover:bg-green-800 disabled:opacity-60 text-white font-bold flex items-center justify-center gap-3 transition shadow-md">
-              {loading ? <><Loader2 className="animate-spin" size={20} />Activating...</> : <><Shield size={20} />Activate Account</>}
+              {loading ? <><Loader2 className="animate-spin" size={20} />Activating...</> : <><Shield size={20} />Activate &amp; Sign In</>}
             </button>
           </form>
         )}

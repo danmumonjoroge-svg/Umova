@@ -31,6 +31,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Smartphone, Loader2, CheckCircle2, Clock, XCircle, AlertTriangle, Settings as SettingsIcon, ChevronDown, ExternalLink } from 'lucide-react';
 import { mpesaService } from '../services/mpesaService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
+import { singleFlight } from '../utils/singleFlight';
 
 function fmt(n) { return (Number(n) || 0).toLocaleString(); }
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -92,7 +93,7 @@ function MpesaSettings({ tenant }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleSave = async (e) => {
+  const handleSave = singleFlight('MpesaPage.handleSave', async (e) => {
     e.preventDefault();
     setError(''); setSavedMsg(''); setSaving(true);
     try {
@@ -117,7 +118,7 @@ function MpesaSettings({ tenant }) {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   const readyToTurnOn = config?.has_consumer_key && config?.has_consumer_secret && config?.has_passkey && form.shortcode;
 

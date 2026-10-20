@@ -37,6 +37,10 @@ import CommunicationPage from "./pages/CommunicationPage";
 import CustomerCommunicationPage from "./pages/CustomerCommunicationPage";
 import SettingsPage from "./pages/SettingsPage";
 import AuditPage from "./pages/AuditPage";
+import StaffPage from "./pages/StaffPage";
+import SaleCorrectionsPage from "./pages/SaleCorrectionsPage";
+import { RequirePermission } from "./navigation/PermissionsContext";
+import { ROUTE_PERMISSIONS } from "./navigation/navConfig";
 import FinancialReportsPage from "./pages/FinancialReportsPage";
 import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -57,6 +61,10 @@ import ProductionPage from "./pages/ProductionPage";
 import RecipesPage from "./pages/RecipesPage";
 import PackagesPage from "./pages/PackagesPage";
 import EfficiencyPage from "./pages/EfficiencyPage";
+import ReconciliationPage from "./pages/ReconciliationPage";
+import HrPage from "./pages/HrPage";
+import PayrollPage from "./pages/PayrollPage";
+import ControlReportPage from "./pages/ControlReportPage";
 
 const SKIP_AUTH = process.env.REACT_APP_POS_SKIP_AUTH === "true";
 
@@ -117,7 +125,7 @@ const PosRoutes = () => (
 const PosRoutesInner = () => (
   <Routes>
     <Route element={<POSLayout />}>
-      <Route index element={<POSPage />} />
+      <Route index element={<RequirePermission perm={["page.sell"]}><POSPage /></RequirePermission>} />
       <Route path="dashboard" element={<POSDashboard />} />
 
       {/* Workspaces -- one full-screen landing page per module */}
@@ -131,22 +139,22 @@ const PosRoutesInner = () => (
       <Route path="production" element={<ProductionWorkspace />} />
       <Route path="more" element={<MoreWorkspace />} />
 
-      <Route path="products" element={<ProductsPage />} />
-      <Route path="customers" element={<CustomersPage />} />
-      <Route path="folios" element={<FoliosPage />} />
+      <Route path="products" element={<RequirePermission perm={ROUTE_PERMISSIONS["products"]}><ProductsPage /></RequirePermission>} />
+      <Route path="customers" element={<RequirePermission perm={ROUTE_PERMISSIONS["customers"]}><CustomersPage /></RequirePermission>} />
+      <Route path="folios" element={<RequirePermission perm={ROUTE_PERMISSIONS["folios"]}><FoliosPage /></RequirePermission>} />
       <Route path="room-list" element={<RoomsPage />} />
       <Route path="stays" element={<StaysPage />} />
       <Route path="production-runs" element={<ProductionPage />} />
       <Route path="recipes" element={<RecipesPage />} />
-      <Route path="inventory" element={<InventoryPage />} />
-      <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
-      <Route path="goods-receiving" element={<GoodsReceivingPage />} />
-      <Route path="suppliers" element={<SuppliersPage />} />
-      <Route path="payables" element={<PayablesPage />} />
-      <Route path="expenses" element={<ExpensesPage />} />
+      <Route path="inventory" element={<RequirePermission perm={ROUTE_PERMISSIONS["inventory"]}><InventoryPage /></RequirePermission>} />
+      <Route path="purchase-orders" element={<RequirePermission perm={ROUTE_PERMISSIONS["purchase-orders"]}><PurchaseOrdersPage /></RequirePermission>} />
+      <Route path="goods-receiving" element={<RequirePermission perm={ROUTE_PERMISSIONS["goods-receiving"]}><GoodsReceivingPage /></RequirePermission>} />
+      <Route path="suppliers" element={<RequirePermission perm={ROUTE_PERMISSIONS["suppliers"]}><SuppliersPage /></RequirePermission>} />
+      <Route path="payables" element={<RequirePermission perm={ROUTE_PERMISSIONS["payables"]}><PayablesPage /></RequirePermission>} />
+      <Route path="expenses" element={<RequirePermission perm={ROUTE_PERMISSIONS["expenses"]}><ExpensesPage /></RequirePermission>} />
       <Route path="equipment" element={<AssetsPage />} />
-      <Route path="mpesa" element={<MpesaPage />} />
-      <Route path="cash" element={<CashPage />} />
+      <Route path="mpesa" element={<RequirePermission perm={ROUTE_PERMISSIONS["mpesa"]}><MpesaPage /></RequirePermission>} />
+      <Route path="cash" element={<RequirePermission perm={ROUTE_PERMISSIONS["cash"]}><CashPage /></RequirePermission>} />
       <Route path="units" element={<UnitsPage />} />
       <Route path="charges" element={<RecurringChargesPage />} />
       <Route path="meters" element={<MetersPage />} />
@@ -159,10 +167,16 @@ const PosRoutesInner = () => (
       <Route path="appointments" element={<AppointmentsPage />} />
       <Route path="communication" element={<CommunicationPage />} />
       <Route path="messages" element={<CustomerCommunicationPage />} />
-      <Route path="settings" element={<SettingsPage />} />
-      <Route path="audit" element={<AuditPage />} />
-      <Route path="financials" element={<FinancialReportsPage />} />
-      <Route path="reports" element={<ReportsPage />} />
+      <Route path="settings" element={<RequirePermission perm={ROUTE_PERMISSIONS["settings"]}><SettingsPage /></RequirePermission>} />
+      <Route path="reversals" element={<RequirePermission perm={ROUTE_PERMISSIONS["reversals"]}><SaleCorrectionsPage /></RequirePermission>} />
+      <Route path="staff" element={<RequirePermission perm={ROUTE_PERMISSIONS["staff"]}><StaffPage /></RequirePermission>} />
+      <Route path="reconcile" element={<RequirePermission perm={ROUTE_PERMISSIONS["reconcile"]}><ReconciliationPage /></RequirePermission>} />
+      <Route path="hr" element={<RequirePermission perm={ROUTE_PERMISSIONS["hr"]}><HrPage /></RequirePermission>} />
+      <Route path="payroll" element={<RequirePermission perm={ROUTE_PERMISSIONS["payroll"]}><PayrollPage /></RequirePermission>} />
+      <Route path="control" element={<RequirePermission perm={ROUTE_PERMISSIONS["control"]}><ControlReportPage /></RequirePermission>} />
+      <Route path="audit" element={<RequirePermission perm={ROUTE_PERMISSIONS["audit"]}><AuditPage /></RequirePermission>} />
+      <Route path="financials" element={<RequirePermission perm={ROUTE_PERMISSIONS["financials"]}><FinancialReportsPage /></RequirePermission>} />
+      <Route path="reports" element={<RequirePermission perm={ROUTE_PERMISSIONS["reports"]}><ReportsPage /></RequirePermission>} />
     </Route>
   </Routes>
 );

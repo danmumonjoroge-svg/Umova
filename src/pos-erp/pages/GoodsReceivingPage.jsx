@@ -5,6 +5,7 @@ import { useProducts } from '../hooks/useProducts';
 import { ScannerModal, useBarcodeScanner, SCAN_RESULTS } from '../index';
 import { productService } from '../services/productService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
+import { singleFlight } from '../utils/singleFlight';
 
 /**
  * Goods Receiving with scanning (spec sections 14–18, 41).
@@ -239,7 +240,7 @@ export default function GoodsReceivingPage() {
     setShowScanner(false);
   };
 
-  const submitQuickCreate = async (e) => {
+  const submitQuickCreate = singleFlight('GoodsReceivingPage.submitQuickCreate', async (e) => {
     e.preventDefault();
     const product = await productService.create({
       name: quickCreateForm.name,
@@ -252,7 +253,7 @@ export default function GoodsReceivingPage() {
     });
     setLines((prev) => [...prev, buildLine(product, null, 1)]);
     setQuickCreateBarcode(null);
-  };
+  });
 
   const grnTotal = lines.reduce((sum, l) => sum + (Number(l.quantity_received) || 0) * (Number(l.unit_cost) || 0), 0);
   const partialAmount = Number(amountPaid) || 0;
@@ -271,7 +272,7 @@ export default function GoodsReceivingPage() {
   const canPost = lines.length > 0 && lines.every(l => l.quantity_received > 0 && l.unit_cost >= 0) &&
     (mode === 'PO' ? !!selectedPOId : !!quickSupplierId) && paymentValid;
 
-  const postGRN = async () => {
+  const postGRN = singleFlight('GoodsReceivingPage.postGRN', async () => {
     setPostError('');
     setPosting(true);
     try {
@@ -333,7 +334,7 @@ export default function GoodsReceivingPage() {
     } finally {
       setPosting(false);
     }
-  };
+  });
 
   return (
     <div className="p-4 max-w-5xl mx-auto">

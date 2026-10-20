@@ -17,6 +17,13 @@
 // one-time token -> a REAL Supabase session (deviceTrust.signInWithDevice). The password form below stays
 // fully usable the whole time, and is always the fallback.
 //
+// Optional props (used by screens that serve more than one service, like UnifiedLogin):
+//   signIn       async () => ({ ok, status })  replaces the default Supabase sign-in (Chama signs in differently)
+//   label        e.g. "Chama"                  button reads "Use fingerprint · Chama" (when two buttons are shown)
+//   hint         false                         hide the "isn't turned on yet" line (avoids two of them on one screen)
+//   hintName     e.g. "this app"               wording for that line when the screen isn't about one service
+//   showDivider  false                         omit the "or" line (when another button sits right above)
+//
 // When the phone CAN do fingerprint but it hasn't been turned on for this service yet, it shows one quiet line saying
 // so (instead of nothing), so it's always clear whether the screen is working. Phones without fingerprint, and the
 // web, see nothing at all.
@@ -54,7 +61,10 @@ function messageFor(status) {
 
 const SERVICE_NAME = { finance: "Umova", business: "My Business", chama: "Chama" };
 
-export default function FingerprintLogin({ service, client, onSignedIn, position = "bottom" }) {
+export default function FingerprintLogin({
+  service, client, onSignedIn, position = "bottom",
+  signIn, label, hint = true, hintName, showDivider = true,
+}) {
   const native = isNativeApp();
   const [show, setShow] = useState(false);
   const [offerHint, setOfferHint] = useState(false);   // can do fingerprint, but not turned on for this service yet
@@ -88,7 +98,7 @@ export default function FingerprintLogin({ service, client, onSignedIn, position
     setMessage("");
     let r;
     try {
-      r = await signInWithDevice({ service, client });
+      r = signIn ? await signIn() : await signInWithDevice({ service, client });
     } catch (e) {
       console.error("[FingerprintLogin]", e);
       r = { ok: false, status: "server_error" };
@@ -99,16 +109,16 @@ export default function FingerprintLogin({ service, client, onSignedIn, position
     setMessage(messageFor(r.status));
     // revoked / invalidated wipe the local setup: hide the button, the password form takes over
     setShow(await isEnabled(service).catch(() => false));
-  }, [busy, service, client, onSignedIn]);
+  }, [busy, service, client, onSignedIn, signIn]);
 
   if (!native) return null;
 
   if (!show) {
-    if (!offerHint) return null;
+    if (!offerHint || !hint) return null;
     return (
       <p className={`${position === "top" ? "mb-5" : "mt-5"} flex items-center justify-center gap-2 text-center text-xs text-slate-400`}>
         <Fingerprint size={14} className="shrink-0" />
-        Fingerprint sign-in isn't turned on for {SERVICE_NAME[service] || "this app"} on this phone yet.
+        Fingerprint sign-in isn't turned on for {hintName || SERVICE_NAME[service] || "this app"} on this phone yet.
         Sign in with your password, then choose "Enable fingerprint".
       </p>
     );
@@ -130,7 +140,7 @@ export default function FingerprintLogin({ service, client, onSignedIn, position
           className="w-full flex items-center justify-center gap-2 rounded-2xl bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white font-semibold py-3.5 transition"
         >
           {busy ? <Loader2 size={20} className="animate-spin" /> : <Fingerprint size={22} />}
-          {busy ? "Checking…" : "Use fingerprint"}
+          {busy ? "Checking…" : label ? `Use fingerprint · ${label}` : "Use fingerprint"}
         </button>
 
         {messageEl}
@@ -146,12 +156,14 @@ export default function FingerprintLogin({ service, client, onSignedIn, position
 
   // position === "bottom": sits under the password form's main button.
   return (
-    <div className="mt-6">
-      <div className="flex items-center gap-3 mb-4 text-xs text-slate-400">
-        <span className="h-px flex-1 bg-slate-200" />
-        or
-        <span className="h-px flex-1 bg-slate-200" />
-      </div>
+    <div className={showDivider ? "mt-6" : "mt-3"}>
+      {showDivider && (
+        <div className="flex items-center gap-3 mb-4 text-xs text-slate-400">
+          <span className="h-px flex-1 bg-slate-200" />
+          or
+          <span className="h-px flex-1 bg-slate-200" />
+        </div>
+      )}
 
       <button
         type="button"                           // never submits the password form
@@ -160,7 +172,7 @@ export default function FingerprintLogin({ service, client, onSignedIn, position
         className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-emerald-800 text-emerald-800 hover:bg-emerald-50 disabled:opacity-60 font-semibold py-3.5 transition"
       >
         {busy ? <Loader2 size={22} className="animate-spin" /> : <Fingerprint size={24} />}
-        {busy ? "Checking…" : "Use fingerprint"}
+        {busy ? "Checking…" : label ? `Use fingerprint · ${label}` : "Use fingerprint"}
       </button>
 
       {messageEl}

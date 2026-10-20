@@ -10,6 +10,7 @@ import { CalendarClock, Loader2, Plus, X } from 'lucide-react';
 import { useAppointments, useServices } from '../hooks/useSalon';
 import { useCustomers } from '../hooks/useCustomers';
 import { useCashierShifts } from '../hooks/useCashierShifts';
+import { singleFlight } from '../utils/singleFlight';
 
 const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'CREDIT'];
 const EMPTY_FORM = { customer_id: '', product_id: '', appointment_date: new Date().toISOString().slice(0, 10), appointment_time: '10:00', notes: '' };
@@ -41,7 +42,7 @@ export default function AppointmentsPage() {
 
   const selectedService = services.find(s => s.id === form.product_id);
 
-  const submit = async (e) => {
+  const submit = singleFlight('AppointmentsPage.submit', async (e) => {
     e.preventDefault();
     setFormError('');
     if (!form.customer_id || !form.product_id) { setFormError('Select a customer and a service.'); return; }
@@ -63,7 +64,7 @@ export default function AppointmentsPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   const openComplete = (appt) => {
     setCompleting(appt);

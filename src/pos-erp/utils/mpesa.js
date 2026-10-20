@@ -23,3 +23,22 @@ export function maskPhone(raw) {
 export function isWholeShillings(amount) {
   return Math.abs(Number(amount) - Math.round(Number(amount))) < 0.005;
 }
+
+/**
+ * Which M-Pesa ways are open RIGHT NOW. "Already paid" (the cashier types the SMS code) needs NO setup, NO internet and
+ * NO Daraja account: it is always available. "Send prompt" (STK push) needs internet AND M-Pesa set up for the business.
+ * When a prompt is not possible the till quietly uses "Already paid".
+ * @param {{isOnline: boolean, config: object|null|undefined, chosenMode?: 'PROMPT'|'MANUAL'}} a  config: undefined = still checking, null = none saved
+ */
+export function resolveMpesa({ isOnline, config, chosenMode = 'PROMPT' }) {
+  const stkConfigured = !!(config?.is_active && config.has_consumer_key && config.has_consumer_secret && config.has_passkey);
+  const stkStatus = !isOnline ? 'offline' : config === undefined ? 'checking' : stkConfigured ? 'ready' : 'not_setup';
+  return { stkStatus, effectiveMode: stkStatus === 'ready' ? chosenMode : 'MANUAL' };
+}
+
+/** Receipt wording for a payment line: "M-Pesa SHK7X9ABCD", "Cash", "Card". */
+export function paymentLabel(p) {
+  const m = String(p?.payment_method || '');
+  if (m === 'MOBILE_MONEY') return p.reference_no ? `M-Pesa ${normalizeMpesaCode(p.reference_no)}` : 'M-Pesa';
+  return m.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+}

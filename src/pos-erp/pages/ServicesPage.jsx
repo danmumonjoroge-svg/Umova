@@ -14,6 +14,7 @@ import { Scissors, Loader2, Plus, X, Clock } from 'lucide-react';
 import { useServices } from '../hooks/useSalon';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useCapabilities } from '../navigation/CapabilitiesContext';
+import { singleFlight } from '../utils/singleFlight';
 
 const EMPTY_FORM = { kind: 'SERVICE', name: '', selling_price: '', duration_minutes: '', commission_rate: '', assign_self: false };
 
@@ -33,7 +34,7 @@ export default function ServicesPage() {
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const submit = async (e) => {
+  const submit = singleFlight('ServicesPage.submit', async (e) => {
     e.preventDefault();
     setFormError('');
     if (!form.name.trim()) { setFormError(`Enter a name for the ${noun(form.kind)}.`); return; }
@@ -55,7 +56,7 @@ export default function ServicesPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   return (
     <div className="p-8 max-w-5xl mx-auto">

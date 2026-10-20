@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, Suspense } from "react";
 import { useChama } from "./ChamaContext";
+import { supabase } from "../supabaseClient";
 import {
   Home, Wallet, Users, HeartHandshake, MoreHorizontal, Bell, ArrowLeft, Coins, LogOut,
   Megaphone, FileText, PiggyBank, ChevronDown, Wifi, WifiOff, User,
@@ -8,6 +9,7 @@ import "./ChamaDashboardAdvanced.css";
 import "./workspaces/workspaces.css";
 import useOnlineStatus from "./shell/useOnlineStatus";
 import { clearChamaCache } from "./shell/useCachedQuery";
+import { useContributionOutbox, listOutbox } from "./shell/contributionOutbox";
 import { VIEWS, canSee, parseRoute } from "./shell/views";
 import { Spinner, Notice, ViewFrame } from "./shell/ui";
 import { initials, roleLabel } from "./shell/format";
@@ -80,6 +82,11 @@ function ConnectionStatus({ online }) {
 export default function ChamaDashboardAdvanced() {
   const { chama, member, hasRole, logout } = useChama();
   const online = useOnlineStatus();
+  // Contributions declared while offline are sent from here (not only from the contribution form): when the app opens,
+  // the moment the connection returns, and every 30 seconds while something is waiting.
+  const outbox = useContributionOutbox({ supabase, memberId: member?.id });
+  const waitingCount = outbox.items.filter((i) => i.status !== "failed").length;
+  const refusedCount = outbox.items.filter((i) => i.status === "failed").length;
   const [route, setRoute] = useState(() => window.history.state?.chamaRoute || "home");
   const [menuOpen, setMenuOpen] = useState(false);
   const mainRef = useRef(null);
@@ -107,7 +114,24 @@ export default function ChamaDashboardAdvanced() {
 
   useEffect(() => { mainRef.current?.scrollTo?.(0, 0); window.scrollTo?.(0, 0); }, [route]);
 
-  const doLogout = useCallback(() => { clearChamaCache(); logout(); }, [logout]);
+  // Logging out must never silently lose a contribution that has not reached the server. If we are online, send what is
+  // waiting first; if something is still unsent, say so and let the person decide. Unsent items stay on the phone (they are
+  // NOT removed by clearChamaCache) and are sent the next time this member signs in. `logoutRef` keeps one stable function
+  // that always uses the latest values (the screens below are memoised and would otherwise keep an old copy).
+  const logoutRef = useRef(null);
+  logoutRef.current = async () => {
+    if (member?.id) {
+      if (online) { try { await outbox.sync(); } catch { /* fall through to the check below */ } }
+      const left = listOutbox(member.id).filter((i) => i.status !== "failed").length;
+      if (left > 0 && !window.confirm(
+        `You have ${left} contribution${left === 1 ? "" : "s"} saved on this phone that ${left === 1 ? "has" : "have"} not been sent yet. ` +
+        `${left === 1 ? "It stays" : "They stay"} on this phone and will be sent the next time you sign in. Log out anyway?`
+      )) return;
+    }
+    clearChamaCache();
+    logout();
+  };
+  const doLogout = useCallback(() => logoutRef.current(), []);
 
   const parsed = parseRoute(route);
   const { ws, view, params } = parsed;
@@ -197,7 +221,18 @@ export default function ChamaDashboardAdvanced() {
 
         {!online && (
           <div className="cm-offline-banner" role="status">
-            <WifiOff size={14} /> You're offline. You can look at information saved on this phone. Sending contributions, applying for loans and other money actions need a connection — nothing you do offline is saved.
+            <WifiOff size={14} /> You're offline. You can look at information saved on this phone, and you can declare a contribution: it is saved on this phone and sent when you're back online. Applying for loans and other money actions need a connection and are not saved.
+          </div>
+        )}
+        {waitingCount > 0 && (
+          <div className="cm-offline-banner" role="status">
+            <Coins size={14} /> {waitingCount} contribution{waitingCount === 1 ? "" : "s"} saved on this phone, not sent yet.
+            {online ? (outbox.syncing ? " Sending…" : " It will be sent automatically.") : " It will be sent when you're back online."}
+          </div>
+        )}
+        {refusedCount > 0 && (
+          <div className="cm-offline-banner" role="alert">
+            <ShieldAlert size={14} /> {refusedCount} contribution{refusedCount === 1 ? "" : "s"} could not be accepted by the server. Open the contribution form to see why.
           </div>
         )}
 

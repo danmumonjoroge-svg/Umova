@@ -18,6 +18,12 @@ import React, {
 } from "react";
 import { posSupabase } from "../services/posSupabaseClient";
 import { posPasskeys } from "../auth/posPasskeys";
+// Offline mode: lets a phone that already signed in once keep opening the till with no signal. See
+// offline/offlineIdentity.js for what is stored and the safety rules.
+import { saveOfflineIdentity, loadOfflineIdentity, clearOfflineIdentity, canReachServer } from "../offline/offlineIdentity";
+import { isNetworkFailure } from "../offline/netErrors";
+import { ensureCacheOwner, clearOfflineCaches } from "../offline/offlineCache";
+import { countUnsent } from "../offline/syncEngine";
 
 const POSAuthContext = createContext(null);
 
@@ -45,6 +51,8 @@ export function POSAuthProvider({ children }) {
   const [tenant, setTenant] = useState(null);
   const [statusDetail, setStatusDetail] = useState(null); // rejection/suspension free-text reason
   const [logoutNotice, setLogoutNotice] = useState(null); // one-shot message shown on next logged_out render
+  // true while the till was opened from the saved sign-in because the server cannot be reached.
+  const [offlineSession, setOfflineSession] = useState(false);
 
   const mounted = useRef(true);
   const validating = useRef(false);
@@ -52,6 +60,9 @@ export function POSAuthProvider({ children }) {
   useEffect(() => { stageRef.current = authStage; }, [authStage]);
 
   const forceSignOut = useCallback(async (notice) => {
+    clearOfflineIdentity(); // a signed-out (or refused) person must not be able to re-enter offline
+    clearOfflineCaches();   // and the phone must not keep this business's customers/items for the next person
+    setOfflineSession(false);
     try {
       await posSupabase.auth.signOut();
     } catch (err) {
@@ -65,12 +76,39 @@ export function POSAuthProvider({ children }) {
     setAuthStage("logged_out");
   }, []);
 
+  // Opens the till from the saved sign-in. Returns true if it did.
+  const openFromSavedSignIn = useCallback(async () => {
+    const id = loadOfflineIdentity();
+    if (!id || !mounted.current) return false;
+    await ensureCacheOwner(id.tenant?.id);
+    setStaff(id.staff);
+    setTenant(id.tenant);
+    setStatusDetail(null);
+    setOfflineSession(true);
+    setAuthStage("authenticated");
+    return true;
+  }, []);
+
   const validate = useCallback(async () => {
     if (validating.current) return;
     validating.current = true;
     try {
-      const { data: { session } } = await posSupabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await posSupabase.auth.getSession();
       if (!session) {
+        // No usable session. If that is only because the phone cannot reach the server (an expired token cannot be
+        // refreshed with no internet) and this phone has a recent saved sign-in, keep working offline.
+        if ((sessionError && isNetworkFailure(sessionError)) || (loadOfflineIdentity() && !(await canReachServer()))) {
+          if (await openFromSavedSignIn()) return;
+        }
+        if (sessionError && isNetworkFailure(sessionError) && stageRef.current === "checking") {
+          if (mounted.current) {
+            setLogoutNotice("No internet. Connect once to sign in on this phone; after that it works offline.");
+            setAuthStage("logged_out");
+          }
+          return;
+        }
+        clearOfflineIdentity();
+        setOfflineSession(false);
         if (mounted.current) setAuthStage("logged_out");
         return;
       }
@@ -81,6 +119,15 @@ export function POSAuthProvider({ children }) {
         // over a blip. Leave the current stage as-is and try again
         // on the next interval/focus tick.
         console.error("[POS AUTH] get_pos_profile error:", error);
+        if (isNetworkFailure(error)) {
+          // No internet. A phone that signed in before may keep working from its saved sign-in; otherwise show the
+          // login screen with a plain reason instead of spinning forever.
+          if (await openFromSavedSignIn()) return;
+          if (stageRef.current === "checking" && mounted.current) {
+            setLogoutNotice("No internet. Connect once to sign in on this phone; after that it works offline.");
+            setAuthStage("logged_out");
+          }
+        }
         return;
       }
 
@@ -106,14 +153,17 @@ export function POSAuthProvider({ children }) {
       }
 
       if (!mounted.current) return;
+      await ensureCacheOwner(profile.tenant?.id); // a different business on this phone => its saved copy is emptied first
       setStaff(profile.staff);
       setTenant(profile.tenant);
       setStatusDetail(null);
+      setOfflineSession(false);
+      saveOfflineIdentity({ staff: profile.staff, tenant: profile.tenant }); // proof of a real online check, for the next offline start
       setAuthStage(profile.staff.must_change_password ? "must_change_password" : "authenticated");
     } finally {
       validating.current = false;
     }
-  }, [forceSignOut]);
+  }, [forceSignOut, openFromSavedSignIn]);
 
   useEffect(() => {
     mounted.current = true;
@@ -121,6 +171,9 @@ export function POSAuthProvider({ children }) {
 
     const { data: { subscription } } = posSupabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT") {
+        clearOfflineIdentity();
+        clearOfflineCaches();
+        setOfflineSession(false);
         if (!mounted.current) return;
         setStaff(null);
         setTenant(null);
@@ -141,12 +194,18 @@ export function POSAuthProvider({ children }) {
       if (mounted.current && REVALIDATE_STAGES.has(stageRef.current)) validate();
     };
     window.addEventListener("focus", onFocus);
+    // The moment the connection returns, re-check the sign-in for real (and clear the "working offline" state).
+    const onOnline = () => {
+      if (mounted.current && (REVALIDATE_STAGES.has(stageRef.current))) validate();
+    };
+    window.addEventListener("online", onOnline);
 
     return () => {
       mounted.current = false;
       subscription.unsubscribe();
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onOnline);
     };
   }, [validate]);
 
@@ -195,7 +254,21 @@ export function POSAuthProvider({ children }) {
     return { ok: true, businessCode: data.business_code };
   }, []);
 
-  const logout = useCallback(() => forceSignOut(null), [forceSignOut]);
+  // Signing out erases the saved sign-in, so with no internet the person could not get back in. If sales are still
+  // waiting on this phone, say so first. (They are NOT lost: they stay saved and are sent after the next sign-in.)
+  const logout = useCallback(async () => {
+    try {
+      const waiting = await countUnsent();
+      if (waiting > 0 && typeof window !== "undefined" && typeof window.confirm === "function" && !(await canReachServer())) {
+        const ok = window.confirm(
+          `${waiting} saved item${waiting === 1 ? " is" : "s are"} still waiting to be sent, and there is no internet. ` +
+          "If you sign out now you will need internet to sign back in. Your saved items are kept. Sign out anyway?"
+        );
+        if (!ok) return;
+      }
+    } catch { /* never block a sign-out on a storage problem */ }
+    return forceSignOut(null);
+  }, [forceSignOut]);
 
   const completePasswordChange = useCallback(async (newPassword) => {
     const { error: updateErr } = await posSupabase.auth.updateUser({ password: newPassword });
@@ -219,6 +292,7 @@ export function POSAuthProvider({ children }) {
     tenant,
     statusDetail,
     logoutNotice,
+    offlineSession,
     loading: authStage === "checking",
     isAuthenticated: authStage === "authenticated",
     isOwner: staff?.role === "owner",

@@ -1,0 +1,10 @@
+CREATE TABLE lb_warehouses (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, business_id uuid, is_default boolean);
+CREATE TABLE lb_products (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, name text, track_inventory boolean DEFAULT true, reorder_level numeric DEFAULT 0);
+CREATE TABLE lb_inventory (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, business_id uuid, warehouse_id uuid, product_id uuid, quantity numeric, average_cost numeric DEFAULT 0, last_movement_at timestamptz, stock_status text);
+CREATE TABLE lb_stock_movements (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, business_id uuid, warehouse_id uuid, product_id uuid, movement_type text, reference_type text, reference_id uuid, quantity numeric, unit_cost numeric, total_cost numeric, notes text, created_by uuid, created_at timestamptz DEFAULT now());
+CREATE TABLE lb_customers (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, name text, outstanding_balance numeric DEFAULT 0, updated_at timestamptz);
+CREATE TABLE lb_customer_credit_transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, business_id uuid, customer_id uuid, transaction_type text, reference_type text, reference_id uuid, amount numeric, balance_after numeric, notes text, created_by uuid, created_at timestamptz DEFAULT now());
+CREATE TABLE lb_sales (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, business_id uuid, branch_id uuid, cashier_id uuid, customer_id uuid, folio_id uuid, sale_number text, status text, total_amount numeric, notes text, completed_at timestamptz DEFAULT now(), updated_at timestamptz);
+CREATE TABLE lb_sale_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), sale_id uuid, product_id uuid, quantity numeric, cost_price numeric);
+CREATE TABLE lb_payments (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), sale_id uuid, payment_method text, amount numeric, change_amount numeric DEFAULT 0, reference_no text, status text, created_at timestamptz DEFAULT now() /*CHK*/);
+CREATE TABLE lb_folio_lines (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), sale_id uuid, status text DEFAULT 'POSTED');

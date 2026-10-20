@@ -16,6 +16,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { settingsService } from '../services/settingsService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
+import { cacheValue, readCachedValue } from '../offline/offlineCache';
 import { ALL_CAPABILITY_KEYS, DEFAULT_CAPABILITY_KEYS, withRequired } from './navConfig';
 
 const CapabilitiesContext = createContext({
@@ -37,9 +38,12 @@ export function CapabilitiesProvider({ children }) {
       const s = await settingsService.getPosSettings(tenant.business_id);
       const list = s?.settings?.enabled_capabilities;
       setStored(Array.isArray(list) ? list.filter((k) => ALL_CAPABILITY_KEYS.includes(k)) : null);
+      cacheValue(`capabilities:${tenant.business_id}`, Array.isArray(list) ? list : null);
     } catch (err) {
-      // A failed settings read must never hide navigation -- fall back to "everything on".
+      // A failed settings read must never hide navigation -- fall back to the last choice saved on this phone, else "everything on".
       console.error('[Capabilities] could not read settings:', err);
+      const saved = await readCachedValue(`capabilities:${tenant.business_id}`);
+      if (Array.isArray(saved)) setStored(saved.filter((k) => ALL_CAPABILITY_KEYS.includes(k)));
     } finally {
       setLoading(false);
     }

@@ -10,6 +10,7 @@ import React, { useState } from 'react';
 import { Gauge, Loader2, Plus, X } from 'lucide-react';
 import { useMeters, useUnits } from '../hooks/useProperty';
 import { useCustomers } from '../hooks/useCustomers';
+import { singleFlight } from '../utils/singleFlight';
 
 const METER_TYPES = ['WATER', 'ELECTRICITY', 'OTHER'];
 const EMPTY_METER_FORM = { meter_number: '', meter_type: 'WATER', rate: '', unit_id: '', customer_id: '' };
@@ -35,7 +36,7 @@ export default function MetersPage() {
   const [readingBusy, setReadingBusy] = useState(false);
   const [billedSummary, setBilledSummary] = useState(null);
 
-  const submitMeter = async (e) => {
+  const submitMeter = singleFlight('MetersPage.submitMeter', async (e) => {
     e.preventDefault();
     setFormError('');
     if (!form.meter_number.trim()) { setFormError('Enter a meter number.'); return; }
@@ -55,7 +56,7 @@ export default function MetersPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   const openReading = (meter) => {
     setReadingMeter(meter);

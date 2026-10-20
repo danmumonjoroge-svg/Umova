@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { productService } from '../services/productService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
+import { readThrough } from '../offline/readThrough';
 
 export function useProducts() {
   const { staffId, tenant } = usePosErpAuth();
@@ -15,6 +16,7 @@ export function useProducts() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({ count: 0, page: 1, limit: 50 });
+  const [copyInfo, setCopyInfo] = useState({ fromCache: false, savedAt: null, complete: true }); // saved copy from this phone?
 
   // Only the LATEST fetch may write state. The till now re-fetches as the
   // cashier types (server-side search), so an older, slower response must
@@ -26,8 +28,13 @@ export function useProducts() {
     setLoading(true);
     setError(null);
     try {
-      const result = await productService.getAll({ ...params });
+      const rt = await readThrough('products', () => productService.getAll({ ...params }), {
+        tenantId: tenant?.id, params, searchFields: ['name', 'sku', 'barcode'],
+        where: (r, p) => (!p.categoryId || r.category_id === p.categoryId) && (!p.activeOnly || r.is_active === 'active'),
+      });
+      const result = rt.result;
       if (mine !== fetchSeq.current) return;
+      setCopyInfo({ fromCache: rt.fromCache, savedAt: rt.savedAt, complete: rt.complete });
       setProducts(result.data || []);
       setPagination({ count: result.count || 0, page: result.page || 1, limit: result.limit || 50 });
     } catch (err) {
@@ -38,7 +45,7 @@ export function useProducts() {
     } finally {
       if (mine === fetchSeq.current) setLoading(false);
     }
-  }, []);
+  }, [tenant?.id]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -71,5 +78,5 @@ export function useProducts() {
     return result;
   }, []);
 
-  return { products, loading, error, pagination, fetch, create, update, deactivate, reactivate };
+  return { products, loading, error, pagination, copyInfo, fetch, create, update, deactivate, reactivate };
 }

@@ -140,3 +140,45 @@ secret to configure. If WhatsApp receipt sending shows "No WhatsApp
 receipt wording is set up yet," open **Messages** once — that's what
 seeds the default templates (Phase 7/8's `ensureDefaults()`), including
 the `RECEIPT` one this depends on.
+
+## 7. Business logo limits (Phase 27) — run only after approval
+Run `schema/phase27_business_branding.sql` after the `business-logos` bucket exists (phase15 setup). It limits the bucket to 1 MB and png/jpeg/webp. Idempotent; no-op if the bucket is missing. Then upload a test logo and confirm an SVG upload is refused.
+
+## 8. Phase 28 (REWORKED) — small additions on top of YOUR existing permission system — run only after approval, STAGING first
+Your live database already has its own permission system (`pos_all_permissions` 24 keys, `pos_role_default_permissions`, `pos_staff.role_template`, `pos_staff_permission_overrides`, `pos_has_permission(p_perm)`, `is_pos_session()`, `pos_enforce_permission()` triggers, owner-only staff functions). The first version of phase 28 tried to replace it and failed on `42P13`; it has been rewritten. **The new file creates no table and redefines no existing function** (checked: a fingerprint of all existing functions is identical before and after).
+It adds only:
+- `pos28_staff_id()` and `pos28_tenant_id()` — read the staff/business from the login token (your `pos_current_*` read session settings that are not reliably set, so new code does not use them).
+- `pos_my_access()` — one call for the menus: `{ok, is_owner, role, template, permissions[]}`.
+- `lb_businesses`: your `guard_business_identity()` (read and confirmed) already protects name, phone, email, address, currency, time zone and logo. A small extra trigger covers what it misses (receipt footer, tax config, settings JSON, status), and insert/delete use your `pos_enforce_permission('settings.manage')`. Your trigger is untouched.
+- Logo bucket: your `business_logos_tenant_*` policies require `settings.manage`, but the older permissive `business_logos_insert_own / update_own / delete_own` policies let any staff member upload or delete a logo. A restrictive policy closes that gap.
+- `pos_audit_log`: staff sessions can no longer update or delete audit rows, and can only insert rows for their own business.
+Findings from your live database that matter: `pos_guard_sale_update` is NOT attached to `lb_sales`, and `lb_sales` has only a `sales.create` insert trigger, so today any staff session can set a sale to VOIDED directly. Phase 29 closes that. Check on staging that no existing screen needs to write audit rows other than inserts, or edit `lb_businesses.settings` as a non-owner.
+Test with three logins (owner, manager, cashier): cashier and manager cannot rename the business, change the footer or upload a logo; owner can; owner grants `settings.manage` to the manager from the Staff page and the manager then can.
+Rollback: drop triggers `trg_pos_perm_lb_businesses_insert/delete` and `trg_pos28_business_extras`, the `r_logo_*` and `r_audit_*` policies, and the functions `pos28_staff_id`, `pos28_tenant_id`, `pos_my_access`, `pos28_guard_business_extras`. Nothing else was touched.
+Permission mapping used by phases 29-32 (and the app): refunds.request / refunds.approve (sale reversals), finance.view (Close the day; sign-off also needs payments.approve), employees.manage (staff records), payroll.access (payroll and salaries), audit.view (control report), settings.manage (branding). Staff management is owner-only through your existing functions; the app's Staff page now calls them (add staff, change role, per-permission override, switch on/off, reset password).
+
+## 9. Sale reversals (Phase 29) — run only after approval, on STAGING first, after phase28
+Check these on staging BEFORE trusting it (the live tables are not in the zip, so these were assumed from the app code):
+1. `lb_sales.status` has the value `VOIDED` and `COMPLETED`; `lb_sales.cashier_id` holds the staff member's auth user id (what saleService writes today).
+2. `lb_payments.status`: does it accept REFUNDED (or VOIDED / CANCELLED)? If none, the reversal still works but shows "PAYMENTS_NOT_MARKED" and cash-up must be adjusted by hand.
+3. `process_credit_sale_payment` (trigger on lb_payments): make sure it does NOT fire on UPDATE of status. Do one credit-sale reversal and confirm the customer balance drops once, not twice.
+4. Credit ledger: the reversal reduces the balance by the positive `lb_customer_credit_transactions` rows whose `reference_id` is the sale. Confirm a credit sale writes such a row; if not you get a "CREDIT_NOT_ADJUSTED" warning and the balance is left alone.
+5. `perform_daily_closing`: confirm a reversed sale no longer counts in cash / M-Pesa totals.
+6. Walk through: cashier asks -> manager approves; manager reverses own sale (shows "their own request"); try a folio-charged sale (refused); try reversing twice (refused).
+7. The old browser "void" is gone. If any screen outside this zip calls `saleService.voidSale`, it will fail until moved to the Sale corrections flow.
+8. Rollback: drop the `r_sales_*` / `r_payments_*` policies, the `pos_*reversal*` functions, `_reverse_sale_core`, and the `pos_sale_reversals` table. Already-reversed sales stay reversed.
+
+## 10. Double-posting fix — app change only (no migration)
+Ship with the next web build. Then run `schema/diagnostics/find_double_posting.sql` (read-only) on production. Block 5 lists any triggers that post stock or folio lines on their own: if one exists, the app and the trigger are both posting and that is a second cause to fix in the database. Duplicate sales found by block 1 are corrected through Sale corrections (phase29, once deployed), duplicate folio lines by "Remove" on the folio, duplicate stock by a stock adjustment with a reason.
+
+## 11. Cash and M-Pesa reconciliation (Phase 30) — run only after approval, STAGING first
+Order: phase27, 28, 29, then **30, 31, 32**. Phase 30 stops with a clear message if 28 or 29 is missing; phase 32 needs 28, 29 and 30; phase 31 needs 28 (31 is optional).
+Screen: More > Close the day (needs `finance.view`; sign-off needs `payments.approve` and a different person from the one who counted, unless owner). The expected figures use sales, folio payments, cash movements, spending and approved reversals for the Nairobi day. Assumptions about the live database to check on staging: `lb_payments.payment_method` / `status` values, `lb_cash_movements` columns, `lb_folio_payments`, `lb_expenses.status`, `lb_mpesa_transactions`. If a column differs the function errors; it does not guess.
+
+## 12. Staff records and payroll (Phase 31) — run only after approval, STAGING first
+Screens: More > Staff records (`employees.manage`), More > Payroll (`payroll.access`). Only the owner can grant these.
+**Statutory rates are a starting point, not advice.** Only NSSF (Year 4, 6% up to KES 108,000 from 1 Feb 2026) was read from an official notice. PAYE bands, personal relief, SHIF (2.75%) and the housing levy (1.5%) came from third-party summaries, and sources disagree on whether SHIF and the levy reduce taxable pay. The seeded rates are marked unconfirmed, and **a run cannot be approved until the owner confirms every rate in force for that month** against KRA, NSSF and SHA. When the law changes, add a new rate with a start date; old runs keep the rates they used.
+Not built: part-month pro-rating, overtime, loans or advances, automatic unpaid-leave deductions, P9/P10 returns, pay-out files. The system does not move money.
+
+## 13. Control report (Phase 32) — run only after approval
+More > Control report (`audit.view`). Read-only; adds no table. It reports only what was recorded through these screens.

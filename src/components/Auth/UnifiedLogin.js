@@ -33,7 +33,9 @@
 // phone, a "Use fingerprint" button appears under the Login button.
 // The fingerprint releases a device secret from the Android Keystore, the
 // server verifies it and returns a one-time token, and verifyOtp() turns that
-// into a normal Supabase session (src/security/deviceTrust.js). The password
+// into a normal Supabase session (src/security/deviceTrust.js). Chama has no
+// Supabase session, so its own button signs in through src/security/chamaDevice.js
+// and hands the verified user to ChamaContext.loginWithDevice(). The password
 // form stays fully usable and is always the fallback.
 // ============================================================================
 
@@ -55,8 +57,9 @@ import { resolveStaffLogin, resolveMemberLogin, looksLikePhoneNumber } from "./l
 import { loginWithPasskey, passkeysSupported } from "./webauthnHelpers";
 import { isNativeApp } from "../../security/nativeBiometric";
 import FingerprintLogin from "../../security/FingerprintLogin";
+import { signInWithChamaFingerprint } from "../../security/chamaDevice";
+import { isEnabled } from "../../security/deviceTrust";
 import { supabase } from "../../supabaseClient";
-import umovaEmblem from "../../assets/brand/umova-emblem-small.png";
 
 export default function UnifiedLogin() {
   const navigate = useNavigate();
@@ -65,7 +68,7 @@ export default function UnifiedLogin() {
   // wants staff to land somewhere specific (e.g. POS Login -> /admin/pos).
   const from = location.state?.from || "/admin/dashboard";
 
-  const { loginWithPhone, authStage, authError, authBusy } = useChama();
+  const { loginWithPhone, loginWithDevice, authStage, authError, authBusy } = useChama();
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -80,6 +83,29 @@ export default function UnifiedLogin() {
   // from a previous visit would silently redirect someone away from a
   // member/staff login attempt they never asked to make.
   const attemptedChama = useRef(false);
+
+  // Phone app: this one screen serves Umova (SACCO / staff) AND Chama. If fingerprint is turned on for BOTH on this
+  // phone we show two clearly labelled buttons; if only one is on, a single plain button.
+  const [fp, setFp] = useState({ finance: false, chama: false });
+  const bothFingerprints = fp.finance && fp.chama;
+  useEffect(() => {
+    if (!isNativeApp()) return undefined;
+    let alive = true;
+    Promise.all([isEnabled("finance"), isEnabled("chama")])
+      .then(([f, c]) => { if (alive) setFp({ finance: !!f, chama: !!c }); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Chama fingerprint sign-in: the fingerprint + server check return the Chama user; ChamaContext then continues exactly
+  // like a password login (memberships, licence). attemptedChama lets the effect below carry on to /chama.
+  const chamaFingerprintSignIn = async () => {
+    attemptedChama.current = true;
+    const r = await signInWithChamaFingerprint({ client: supabase });
+    if (!r.ok) { attemptedChama.current = false; return r; }
+    await loginWithDevice(r.user);
+    return { ok: true };
+  };
 
   useEffect(() => {
     if (!attemptedChama.current) return;
@@ -149,7 +175,7 @@ export default function UnifiedLogin() {
       if (memberResult.reason === "NEEDS_SETUP") {
         // Hand off to the full member-setup flow (National ID verification,
         // password creation) rather than reimplementing it here.
-        navigate("/member-login", { state: { mode: "setup", memberNo: trimmed } });
+        navigate("/login", { state: { mode: "setup", memberNo: trimmed } });
         return;
       }
 
@@ -212,8 +238,8 @@ export default function UnifiedLogin() {
         {/* HEADER */}
         <div className="bg-gradient-to-r from-green-800 to-emerald-700 p-8 text-white">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-white shadow-md flex items-center justify-center p-1.5">
-              <img src={umovaEmblem} alt="Umova" className="w-full h-full object-contain" />
+            <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center">
+              <UserCircle2 size={30} />
             </div>
             <div>
               <h1 className="text-3xl font-black">UMOVA</h1>
@@ -318,6 +344,9 @@ export default function UnifiedLogin() {
           <FingerprintLogin
             service="finance"
             client={supabase}
+            label={bothFingerprints ? "Umova" : undefined}
+            hintName="this app"
+            hint={!fp.chama}
             onSignedIn={() => {
               setError("");
               setSuccess("Signed in with fingerprint.");
@@ -325,11 +354,24 @@ export default function UnifiedLogin() {
             }}
           />
 
+          {/* Chama has no Supabase session, so it signs in through its own check (chamaDevice.js). Its "isn't turned
+              on" hint is hidden because the button above already shows one on this shared screen. It prints no success
+              message of its own: ChamaContext + the authStage effect above decide where to go, or show the error
+              (for example "no chama membership yet"). */}
+          <FingerprintLogin
+            service="chama"
+            client={supabase}
+            signIn={chamaFingerprintSignIn}
+            label={bothFingerprints ? "Chama" : undefined}
+            hint={false}
+            showDivider={!bothFingerprints}
+          />
+
           <div className="mt-6 text-center text-sm text-slate-500">
             First time logging in, or forgot your password?{" "}
             <button
               type="button"
-              onClick={() => navigate("/member-login")}
+              onClick={() => navigate("/login")}
               className="text-green-700 font-semibold hover:underline"
             >
               Set up / reset here

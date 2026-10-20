@@ -14,6 +14,7 @@ import { useNetStatus } from '../offline/useNetStatus';
 import { WorkspacePage, kes } from '../components/workspace/WorkspaceKit';
 import Sheet, { fieldClass as field } from '../components/workspace/Sheet';
 import { NewStaySheet } from '../components/StaySheets';
+import { singleFlight } from '../utils/singleFlight';
 
 const TONE = {
   AVAILABLE: 'bg-[#237A52]/10 text-[#1B5138]',
@@ -72,14 +73,14 @@ function RoomSheet({ room, types, onClose, onSaved }) {
   const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const type = types.find((t) => t.id === form.roomTypeId);
-  const save = async (isActive = true) => {
+  const save = singleFlight('RoomsPage.save', async (isActive = true) => {
     setBusy(true); setError('');
     try {
       await roomService.saveRoom({ id: room?.id, tenantId: tenant?.id, businessId: tenant?.business_id, roomNumber: form.roomNumber, roomTypeId: form.roomTypeId, rateOverride: form.rate, notes: form.notes, isActive });
       onSaved();
     } catch (err) { setError(err.message || 'Could not save the room.'); }
     finally { setBusy(false); }
-  };
+  });
   return (
     <Sheet title={room ? `Room ${room.room_number}` : 'Add a room'} onClose={onClose}>
       <div className="space-y-2">
@@ -103,12 +104,12 @@ function TypesSheet({ types, onClose, onSaved }) {
   const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const edit = (t) => { setEditing(t); setForm(t.id ? { name: t.name, baseRate: String(Number(t.base_rate)), capacity: String(t.capacity) } : { name: '', baseRate: '', capacity: '2' }); setError(''); };
-  const save = async () => {
+  const save = singleFlight('RoomsPage.save', async () => {
     setBusy(true); setError('');
     try { await roomService.saveType({ id: editing.id, tenantId: tenant?.id, businessId: tenant?.business_id, name: form.name, baseRate: form.baseRate, capacity: form.capacity }); setEditing(null); onSaved(); }
     catch (err) { setError(err.message || 'Could not save.'); }
     finally { setBusy(false); }
-  };
+  });
   return (
     <Sheet title="Room types" onClose={onClose}>
       {!editing ? (
@@ -168,12 +169,12 @@ export default function RoomsPage() {
   }, [rows]);
   const shown = (rows || []).filter((r) => filter === 'ALL' || r.display_status === filter || (filter === 'AVAILABLE' && r.display_status === 'RESERVED'));
 
-  const setStatus = async (room, status) => {
+  const setStatus = singleFlight('RoomsPage.setStatus', async (room, status) => {
     setBusy(true); setError('');
     try { await roomService.setStatus(room.id, status); await load(); }
     catch (err) { setError(err.message || 'That did not work.'); }
     finally { setBusy(false); }
-  };
+  });
   const canWrite = isOnline && !fromCache;
 
   return (

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { inventoryService } from '../services/inventoryService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
+import { readThrough } from '../offline/readThrough';
 
 export function useInventory() {
   const { staffId, tenant } = usePosErpAuth();
@@ -10,12 +11,15 @@ export function useInventory() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({ count: 0, page: 1, limit: 50 });
+  const [copyInfo, setCopyInfo] = useState({ fromCache: false, savedAt: null, complete: true }); // saved copy from this phone?
 
   const fetch = useCallback(async (params = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await inventoryService.getAll(params);
+      const rt = await readThrough('inventory', () => inventoryService.getAll(params), { tenantId: tenant?.id, params, searchFields: ['name'] });
+      const result = rt.result;
+      setCopyInfo({ fromCache: rt.fromCache, savedAt: rt.savedAt, complete: rt.complete });
       setItems(result.data || []);
       setPagination({ count: result.count || 0, page: result.page || 1, limit: result.limit || 50 });
     } catch (err) {
@@ -25,7 +29,7 @@ export function useInventory() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenant?.id]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -42,7 +46,7 @@ export function useInventory() {
     await fetch(); // re-read rather than patch in place — quantity/stock_status/average_cost all depend on server-side logic in applyStockMovement
   }, [staffId, tenant, fetch]);
 
-  return { items, loading, error, pagination, fetch, adjustStock };
+  return { items, loading, error, pagination, copyInfo, fetch, adjustStock };
 }
 
 export function useStockHistory(productId) {

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useInventory, useStockHistory } from "../hooks/useInventory";
 import { MANUAL_ADJUSTMENT_TYPES } from "../services/inventoryService";
+import { singleFlight } from '../utils/singleFlight';
 
 const STATUS_STYLES = {
   NORMAL: "bg-emerald-50 text-emerald-700",
@@ -145,7 +146,7 @@ function AdjustStockModal({ product, onClose, onAdjust }) {
   const hasFixedDirection = type in FIXED_DIRECTION;
   const effectiveDirection = hasFixedDirection ? FIXED_DIRECTION[type] : direction;
 
-  const submit = async (e) => {
+  const submit = singleFlight('InventoryPage.submit', async (e) => {
     e.preventDefault();
     const qty = Number(amount);
     if (!qty || qty <= 0) { setErr("Enter a quantity greater than zero."); return; }
@@ -160,7 +161,7 @@ function AdjustStockModal({ product, onClose, onAdjust }) {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">

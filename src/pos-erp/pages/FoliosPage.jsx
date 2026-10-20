@@ -25,6 +25,8 @@ import Sheet, { fieldClass } from '../components/workspace/Sheet';
 import { printDocument } from '../utils/printDocument';
 import { buildFolioDocumentHtml } from '../utils/folioDocument';
 import { normalizeMpesaCode, isValidMpesaCode } from '../utils/mpesa';
+import { singleFlight } from '../utils/singleFlight';
+const newKey = () => `FL-${(window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)}`;
 
 const METHODS = [['CASH', 'Cash'], ['MOBILE_MONEY', 'M-Pesa'], ['CARD', 'Card']];
 const CHARGE_TYPES = [['OTHER', 'Other charge'], ['SERVICE', 'Service'], ['ACTIVITY', 'Activity']];
@@ -62,16 +64,17 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
   useEffect(() => { load(); }, [load]);
   // Arriving from check-out (?settle=1): go straight to the settle sheet once the bill has loaded.
   const settleOpened = React.useRef(false);
+  const chargeKey = React.useRef(null); // idempotency key for the charge being added; the server ignores a repeat of the same key
   useEffect(() => {
     if (openSettle && folio && folio.status === 'OPEN' && Number(folio.balance_due) > 0 && !settleOpened.current) { settleOpened.current = true; setSheet('settle'); }
   }, [openSettle, folio]);
 
-  const act = async (fn) => {
+  const act = singleFlight('FoliosPage.act', async (fn) => {
     setBusy(true); setError('');
-    try { await fn(); setSheet(null); setForm((f) => ({ ...f, description: '', quantity: '1', price: '', code: '' })); await load(); }
+    try { await fn(); chargeKey.current = null; setSheet(null); setForm((f) => ({ ...f, description: '', quantity: '1', price: '', code: '' })); await load(); }
     catch (err) { setError(err.message || 'That did not work.'); }
     finally { setBusy(false); }
-  };
+  });
 
   if (!folio) return <p className="text-sm text-[#68756D]">{error || 'Loading…'}</p>;
   const open = folio.status === 'OPEN';
@@ -196,7 +199,7 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
               <input className={field} type="number" inputMode="decimal" placeholder="Qty" value={form.quantity} onChange={set('quantity')} />
               <input className={field} type="number" inputMode="decimal" placeholder="Price each" value={form.price} onChange={set('price')} />
             </div>
-            <button disabled={busy || !form.description.trim() || !(Number(form.price) > 0) || !(Number(form.quantity) > 0)} onClick={() => act(() => folioService.addCharge({ folioId, lineType: form.type, description: form.description, quantity: Number(form.quantity), unitPrice: Number(form.price), createdBy: staffId }))}
+            <button disabled={busy || !form.description.trim() || !(Number(form.price) > 0) || !(Number(form.quantity) > 0)} onClick={() => act(() => folioService.addCharge({ folioId, lineType: form.type, description: form.description, quantity: Number(form.quantity), unitPrice: Number(form.price), createdBy: staffId, clientReference: (chargeKey.current ||= newKey()) }))}
               className="w-full min-h-[48px] rounded-xl bg-[#237A52] text-white font-bold disabled:opacity-50">{busy ? 'Adding…' : 'Add to bill'}</button>
           </div>
         </Sheet>
@@ -258,7 +261,7 @@ export default function FoliosPage() {
     setShowNew(true);
     if (!customers.length) { try { setCustomers((await customerService.getAll({ limit: 200 })).data); } catch { /* picker stays empty; error shows on submit */ } }
   };
-  const createFolio = async () => {
+  const createFolio = singleFlight('FoliosPage.createFolio', async () => {
     setBusy(true); setError('');
     try {
       const id = await folioService.open({ businessId: tenant?.business_id, customerId: newForm.customerId, title: newForm.title.trim() || null, createdBy: staffId });
@@ -266,7 +269,7 @@ export default function FoliosPage() {
       setParams({ folio: id });
     } catch (err) { setError(err.message || 'Could not open the folio.'); }
     finally { setBusy(false); }
-  };
+  });
 
   return (
     <WorkspacePage title="Customer Folios" subtitle="One bill per customer. Charge as they go, settle it all at once.">

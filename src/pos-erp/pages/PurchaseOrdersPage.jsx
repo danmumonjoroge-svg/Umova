@@ -21,6 +21,7 @@ import { ClipboardList, Loader2, Plus, X, Trash2 } from 'lucide-react';
 import { usePurchaseOrders } from '../hooks/usePurchases';
 import { useSuppliers } from '../hooks/useSuppliers';
 import { useProducts } from '../hooks/useProducts';
+import { singleFlight } from '../utils/singleFlight';
 
 const STATUS_COLORS = {
   DRAFT: 'bg-slate-100 text-slate-500',
@@ -70,7 +71,7 @@ export default function PurchaseOrdersPage() {
 
   const resetForm = () => { setSupplierId(''); setItems([]); setProductQuery(''); setFormError(''); };
 
-  const submit = async (e) => {
+  const submit = singleFlight('PurchaseOrdersPage.submit', async (e) => {
     e.preventDefault();
     setFormError('');
     if (!supplierId) { setFormError('Select a supplier.'); return; }
@@ -89,7 +90,7 @@ export default function PurchaseOrdersPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   return (
     <div className="p-6 max-w-5xl mx-auto">

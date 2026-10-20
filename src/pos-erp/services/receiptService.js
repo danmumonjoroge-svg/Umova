@@ -36,6 +36,7 @@
 import { posSupabase as supabase } from './posSupabaseClient';
 import { templateService, communicationLogService, whatsappService, normalizePhoneForWhatsApp, renderTemplate } from './communicationService';
 import { printDocument, escapeHtml } from '../utils/printDocument';
+import { paymentLabel } from '../utils/mpesa';
 
 export const receiptService = {
   /** Full receipt (with sale/customer join) for a given sale — used right after checkout and for a later reprint. */
@@ -72,7 +73,7 @@ export const receiptService = {
     if (Number(d.tax_total) > 0) lines.push(`Tax: ${Number(d.tax_total).toLocaleString()}`);
     lines.push(`TOTAL: ${Number(d.total_amount || 0).toLocaleString()}`);
     for (const p of d.payments || []) {
-      lines.push(`Paid (${String(p.payment_method || '').replace('_', ' ')}): ${Number(p.amount).toLocaleString()}`);
+      lines.push(`Paid (${paymentLabel(p)}): ${Number(p.amount).toLocaleString()}`);
     }
     if (d.charged_to_folio) lines.push('Charged to your folio. Payable when you settle.');
     lines.push('');
@@ -90,7 +91,7 @@ export const receiptService = {
         <td class="right">${fmt(item.total_price ?? item.quantity * item.unit_price)}</td>
       </tr>`).join('');
     const paymentsHtml = (d.payments || []).map(p => `
-      <tr><td class="muted">${escapeHtml(String(p.payment_method || '').replace('_', ' '))}</td><td class="right muted">${fmt(p.amount)}</td></tr>`).join('');
+      <tr><td class="muted">${escapeHtml(paymentLabel(p))}</td><td class="right muted">${fmt(p.amount)}</td></tr>`).join('');
 
     return `
       <div class="center">
@@ -123,8 +124,8 @@ export const receiptService = {
 
   // ---------- Actions ----------
 
-  print(receipt, business, posSettings) {
-    printDocument(`Receipt ${receipt.receipt_number}`, this.buildReceiptHtml(receipt, business, posSettings));
+  print(receipt, business, posSettings, opts) {
+    printDocument(`Receipt ${receipt.receipt_number}`, this.buildReceiptHtml(receipt, business, posSettings), '', opts);
   },
 
   /**

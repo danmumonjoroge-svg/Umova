@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { Repeat, Loader2, Plus, X } from 'lucide-react';
 import { useRecurringCharges, useChargeInvoices, useUnits } from '../hooks/useProperty';
 import { useCustomers } from '../hooks/useCustomers';
+import { singleFlight } from '../utils/singleFlight';
 
 const FREQUENCIES = ['MONTHLY', 'WEEKLY', 'QUARTERLY', 'ANNUALLY', 'ONE_OFF'];
 const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK', 'VOUCHER', 'OTHER'];
@@ -45,7 +46,7 @@ export default function RecurringChargesPage() {
 
   const currentPeriod = new Date().toISOString().slice(0, 8) + '01'; // first of this month
 
-  const submit = async (e) => {
+  const submit = singleFlight('RecurringChargesPage.submit', async (e) => {
     e.preventDefault();
     setFormError('');
     if (!form.customer_id) { setFormError('Select a customer.'); return; }
@@ -67,7 +68,7 @@ export default function RecurringChargesPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   const handleGenerate = async (charge) => {
     setGenError('');

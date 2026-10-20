@@ -10,6 +10,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { BarChart3, Loader2, Lock, CheckCircle2 } from "lucide-react";
 import { usePosErpAuth } from "../auth/usePosErpAuth";
 import { reportsService } from "../services/reportsService";
+import { singleFlight } from '../utils/singleFlight';
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -40,7 +41,7 @@ export default function ReportsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleCloseDay = async () => {
+  const handleCloseDay = singleFlight('ReportsPage.handleCloseDay', async () => {
     if (!window.confirm(`Close ${date}? This locks the day's summary and can't be undone from here.`)) return;
     setClosing(true);
     setError(null);
@@ -57,7 +58,7 @@ export default function ReportsPage() {
     } finally {
       setClosing(false);
     }
-  };
+  });
 
   return (
     <div className="p-8 max-w-4xl mx-auto">

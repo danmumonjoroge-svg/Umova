@@ -23,6 +23,7 @@ import { HardHat, Plus, Loader2, Info, Wrench, Archive } from 'lucide-react';
 import { useAssets } from '../hooks/useAssets';
 import { useSuppliers } from '../hooks/useSuppliers';
 import { assetService, bookValue, monthlyDepreciation, monthBounds, DEPRECIATION_METHODS } from '../services/assetService';
+import { singleFlight } from '../utils/singleFlight';
 
 const CATEGORY_SUGGESTIONS = ['Fridge', 'Freezer', 'Vehicle', 'Computer', 'Furniture', 'Machinery', 'Equipment'];
 
@@ -88,7 +89,7 @@ export default function AssetsPage() {
     setShowForm(true);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = singleFlight('AssetsPage.handleSubmit', async (e) => {
     e.preventDefault();
     setFormError('');
     setSaving(true);
@@ -103,7 +104,7 @@ export default function AssetsPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   const handleDepreciate = async (asset) => {
     setActionError('');

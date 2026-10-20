@@ -8,6 +8,7 @@
 import React, { useState } from 'react';
 import { Receipt, Loader2, Plus, X } from 'lucide-react';
 import { useExpenses } from '../hooks/useExpenses';
+import { singleFlight } from '../utils/singleFlight';
 
 const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK', 'VOUCHER', 'OTHER'];
 
@@ -29,7 +30,7 @@ export default function ExpensesPage() {
 
   const total = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
 
-  const submit = async (e) => {
+  const submit = singleFlight('ExpensesPage.submit', async (e) => {
     e.preventDefault();
     setFormError('');
     if (!form.amount || Number(form.amount) <= 0) {
@@ -52,7 +53,7 @@ export default function ExpensesPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   return (
     <div className="p-8 max-w-5xl mx-auto">

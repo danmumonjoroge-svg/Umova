@@ -25,7 +25,7 @@
 import { usePOSAuth } from "../context/POSAuthContext";
 
 export function usePosErpAuth() {
-  const { staff, tenant, authStage, isOwner, isManager, isCashier, logout } = usePOSAuth();
+  const { staff, tenant, authStage, isOwner, isManager, isCashier, logout, offlineSession } = usePOSAuth();
 
   return {
     // No separate "auth user" object is exposed by this system — the
@@ -48,6 +48,8 @@ export function usePosErpAuth() {
     isManager,
     isCashier,
     loading: authStage === "checking",
+    // true when the till was opened from the saved sign-in because there is no internet (offline mode)
+    offlineSession: !!offlineSession,
     logout,
   };
 }

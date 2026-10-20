@@ -32,13 +32,14 @@ export const expensesService = {
     return data || [];
   },
 
-  async getAll({ businessId, page = 1, limit = 50 } = {}) {
+  async getAll({ businessId, page = 1, limit = 50, sinceDate } = {}) {
     let q = supabase
       .from('lb_expenses')
       .select('*, category:lb_expense_categories(id, name)', { count: 'exact' })
       .order('expense_date', { ascending: false })
       .order('created_at', { ascending: false });
     if (businessId) q = q.eq('business_id', businessId);
+    if (sinceDate) q = q.gte('expense_date', sinceDate); // saved-copy window only; the page itself passes nothing
     const from = (page - 1) * limit;
     const to = from + limit - 1;
     q = q.range(from, to);

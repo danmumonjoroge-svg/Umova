@@ -29,18 +29,44 @@ const format = (n) =>
   });
 
 /* ======================================================
-   GENERATE NEXT MEMBER NUMBER
-   (adjust this to match your real numbering scheme)
+   HELPERS
+   - Supabase returns at most 1000 rows per request. The old code
+     fetched members and the whole general ledger in ONE request, so
+     once the ledger passed 1000 rows every balance was silently wrong.
+     fetchAll() pages through until everything is loaded.
+   - memberKey() makes "ui-0001 " and "UI-0001" the same member.
 ====================================================== */
 
-const generateMemberNo = (existingMembers) => {
-  const nums = existingMembers
-    .map((m) => Number(String(m.member_no || "").replace(/\D/g, "")))
-    .filter((n) => !isNaN(n));
+const PAGE_SIZE = 1000;
 
-  const max = nums.length ? Math.max(...nums) : 0;
+async function fetchAll(table, columns = "*") {
+  let from = 0;
+  let all = [];
+  for (;;) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(columns)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    all = all.concat(data || []);
+    if (!data || data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return all;
+}
 
-  return `UI-${String(max + 1).padStart(4, "0")}`;
+const memberKey = (v) => String(v || "").trim().toUpperCase();
+
+const REASONS = {
+  FORBIDDEN: "You are not allowed to do this.",
+  NAME_REQUIRED: "Name is required.",
+  INVALID_NATIONAL_ID: "National ID must be 7 or 8 digits.",
+  EMAIL_REQUIRED: "Email is required (the member needs it to activate their account).",
+  DUPLICATE_NATIONAL_ID: "A member with this National ID already exists.",
+  DUPLICATE_EMAIL: "Another member already uses this email address.",
+  ALREADY_PROCESSED: "This application was already approved or rejected.",
+  NOT_FOUND: "Application not found.",
 };
 
 /* ======================================================
@@ -79,6 +105,12 @@ export default function Members() {
   const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState("");
 
+  /* ================= FEEDBACK / DOUBLE-CLICK GUARDS ================= */
+
+  const [loadError, setLoadError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busyId, setBusyId] = useState(null);
+
   /* ======================================================
      LOAD MEMBERS + LEDGER
   ====================================================== */
@@ -87,21 +119,22 @@ export default function Members() {
 
     setLoading(true);
 
-    /* ================= MEMBERS ================= */
+    let memberData;
+    let ledger;
 
-    const { data: memberData } =
-      await supabase
-        .from("members")
-        .select("*");
-
-    /* ================= LEDGER ================= */
-
-    const { data: ledgerData } =
-      await supabase
-        .from("general_ledger")
-        .select("*");
-
-    const ledger = ledgerData || [];
+    try {
+      memberData = await fetchAll("members");
+      ledger = await fetchAll(
+        "general_ledger",
+        "id, member_no, name, debit_account_id, credit_account_id, amount, date, created_at"
+      );
+      setLoadError("");
+    } catch (err) {
+      console.error("Members load failed:", err);
+      setLoadError("Could not load members: " + (err?.message || err));
+      setLoading(false);
+      return;
+    }
 
     /* ======================================================
        MEMBER MAP
@@ -115,7 +148,7 @@ export default function Members() {
 
     (memberData || []).forEach((m) => {
 
-      map[m.member_no] = {
+      map[memberKey(m.member_no) || String(m.id)] = {
 
         ...m,
 
@@ -166,7 +199,7 @@ export default function Members() {
     ledger.forEach((row) => {
 
       const member =
-        row.member_no;
+        memberKey(row.member_no);
 
       if (!member) return;
 
@@ -175,6 +208,7 @@ export default function Members() {
         map[member] = {
 
           member_no: member,
+          ledgerOnly: true, // ledger rows exist for a member number that is NOT in the members table
           name:
             row.name ||
             "Unknown",
@@ -617,46 +651,46 @@ export default function Members() {
 
   /* ======================================================
      APPROVE APPLICATION
-     -> creates a member record + marks application approved
+     Runs entirely on the server (approve_membership_application):
+     one transaction, next number from a database sequence, refuses
+     duplicates, and is safe if clicked twice.
   ====================================================== */
 
   const approveApplication = async (app) => {
 
-    const member_no = generateMemberNo(members);
+    if (busyId) return;
+    setBusyId(app.id);
+    setNotice("");
 
-    const { error: insertError } = await supabase
-      .from("members")
-      .insert([
-        {
-          member_no,
-          name: app.name,
-          national_id: app.national_id,
-          email: app.email,
-          phone: app.phone,
-          branch: app.branch || null,
-          status: "active",
-          kyc_status: "PENDING",
-          first_login: true,
-          first_time_login: false,
-        },
-      ]);
+    try {
+      const { data, error } = await supabase.rpc(
+        "approve_membership_application",
+        { p_app_id: String(app.id) }
+      );
 
-    if (insertError) {
-      alert("Failed to create member: " + insertError.message);
-      return;
+      if (error) {
+        alert("Failed to approve: " + error.message);
+        return;
+      }
+
+      if (!data?.ok) {
+        alert(REASONS[data?.reason] || "Could not approve this application.");
+        if (data?.reason === "ALREADY_PROCESSED") await loadApplications();
+        return;
+      }
+
+      setNotice(
+        data.existing
+          ? `${app.name} is already a member (${data.member_no}). Application marked approved, no new member created.`
+          : `${app.name} approved. Member number: ${data.member_no}. They activate with this number and their National ID.`
+      );
+
+      await loadApplications();
+      await load();
+
+    } finally {
+      setBusyId(null);
     }
-
-    const { error: updateError } = await supabase
-      .from("membership_applications")
-      .update({ status: "approved" })
-      .eq("id", app.id);
-
-    if (updateError) {
-      alert("Member created, but failed to update application status: " + updateError.message);
-    }
-
-    await loadApplications();
-    await load();
   };
 
   /* ======================================================
@@ -665,31 +699,43 @@ export default function Members() {
 
   const rejectApplication = async (app) => {
 
+    if (busyId) return;
+
     const confirmed = window.confirm(
       `Reject application from ${app.name}?`
     );
 
     if (!confirmed) return;
 
-    const { error } = await supabase
-      .from("membership_applications")
-      .update({ status: "rejected" })
-      .eq("id", app.id);
+    setBusyId(app.id);
 
-    if (error) {
-      alert("Failed to reject application: " + error.message);
-      return;
+    try {
+      const { error } = await supabase
+        .from("membership_applications")
+        .update({ status: "rejected" })
+        .eq("id", app.id)
+        .eq("status", "pending"); // never overwrite an application that was already approved
+
+      if (error) {
+        alert("Failed to reject application: " + error.message);
+        return;
+      }
+
+      await loadApplications();
+
+    } finally {
+      setBusyId(null);
     }
-
-    await loadApplications();
   };
 
   /* ======================================================
-     ADD MEMBER MANUALLY
+     ADD MEMBER MANUALLY (also server-side)
   ====================================================== */
 
   const submitAddMember = async (e) => {
     e.preventDefault();
+
+    if (addSaving) return;
 
     setAddError("");
 
@@ -698,31 +744,35 @@ export default function Members() {
       return;
     }
 
+    if (!/^\d{7,8}$/.test(addForm.national_id.trim())) {
+      setAddError(REASONS.INVALID_NATIONAL_ID);
+      return;
+    }
+
+    if (!addForm.email.trim()) {
+      setAddError(REASONS.EMAIL_REQUIRED);
+      return;
+    }
+
     setAddSaving(true);
 
-    const member_no = generateMemberNo(members);
-
-    const { error } = await supabase
-      .from("members")
-      .insert([
-        {
-          member_no,
-          name: addForm.name.trim(),
-          national_id: addForm.national_id.trim() || null,
-          email: addForm.email.trim() || null,
-          phone: addForm.phone.trim() || null,
-          branch: addForm.branch.trim() || null,
-          status: "active",
-          kyc_status: "PENDING",
-          first_login: true,
-          first_time_login: false,
-        },
-      ]);
+    const { data, error } = await supabase.rpc("admin_add_member", {
+      p_name: addForm.name,
+      p_national_id: addForm.national_id,
+      p_email: addForm.email,
+      p_phone: addForm.phone,
+      p_branch: addForm.branch,
+    });
 
     setAddSaving(false);
 
     if (error) {
       setAddError(error.message);
+      return;
+    }
+
+    if (!data?.ok) {
+      setAddError(REASONS[data?.reason] || "Could not add member.");
       return;
     }
 
@@ -735,11 +785,13 @@ export default function Members() {
     });
 
     setShowAddMember(false);
+    setNotice(`Member added. Member number: ${data.member_no}.`);
 
     await load();
   };
 
   /* ======================================================
+/* ======================================================
      FILTER
   ====================================================== */
 
@@ -826,6 +878,19 @@ export default function Members() {
         </p>
 
       </div>
+
+      {loadError && (
+        <p className="form-error" role="alert">{loadError}</p>
+      )}
+
+      {notice && (
+        <p
+          role="status"
+          style={{ background: "#ecfdf5", color: "#065f46", padding: "10px 14px", borderRadius: 12, margin: "0 0 12px" }}
+        >
+          {notice}
+        </p>
+      )}
 
       {/* ACTION BAR */}
       <div className="action-bar">
@@ -956,7 +1021,14 @@ export default function Members() {
                     {m.member_no}
                   </td>
 
-                  <td>{m.name}</td>
+                  <td>
+                    {m.name}
+                    {m.ledgerOnly && (
+                      <span title="This member number has ledger entries but is not in the members table" style={{ marginLeft: 8, color: "#b45309", fontSize: 12 }}>
+                        ⚠ not in registry
+                      </span>
+                    )}
+                  </td>
 
                   <td>
                     {format(
@@ -1285,12 +1357,14 @@ export default function Members() {
                           <div className="row-actions">
                             <button
                               className="approve-btn"
+                              disabled={!!busyId}
                               onClick={() => approveApplication(app)}
                             >
                               Approve
                             </button>
                             <button
                               className="reject-btn"
+                              disabled={!!busyId}
                               onClick={() => rejectApplication(app)}
                             >
                               Reject
@@ -1350,12 +1424,15 @@ export default function Members() {
                 </label>
 
                 <label>
-                  National ID
+                  National ID *
                   <input
                     type="text"
                     value={addForm.national_id}
+                    required
+                    inputMode="numeric"
+                    maxLength={8}
                     onChange={(e) =>
-                      setAddForm({ ...addForm, national_id: e.target.value })
+                      setAddForm({ ...addForm, national_id: e.target.value.replace(/\D/g, "") })
                     }
                   />
                 </label>
@@ -1372,9 +1449,10 @@ export default function Members() {
                 </label>
 
                 <label>
-                  Email
+                  Email *
                   <input
                     type="email"
+                    required
                     value={addForm.email}
                     onChange={(e) =>
                       setAddForm({ ...addForm, email: e.target.value })

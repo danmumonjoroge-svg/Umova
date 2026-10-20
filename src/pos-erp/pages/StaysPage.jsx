@@ -13,6 +13,7 @@ import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useNetStatus } from '../offline/useNetStatus';
 import { WorkspacePage, kes } from '../components/workspace/WorkspaceKit';
 import { NewStaySheet, ChangeStaySheet, CheckOutSheet, CancelStaySheet } from '../components/StaySheets';
+import { singleFlight } from '../utils/singleFlight';
 
 const TABS = [['house', 'In the room', ['CHECKED_IN']], ['booked', 'Booked', ['RESERVED']], ['past', 'Past', ['CHECKED_OUT', 'CANCELLED']]];
 const btn = 'min-h-[44px] rounded-xl text-sm font-semibold border border-[#DDE3DD] bg-white px-3 disabled:opacity-50 flex items-center justify-center';
@@ -96,13 +97,13 @@ export default function StaysPage() {
     catch (err) { setError(err.message || 'Could not load the rooms.'); }
   };
 
-  const onAct = async (kind, stay) => {
+  const onAct = singleFlight('StaysPage.onAct', async (kind, stay) => {
     if (kind !== 'checkin') { setSheet({ kind, stay }); return; }
     setBusy(true); setError('');
     try { await roomService.checkIn(stay.id, staffId); setParams({ tab: 'house' }); await load(); }
     catch (err) { setError(err.message || 'Could not check the guest in.'); }
     finally { setBusy(false); }
-  };
+  });
   const done = () => { setSheet(null); load(); };
 
   return (

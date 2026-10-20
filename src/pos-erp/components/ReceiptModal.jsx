@@ -25,7 +25,7 @@
 // (Prepared → Opened in WhatsApp) and visible in Messages if anyone
 // wants to check; it just doesn't block this screen on a confirm click.
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Printer, MessageCircle, Mail, X, CheckCircle2, Loader2 } from 'lucide-react';
 import { receiptService } from '../services/receiptService';
 
@@ -39,11 +39,35 @@ export default function ReceiptModal({ receipt, business, posSettings, customer,
   const [waSent, setWaSent] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [err, setErr] = useState('');
+  const [printing, setPrinting] = useState(false);
+
+  // Android Back / browser Back closes THIS receipt screen (and nothing else). The modal is plain state, so without this
+  // Back would leave the till page (or exit the app) while a sale's receipt was still open. One history entry is pushed
+  // when the receipt opens; Back (popstate) closes it; closing any other way (Done / X) removes the entry again.
+  // The completed sale is never touched by any of this -- it was saved before this screen opened.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const pushed = useRef(false);
+  useEffect(() => {
+    try { window.history.pushState({ ...(window.history.state || {}), posReceipt: true }, ''); pushed.current = true; } catch { pushed.current = false; }
+    const onPop = () => { pushed.current = false; onCloseRef.current(); };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (pushed.current) {
+        pushed.current = false;
+        try { if (window.history.state?.posReceipt) window.history.back(); } catch { /* nothing to undo */ }
+      }
+    };
+  }, []);
 
   const handlePrint = () => {
+    if (printing) return; // a double tap must not open two print sheets
     setErr('');
+    setPrinting(true);
+    setTimeout(() => setPrinting(false), 2500);
     try {
-      receiptService.print(receipt, business, posSettings);
+      receiptService.print(receipt, business, posSettings, { onError: (e) => setErr(e.message) });
     } catch (e) {
       setErr(e.message);
     }
@@ -90,7 +114,7 @@ export default function ReceiptModal({ receipt, business, posSettings, customer,
             <h3 className="font-bold text-lg text-slate-800">Sale Complete</h3>
             <p className="text-xs text-slate-400">Receipt {receipt.receipt_number}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+          <button onClick={onClose} aria-label="Close receipt" className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-600"><X size={18} /></button>
         </div>
 
         {isOfflineSale && (
@@ -122,8 +146,8 @@ export default function ReceiptModal({ receipt, business, posSettings, customer,
         {err && <div className="mx-5 mb-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2">{err}</div>}
 
         <div className="p-5 pt-2 space-y-3 border-t border-slate-100">
-          <button onClick={handlePrint} className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold py-2.5 rounded-xl">
-            <Printer size={15} /> Print
+          <button onClick={handlePrint} disabled={printing} className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold py-2.5 rounded-xl disabled:opacity-60">
+            <Printer size={15} /> {printing ? 'Opening print…' : 'Print'}
           </button>
 
           <div className="flex gap-2">
@@ -159,7 +183,7 @@ export default function ReceiptModal({ receipt, business, posSettings, customer,
             WhatsApp and Email open your customer's own app with the receipt ready — you'll still need to press Send there.
           </p>
 
-          <button onClick={onClose} className="w-full text-center text-sm text-slate-500 py-1.5">Done</button>
+          <button onClick={onClose} className="w-full min-h-[44px] bg-slate-100 hover:bg-slate-200 rounded-xl text-center text-sm font-semibold text-slate-700">Done — back to sale</button>
         </div>
       </div>
     </div>

@@ -1,9 +1,15 @@
 // chama-erp-advanced/auth/ChamaPasskeySettings.js — "Fingerprint login" card for Chama → More.
 // Every action asks for the password again: Chama has no server session, so the password is the proof of who is asking.
+//
+// This card is the WEB passkey (WebAuthn) screen. Inside the phone app WebAuthn is not available, so there it shows the
+// phone's own fingerprint switch instead (ChamaFingerprintToggle: Keystore-protected, checked by the server, same
+// password-once confirmation). The web experience is unchanged.
 import React, { useState } from "react";
 import { Fingerprint, Trash2, Loader2 } from "lucide-react";
 import { useChama } from "../ChamaContext";
 import { chamaPasskeys } from "./chamaPasskeys";
+import { isNativeApp } from "../../security/nativeBiometric";
+import { ChamaFingerprintToggle } from "./ChamaLock";
 
 const fmt = (d) => new Date(d).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" });
 const guessDevice = () => {
@@ -19,6 +25,17 @@ export default function ChamaPasskeySettings() {
   const [devices, setDevices] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({ kind: "", text: "" });
+
+  // Phone app: the web passkey card can't work in the app's WebView ("this browser can't do fingerprint login"),
+  // so show the phone fingerprint switch instead.
+  if (isNativeApp()) {
+    return (
+      <div className="cm-card" style={{ marginTop: 12 }}>
+        <style>{".cm-card .uma-row{display:flex;justify-content:space-between;align-items:center;gap:12px}"}</style>
+        <ChamaFingerprintToggle />
+      </div>
+    );
+  }
 
   if (!chamaPasskeys.supported()) {
     return (

@@ -191,7 +191,7 @@ export default function Savings({ memberNo: propMemberNo }) {
         {/* DEPOSITS (CREDITS) CARD */}
         <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm flex items-center justify-between relative overflow-hidden group hover:border-slate-300 transition">
           <div className="space-y-2 z-10">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Gross Capital Savings</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Contributions</span>
             <h3 className="text-2xl font-black text-slate-800 tracking-tight">KES {totals.deposits.toLocaleString()}</h3>
           </div>
           <div className="bg-emerald-50 text-emerald-600 p-3.5 rounded-2xl group-hover:scale-110 transition duration-200">
@@ -203,7 +203,7 @@ export default function Savings({ memberNo: propMemberNo }) {
         {/* WITHDRAWALS (DEBITS) CARD */}
         <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm flex items-center justify-between relative overflow-hidden group hover:border-slate-300 transition">
           <div className="space-y-2 z-10">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Withdrawn Capital</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Withdrawals</span>
             <h3 className="text-2xl font-black text-slate-800 tracking-tight">KES {totals.withdrawals.toLocaleString()}</h3>
           </div>
           <div className="bg-red-50 text-red-600 p-3.5 rounded-2xl group-hover:scale-110 transition duration-200">
@@ -212,10 +212,13 @@ export default function Savings({ memberNo: propMemberNo }) {
         </div>
 
         {/* NET SAVINGS POSITION BALANCE */}
-        <div className="bg-gradient-to-br from-green-950 to-green-800 text-white p-6 rounded-3xl shadow-md flex items-center justify-between relative overflow-hidden group">
+        <div className="md:order-first bg-gradient-to-br from-green-950 to-green-800 text-white p-6 rounded-3xl shadow-md flex items-center justify-between relative overflow-hidden group">
           <div className="space-y-2 z-10">
-            <span className="text-[11px] font-bold text-green-300/80 uppercase tracking-wider block">Net Ledger Balance</span>
-            <h3 className="text-2xl font-black tracking-tight">KES {totals.balance.toLocaleString()}</h3>
+            <span className="text-[11px] font-bold text-green-300/80 uppercase tracking-wider block">Net Savings Balance</span>
+            <h3 className="text-2xl font-black tracking-tight tabular-nums">KES {totals.balance.toLocaleString()}</h3>
+            <p className="text-[10px] text-green-200/70 font-medium">
+              Contributions {totals.deposits.toLocaleString()} − Withdrawals {totals.withdrawals.toLocaleString()}
+            </p>
           </div>
           <div className="bg-white/10 text-white p-3.5 rounded-2xl backdrop-blur-md group-hover:scale-110 transition duration-200">
             <TrendingUp size={24} />
