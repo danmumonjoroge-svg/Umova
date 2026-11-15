@@ -5,7 +5,7 @@
 // Hidden entries never remove a route: a bookmark still works; the database decides access.
 import React, { Suspense, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, CalendarCheck, Wallet, LayoutGrid, GraduationCap, ClipboardList, Layers, UserRound, MessageSquare, CalendarDays, BarChart3, Settings, Clock } from 'lucide-react';
+import { Home, Users, CalendarCheck, Wallet, LayoutGrid, GraduationCap, ClipboardList, Layers, UserRound, MessageSquare, CalendarDays, BarChart3, Settings, Clock, DoorOpen, ScanLine, UserCog } from 'lucide-react';
 import { NAV_ITEMS } from '../utils/permissions.js';
 import { useElimuAccess } from '../hooks/useElimu.js';
 import { OfflineBanner } from './ui.jsx';
@@ -14,16 +14,16 @@ import { registeredModules } from '../registry.js';
 import AppSheet from './AppSheet.jsx';
 
 const ICONS = { dashboard: Home, students: Users, admissions: ClipboardList, classes: Layers, guardians: UserRound, academics: GraduationCap, attendance: CalendarCheck,
-  timetable: Clock, fees: Wallet, communication: MessageSquare, calendar: CalendarDays, reports: BarChart3, settings: Settings };
+  timetable: Clock, rooms: DoorOpen, gate: ScanLine, fees: Wallet, communication: MessageSquare, calendar: CalendarDays, reports: BarChart3, settings: Settings, staff: UserCog };
 const PRIMARY = ['dashboard', 'students', 'attendance', 'fees'];       // the four tabs; everything else lives under More
 
 export default function ElimuLayout({ basePath = '/elimu' }) {
-  const { can } = useElimuAccess(); const online = useOnline(); const loc = useLocation(); const nav = useNavigate();
+  const { can, isOwner } = useElimuAccess(); const online = useOnline(); const loc = useLocation(); const nav = useNavigate();
   const [more, setMore] = useState(false);
   const mods = registeredModules();
-  const items = NAV_ITEMS.filter((n) => (n.owned || mods.has(n.key)) && (n.anyOf ? n.anyOf.some((x) => can(x)) : can(n.action)));
+  const items = NAV_ITEMS.filter((n) => (!n.ownerOnly || isOwner) && (n.owned || mods.has(n.key)) && (n.anyOf ? n.anyOf.some((a) => can(a)) : can(n.action)));
   const href = (n) => `${basePath}${n.to}`;
-  const isOn = (n) => (n.to === '' ? loc.pathname.replace(/\/$/, '') === basePath : loc.pathname.startsWith(href(n)));
+  const isOn = (n) => (n.to === '' ? loc.pathname.replace(/\/$/, '') === basePath : loc.pathname.startsWith(href(n)) || (n.also || []).some((a) => loc.pathname.startsWith(`${basePath}${a}`)));
   const tabs = items.filter((n) => PRIMARY.includes(n.key)); const rest = items.filter((n) => !PRIMARY.includes(n.key));
   const moreActive = rest.some(isOn);
   return (

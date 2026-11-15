@@ -20,6 +20,8 @@ export default function ElimuCollectPage() {
   const { api, businessId, tenantId, staffId, can } = ctx;
   const [q, setQ] = useState(''); const [results, setResults] = useState([]); const [student, setStudent] = useState(null);
   const [view, setView] = useState(null); const [session, setSession] = useState(null); const [inbox, setInbox] = useState([]);
+  const [schoolCode, setSchoolCode] = useState(''); const [refMiss, setRefMiss] = useState(false);
+  useEffect(() => { (async () => { try { const { data } = await (await import('../../../services/posSupabaseClient')).posSupabase.rpc('elimu_my_school'); setSchoolCode(data?.school_code || ''); } catch { /* shown without a code */ } })(); }, []);
   const [form, setForm] = useState({ method: 'CASH', amount: '', ref: '', bank: '', slip: '', payer: '', phone: '' });
   const [busy, setBusy] = useState(false); const [msg, setMsg] = useState(null); const [done, setDone] = useState(null); const [drafts, setDrafts] = useState([]);
   const attempt = useRef(newUuid());                          // one id per payment attempt; reused if the cashier retries after an error
@@ -29,12 +31,18 @@ export default function ElimuCollectPage() {
   useEffect(() => { if (businessId && can('collect')) api.c2bInbox(businessId, 20).then(setInbox).catch(() => setInbox([])); }, [businessId, api, can, done]);
 
   const search = async (text) => {
-    setQ(text); if (text.trim().length < 2) return setResults([]);
+    setQ(text); setRefMiss(false); if (text.trim().length < 2) return setResults([]);
     try {
       const t = text.trim().replace(/[%,()]/g, '');
+      // A school reference (CODE-ADM, e.g. E7K3QX-S100) matches exactly ONE student of THIS school; another school's code never matches.
+      if (/^[A-Za-z0-9]{6}[\s\-#:_]*[A-Za-z0-9]/.test(t) && t.replace(/[^A-Za-z0-9]/g, '').length >= 8) {
+        const sb = (await import('../../../services/posSupabaseClient')).posSupabase;
+        const { data: r } = await sb.rpc('elimu_resolve_student_ref', { p_ref: t });
+        if (r?.ok) { const { data: one } = await sb.from('elimu_fin_students').select('student_id,admission_no,full_name,class_name,guardian_name,guardian_phone,guardian_email,status').eq('student_id', r.student_id).limit(1); if (one?.length) return setResults(one); }
+      }
       const { data } = await (await import('../../../services/posSupabaseClient')).posSupabase.from('elimu_fin_students').select('student_id,admission_no,full_name,class_name,guardian_name,guardian_phone,guardian_email,status')
         .eq('business_id', businessId).or(`admission_no.ilike.%${t}%,full_name.ilike.%${t}%`).limit(10);
-      setResults(data || []);
+      setResults(data || []); if (!(data || []).length && /^[A-Za-z0-9]{6}[\s\-#:_]+\S/.test(t)) setRefMiss(true);
     } catch { setResults([]); }
   };
   const pick = async (s) => {
@@ -77,10 +85,12 @@ export default function ElimuCollectPage() {
     <FitPage title="Collect fees" subtitle="Record a payment against a student's account">
       {!session && <div className={formCard}><div className="text-sm mb-2">Cash is counted against a cashier session so the till can be reconciled at the end of the shift.</div><button className={saveBtnCls} onClick={openSession}>Open my cashier session</button></div>}
       <SearchBox value={q} onChange={search} placeholder="Admission number or student name" />
+      {refMiss && <Notice tone="warn">No student of this school has that reference. Check the school code and admission number.</Notice>}
       {results.map(s => (<button key={s.student_id} onClick={() => pick(s)} className="w-full text-left border rounded-lg p-2 my-1 bg-white"><Search size={14} className="inline mr-1" />{s.full_name} <span className="text-xs text-[#68756D]">({s.admission_no}, {s.class_name || 'no class'}){s.status !== 'ACTIVE' ? ` - ${s.status.toLowerCase()}` : ''}</span></button>))}
 
       {student && (<div className={formCard}>
         <div className="font-semibold">{student.full_name} <span className="text-xs">({student.admission_no})</span></div>
+        {schoolCode && <div className="text-xs text-[#68756D]">Pay reference: <b className="tracking-wider">{schoolCode}-{student.admission_no}</b></div>}
         {view?.fromCache && <Notice tone="warn">Showing a copy saved on this phone{view.savedAt ? ` at ${new Date(view.savedAt).toLocaleTimeString('en-KE')}` : ''}. Balances may have changed.</Notice>}
         {acct && <MiniStats items={[{ label: bal > 0 ? 'Owes' : bal < 0 ? 'Credit' : 'Balance', value: formatMoney(Math.abs(bal)) }, { label: 'Arrears (past due)', value: formatMoney(fromDb(acct.arrears)) }, { label: 'Paid so far', value: formatMoney(fromDb(acct.payments)) }]} />}
         <div className="flex gap-2 my-2 flex-wrap">{METHODS.map(m => (<button key={m.key} onClick={() => setForm({ ...form, method: m.key })} className={`px-3 py-2 rounded-lg border text-sm ${form.method === m.key ? 'bg-[#1F6B45] text-white' : 'bg-white'}`}><m.icon size={14} className="inline mr-1" />{m.label}</button>))}</div>
@@ -107,7 +117,7 @@ export default function ElimuCollectPage() {
 
       {inbox.length > 0 && (<div className={formCard}><div className="font-semibold mb-1">Paybill payments not yet applied</div>
         {inbox.map(i => (<div key={i.c2b_id} className="text-sm border-b py-1 flex justify-between"><span>{i.trans_id} - {formatMoney(fromDb(i.left_amount))} left {i.payer_name ? `from ${i.payer_name}` : ''}</span>
-          {i.suggested_student_id ? <TextBtn onClick={() => { pick({ student_id: i.suggested_student_id, admission_no: i.suggested_admission_no, full_name: i.suggested_name }); setForm(f => ({ ...f, method: 'MPESA', ref: i.trans_id, amount: toDecimalString(fromDb(i.left_amount)) })); }}>Use for {i.suggested_admission_no}</TextBtn> : <span className="text-xs">no matching admission number</span>}</div>))}</div>)}
+          {i.suggested_student_id ? <TextBtn onClick={() => { pick({ student_id: i.suggested_student_id, admission_no: i.suggested_admission_no, full_name: i.suggested_name }); setForm(f => ({ ...f, method: 'MPESA', ref: i.trans_id, amount: toDecimalString(fromDb(i.left_amount)) })); }}>Use for {i.suggested_admission_no}{i.match_kind === 'ADMISSION_ONLY' ? ' (check: no school code)' : ''}</TextBtn> : <span className="text-xs">no matching school reference</span>}</div>))}</div>)}
       {!student && !drafts.length && !inbox.length && <EmptyBlock>Search for a student to begin.</EmptyBlock>}
     </FitPage>
   );

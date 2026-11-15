@@ -1,15 +1,17 @@
 // ELIMU as its own app inside Umova:  <Route path="/school/*" element={<ElimuApp />} />   (see App.js)
 // Same sign-in as "My Business" (POSAuthProvider -> POSAuthGate -> app lock), so a school signs in with its business account.
 // Phone-first shell: fixed top app bar, ONE scrolling area, bottom tab bar (in ElimuLayout). Registers every Elimu module once.
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { Route, Navigate, useNavigate } from 'react-router-dom';
 import { GraduationCap, LogOut, Home as HomeIcon } from 'lucide-react';
-import { POSAuthProvider, POSAuthGate, AppLock, supabase, usePosErpAuth } from './services/platform.js';
+import { POSAuthProvider, AppLock, supabase, usePosErpAuth } from './services/platform.js';
+import ElimuAuthGate from './auth/ElimuAuthGate.jsx';
+import { seedDemoSchoolIfEmpty } from './auth/demo.js';
 import ElimuRoutes from './routes.jsx';
 import { registerModule } from './registry.js';
 import { elimuAcademicNested } from './routes.academic.jsx';
 import { attendanceLayoutRoute } from './routes.attendance.jsx';
-import { elimuFinanceRoutes } from './finance/ElimuFinanceRoutes.jsx';
+import { elimuFinanceRoutes, FinanceHub } from './finance/ElimuFinanceRoutes.jsx';
 
 export const ELIMU_BASE = '/school';
 
@@ -18,10 +20,13 @@ registerModule({ key: 'academics', routes: [React.cloneElement(elimuAcademicNest
 registerModule({ key: 'attendance', routes: [React.cloneElement(attendanceLayoutRoute, { key: 'attendance' })] });
 registerModule({ key: 'timetable', routes: [] });      // pages ship with the attendance group above
 registerModule({ key: 'calendar', routes: [] });
+registerModule({ key: 'rooms', routes: [] });      // pages ship with the attendance group above
+registerModule({ key: 'gate', routes: [] });
 registerModule({ key: 'reports', routes: [] });
 registerModule({ key: 'fees', routes: [
   React.cloneElement(elimuFinanceRoutes(), { key: 'finance' }),
-  <Route key="fees" path="fees" element={<Navigate to="../school-finance/collect" replace />} />,
+  <Route key="finance-hub" path="finance/*" element={<FinanceHub basePath={ELIMU_BASE} />} />,
+  <Route key="fees" path="fees" element={<Navigate to="../finance" replace />} />,
 ] });
 
 const CSS = `
@@ -38,6 +43,7 @@ function ElimuLock({ children }) {
 
 function Shell() {
   const { tenant, staffName, logout } = usePosErpAuth(); const nav = useNavigate();
+  useEffect(() => { seedDemoSchoolIfEmpty(tenant).then((r) => { if (r?.seeded) window.location.reload(); }); }, [tenant?.id]);   // demo school only; the database refuses any other school
   return (
     <div className="elimu-app fixed inset-0 flex flex-col bg-[#FBF8EA] text-[#23382B]" style={{ height: '100dvh' }}>
       <style>{CSS}</style>
@@ -59,7 +65,7 @@ function Shell() {
 export default function ElimuApp() {
   return (
     <POSAuthProvider>
-      <POSAuthGate><ElimuLock><Shell /></ElimuLock></POSAuthGate>
+      <ElimuAuthGate><ElimuLock><Shell /></ElimuLock></ElimuAuthGate>
     </POSAuthProvider>
   );
 }

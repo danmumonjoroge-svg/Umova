@@ -16,6 +16,9 @@ import AccessPage from './shared/pages/AccessPage';
 
 const G = ({ any, children }) => <RequireElimu any={any}>{children}</RequireElimu>;
 
+import GatePage from './gate/pages/GatePage.jsx';
+import RoomsPage from './rooms/pages/RoomsPage.jsx';
+
 const ATT_ROUTES = (
   <>
     <Route path="attendance" element={<G any={['attendance.take_own', 'attendance.take_any', 'attendance.view_all']}><AttendanceDashboardPage /></G>} />
@@ -27,6 +30,8 @@ const ATT_ROUTES = (
     <Route path="timetable/changes" element={<G any={['timetable.view']}><TimetableChangesPage /></G>} />
     <Route path="timetable/setup" element={<G any={['timetable.manage']}><TimetableSetupPage /></G>} />
     <Route path="calendar" element={<G any={['calendar.view']}><CalendarPage /></G>} />
+    <Route path="gate" element={<G any={['attendance.take_any']}><GatePage /></G>} />
+    <Route path="rooms" element={<G any={['timetable.view']}><RoomsPage /></G>} />
     <Route path="access" element={<G any={['roles.view']}><AccessPage /></G>} />
   </>
 );

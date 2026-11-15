@@ -12,6 +12,10 @@ import * as api from '../../index.js';
 import ElimuApp from '../../ElimuApp.jsx';
 import AppSheet from '../../components/AppSheet.jsx';
 import ParentApp from '../../parent/ParentApp.jsx';
+import { STAFF_ROLE_CHOICES, NAV_ITEMS } from '../../utils/permissions.js';
+import ElimuLogin from '../../auth/ElimuLogin.jsx';
+import ElimuRegister from '../../auth/ElimuRegister.jsx';
+import { isElimuDemo, ELIMU_DEMO_CODE } from '../../auth/demo.js';
 import { toE164 } from '../../parent/parentClient.js';
 
 const guardian = { id: 'g1', first_name: 'Grace', last_name: 'Otieno', consent: [{ channel: 'EMAIL', status: 'OPTED_OUT' }],
@@ -23,21 +27,42 @@ const check = (name, fn) => { try { const html = fn(); results.push([name, html.
 for (const path of ['/elimu', '/elimu/students', '/elimu/students/s1', '/elimu/guardians', '/elimu/guardians/g1', '/elimu/admissions', '/elimu/classes', '/elimu/communication', '/elimu/settings'])
   check(`route ${path}`, () => renderToString(<MemoryRouter initialEntries={[path]}><Routes><Route path="/elimu/*" element={<Routes_ />} /></Routes></MemoryRouter>));
 // unified app shell (phone layout): every school route renders under /school without throwing, with the app bar and the bottom tab bar
-for (const path of ['/school', '/school/students', '/school/attendance', '/school/attendance/take', '/school/absences', '/school/timetable', '/school/calendar', '/school/academics', '/school/academics/assessments', '/school/fees', '/school/school-finance/collect', '/school/settings']) {
+for (const path of ['/school', '/school/students', '/school/attendance', '/school/attendance/take', '/school/absences', '/school/timetable', '/school/calendar', '/school/academics', '/school/academics/assessments', '/school/gate', '/school/rooms', '/school/fees', '/school/finance', '/school/finance/fees', '/school/finance/reports', '/school/school-finance/collect', '/school/settings']) {
   const html = check(`app route ${path}`, () => renderToString(<MemoryRouter initialEntries={[path]}><Routes><Route path="/school/*" element={<Routes2 />} /></Routes></MemoryRouter>));
   results.push([`app shell ${path}: tab bar present`, html.includes('aria-label="School tabs"'), '']);
 }
 function Routes2() { return <Suspense fallback={<i>loading-chunk</i>}><ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} /></Suspense>; }
 { const r = (p) => renderToString(<MemoryRouter initialEntries={[p]}><Routes><Route path="/school/*" element={<Routes2 />} /></Routes></MemoryRouter>); const nothing = r('/school/zzz');   // no match -> Navigate (renders nothing on the server): just the empty shell
-  for (const p of ['/school/attendance', '/school/absences', '/school/academics', '/school/academics/assessments', '/school/timetable', '/school/calendar', '/school/school-finance/collect', '/school/settings'])
+  for (const p of ['/school/attendance', '/school/absences', '/school/academics', '/school/academics/assessments', '/school/timetable', '/school/calendar', '/school/gate', '/school/rooms', '/school/finance', '/school/finance/fees', '/school/finance/payables', '/school/school-finance/collect', '/school/settings'])
     results.push([`${p} matches a real route (renders more than the empty shell)`, r(p).length > nothing.length, '']);
   results.push(['/school/academics shows the Academics home', r('/school/academics').includes('Academics &amp; exams'), '']); }
+{ const r = (p) => renderToString(<MemoryRouter initialEntries={[p]}><Routes><Route path="/school/*" element={<Routes2 />} /></Routes></MemoryRouter>);
+  const hub = r('/school/finance'); const fees = r('/school/finance/fees'); const none = r('/school/finance/zzz');
+  results.push(['Finance hub lists the submodules', ['Fees', 'Receivables', 'Payables &amp; expenses', 'Bank &amp; cash', 'Assets &amp; inventory', 'Reports &amp; statements'].every((t) => hub.includes(t)), '']);
+  results.push(['Finance > Fees lists its pages and a breadcrumb', ['Collect fees', 'Bursaries &amp; scholarships', 'Fee balances', 'Where you are'].every((t) => fees.includes(t)), '']);
+  results.push(['unbuilt pages are shown as SOON, not as links', fees.includes('SOON') && r('/school/finance/reports').includes('Trial balance'), '']);
+  const pay = r('/school/finance/payables');
+  results.push(['Payables: Expenses and Budgets are built, only Suppliers and Staff are still SOON', ['Expenses', 'Budgets', 'Suppliers', 'Staff &amp; payroll'].every((t) => pay.includes(t)) && (pay.match(/SOON/g) || []).length === 2, String((pay.match(/SOON/g) || []).length)]);
+  for (const pth of ['/school/school-finance/expenses', '/school/school-finance/budgets']) check('route ' + pth, () => renderToString(<MemoryRouter initialEntries={[pth]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>));
+  results.push(['unknown finance section says so', none.includes('does not exist'), '']);
+  results.push(['school tab bar says Finance (not Fees)', hub.includes('>Finance<'), '']); }
 const appHtml = check('ElimuApp (auth + shell) renders', () => renderToString(<MemoryRouter initialEntries={['/school']}><Routes><Route path="/school/*" element={<ElimuApp />} /></Routes></MemoryRouter>));
 results.push(['app bar has school name, Umova home and Sign out', appHtml.includes('Sunrise Academy') && appHtml.includes('aria-label="Umova home"') && appHtml.includes('aria-label="Sign out"'), '']);
 results.push(['shell is one full-height column (dvh) with safe-area padding', appHtml.includes('100dvh') && appHtml.includes('safe-area-inset-top'), '']);
 const parentHtml = check('ParentApp renders (signed-out state is the loading screen on the server)', () => renderToString(<MemoryRouter><ParentApp /></MemoryRouter>));
 results.push(['parent app is a full-height dvh column', parentHtml.includes('100dvh'), '']);
 results.push(['phone numbers normalise to +254', toE164('0722 111 222') === '+254722111222' && toE164('722111222') === '+254722111222' && toE164('+254722111222') === '+254722111222' && toE164('254722111222') === '+254722111222' && toE164('12') === '' && toE164('') === '', '']);
+const loginHtml = check('ElimuLogin renders', () => renderToString(<ElimuLogin onGoToRegister={() => {}} />));
+results.push(['Elimu sign-in has school code, demo button, register link and no shop wording', ['School code', 'Try the demo school', 'Register here', 'Elimu sign in'].every((t) => loginHtml.includes(t)) && !/My Business|Business code|retail/i.test(loginHtml), '']);
+results.push(['sign-in screen is a full-height dvh scroller', loginHtml.includes('100dvh') && loginHtml.includes('overflow-y-auto'), '']);
+const regHtml = check('ElimuRegister renders', () => renderToString(<ElimuRegister onBackToLogin={() => {}} />));
+results.push(['register form asks for a school (not a business)', regHtml.includes('School name') && regHtml.includes('Register your school') && !/Business name/i.test(regHtml), '']);
+results.push(['demo school is recognised by its code only', isElimuDemo({ business_code: ELIMU_DEMO_CODE }) && !isElimuDemo({ business_code: 'DEMO' }) && !isElimuDemo(null), '']);
+
+const staffHtml = check('Staff page route renders', () => renderToString(<MemoryRouter initialEntries={['/school/staff']}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>));
+results.push(['staff page route exists and shows Staff in the menu', staffHtml.includes('Staff'), '']);
+results.push(['staff roles include the gate officer and keys are unique', STAFF_ROLE_CHOICES.some((r) => r.key === 'attendance_officer') && new Set(STAFF_ROLE_CHOICES.map((r) => r.key)).size === STAFF_ROLE_CHOICES.length, '']);
+results.push(['Staff is an owner-only menu item', NAV_ITEMS.some((n) => n.key === 'staff' && n.ownerOnly), '']);
 const sheetHtml = check('AppSheet renders', () => renderToString(<AppSheet title="New academic year" onClose={() => {}}><input /></AppSheet>));
 results.push(['sheet is capped to the visible screen and its body scrolls', sheetHtml.includes('92dvh') && sheetHtml.includes('overflow-y-auto') && sheetHtml.includes('safe-area-inset-bottom'), '']);
 const ACCESS = { can: () => true, loaded: true, isOwner: true, roles: [] };

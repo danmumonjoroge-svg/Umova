@@ -8,6 +8,7 @@ import { usePermissions, RequirePermission } from '../../navigation/PermissionsC
 import { usePosErpAuth } from '../../auth/usePosErpAuth';
 import { getRegisteredBusinessName } from '../../services/businessIdentity';
 
+export { staffService, generateTempPassword } from '../../services/staffService';
 export const supabase = posSupabase;
 export { usePermissions, RequirePermission, usePosErpAuth };
 
@@ -15,8 +16,8 @@ export { usePermissions, RequirePermission, usePosErpAuth };
 export * from '../../components/CardKit';
 export { fieldClass } from '../../components/workspace/Sheet';
 export { default as Sheet } from '../components/AppSheet.jsx';   // Elimu's own phone-friendly sheet (scrolls, keyboard- and notch-safe)
-export { POSAuthProvider } from '../../context/POSAuthContext';
-export { default as POSAuthGate } from '../../auth/POSAuthGate';
+export { POSAuthProvider, usePOSAuth } from '../../context/POSAuthContext';
+export { default as POSForcePasswordChange } from '../../auth/POSForcePasswordChange';
 export { default as AppLock } from '../../../security/AppLock';
 export { BRAND } from '../../theme/brand';
 

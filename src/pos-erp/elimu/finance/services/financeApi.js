@@ -79,6 +79,19 @@ export const financeApi = {
   // ---- expenses, budgets, reconciliation ----
   recordExpense: (b, e) => rpc('elimu_fin_record_expense', { p_business: b, p_category: e.categoryId, p_date: e.date ?? null, p_amount: money(e.amountCents), p_method: e.method, p_description: e.description,
     p_supplier: e.supplier ?? null, p_department: e.department ?? null, p_reference: e.reference ?? null, p_document_url: e.documentUrl ?? null, p_period: e.periodId ?? null, p_status: e.status ?? 'PENDING' }),
+  /** Expense categories: the shared system categories plus any the school added (row security returns both). */
+  async expenseCategories() { const { data, error } = await supabase.from('lb_expense_categories').select('id, name').eq('is_active', true).order('sort_order'); if (error) throw new Error(error.message); return data || []; },
+  /** Expenses of this school with the school extras (supplier, department, reference), newest first. */
+  async expenses(b, limit = 300) {
+    const [e, m] = await Promise.all([
+      supabase.from('lb_expenses').select('id, expense_number, expense_date, amount, payment_method, description, status, category_id').eq('business_id', b).order('expense_date', { ascending: false }).order('created_at', { ascending: false }).limit(limit),
+      supabase.from('elimu_fin_expense_meta').select('expense_id, supplier_name, department, reference, approval_note').eq('business_id', b).limit(1000)]);
+    if (e.error) throw new Error(e.error.message); if (m.error) throw new Error(m.error.message);
+    const meta = Object.fromEntries((m.data || []).map((x) => [x.expense_id, x]));
+    return (e.data || []).map((x) => ({ ...x, ...(meta[x.id] || {}) }));
+  },
+  budgets: (b) => (financeApi.list('elimu_fin_budgets', b, { order: { col: 'created_at', asc: false }, limit: 100 })),
+  budgetLines: (budgetId) => supabase.from('elimu_fin_budget_lines').select('department, category_id, amount').eq('budget_id', budgetId).then(({ data, error }) => { if (error) throw new Error(error.message); return data || []; }),
   setExpenseStatus: (id, status, note) => rpc('elimu_fin_set_expense_status', { p_expense: id, p_status: status, p_note: note ?? null }),
   saveBudget: (b, budget) => rpc('elimu_fin_save_budget', { p_business: b, p_budget: { ...budget, lines: (budget.lines || []).map(l => ({ ...l, amount: money(l.amountCents ?? l.amount) })) } }),
   approveBudget: (id) => rpc('elimu_fin_approve_budget', { p_budget: id }),

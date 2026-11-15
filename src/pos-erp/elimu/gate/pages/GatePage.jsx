@@ -30,7 +30,30 @@ function QrScanner({ onCode, onClose }) {
   );
 }
 
+function TodayReport() {
+  const [d, setD] = useState(null); const [err, setErr] = useState(null);
+  const load = useCallback(async () => { try { setD(await gateService.today()); setErr(null); } catch (e) { setErr(e.message); } }, []);
+  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, [load]);
+  if (err) return <ErrorLine error={err} />; if (!d) return <LoadingBlock />;
+  const hm = (iso) => new Date(iso).toTimeString().slice(0, 5);
+  return (
+    <div>
+      <div className="grid grid-cols-4 gap-2 text-center mb-3">{[['Arrived', d.arrived, 'text-emerald-700'], ['Late', d.late, 'text-amber-700'], ['Left', d.left, 'text-slate-700'], ['Issues', d.problems, 'text-red-700']].map(([k, v, c]) => (
+        <div key={k} className="rounded-2xl bg-white border border-[#E3DBB8] p-2"><div className={`text-xl font-bold ${c}`}>{v}</div><div className="text-[11px] text-slate-500">{k}</div></div>))}</div>
+      <div className="text-xs font-semibold text-slate-500 mb-1">NOT ARRIVED YET ({d.not_arrived.length})</div>
+      {d.not_arrived.length === 0 ? <p className="text-sm text-slate-500 mb-3">Everyone enrolled has arrived.</p> : (
+        <div className="mb-4 rounded-2xl bg-white border border-[#E3DBB8] divide-y divide-[#EFE8C8]">{d.not_arrived.slice(0, 120).map((s) => (
+          <div key={s.admission_no + s.name} className="flex justify-between px-3 py-2 text-sm"><span>{s.name}</span><span className="text-slate-500">{s.class_name} · {s.admission_no}</span></div>))}</div>)}
+      <div className="text-xs font-semibold text-slate-500 mb-1">SCANS ({d.scans.length})</div>
+      <div className="rounded-2xl bg-white border border-[#E3DBB8] divide-y divide-[#EFE8C8]">{d.scans.map((x, i) => (
+        <div key={i} className="flex justify-between px-3 py-2 text-sm"><span>{x.name}<span className="text-xs text-slate-400"> · {x.direction}{x.device ? ` · ${x.device}` : ''}</span></span>
+          <span className={x.result === 'RECORDED' ? (x.status === 'LATE' ? 'text-amber-700' : 'text-emerald-700') : x.result === 'ALREADY_IN' ? 'text-sky-700' : 'text-red-700'}>{x.result === 'RECORDED' ? (x.status || 'OK') : x.result.replace('_', ' ').toLowerCase()} · {hm(x.at)}</span></div>))}</div>
+    </div>
+  );
+}
+
 export default function GatePage() {
+  const [view, setView] = useState('checkin');
   const [dir, setDir] = useState('IN'); const [q, setQ] = useState(''); const [found, setFound] = useState([]); const [busy, setBusy] = useState(false); const [err, setErr] = useState(null);
   const [res, setRes] = useState(null); const [log, setLog] = useState([]); const [scan, setScan] = useState(false); const [device, setDevice] = useState(() => ls.get('elimu.gate.device', 'Main gate'));
   const [method, setMethod] = useState('MANUAL'); const timer = useRef(null); const input = useRef(null);
@@ -59,6 +82,9 @@ export default function GatePage() {
 
   return (
     <FitPage title="Gate" subtitle="Check students in and out">
+      <div className="grid grid-cols-2 gap-1 p-1 mb-3 rounded-xl bg-[#EFE8C8]">{[['checkin', 'Check in'], ['today', 'Today']].map(([k, l]) => (
+        <button key={k} type="button" onClick={() => setView(k)} className={`h-10 rounded-lg text-sm font-semibold ${view === k ? 'bg-white text-[#1F6B45] shadow-sm' : 'text-[#6F7461]'}`}>{l}</button>))}</div>
+      {view === 'today' ? <TodayReport /> : (<>
       <div className="grid grid-cols-2 gap-2 mb-3">{['IN', 'OUT'].map((d) => (
         <button key={d} type="button" onClick={() => setDir(d)} className={`h-14 rounded-2xl text-lg font-bold border ${dir === d ? (d === 'IN' ? 'bg-[#1F6B45] text-white border-[#1F6B45]' : 'bg-[#8A6D0B] text-white border-[#8A6D0B]') : 'bg-white text-[#23382B] border-[#E3DBB8]'}`}>{d === 'IN' ? 'Arriving' : 'Leaving'}</button>))}</div>
       {scan && <QrScanner onCode={onCode} onClose={() => setScan(false)} />}
@@ -77,6 +103,7 @@ export default function GatePage() {
       <label className="block mt-6 text-xs text-slate-500">This device is called
         <input value={device} onChange={(e) => { setDevice(e.target.value); ls.set('elimu.gate.device', e.target.value); }} className="mt-1 w-full h-10 rounded-lg border border-[#DDD6B6] px-3 bg-white text-sm" /></label>
       <p className="mt-3 text-xs text-slate-500">Fingerprint scanners: an external scanner that identifies the student can call the same check-in with method FINGERPRINT. A phone’s own fingerprint sensor cannot tell which student a finger belongs to, so it is not used here.</p>
+      </>)}
     </FitPage>
   );
 }
