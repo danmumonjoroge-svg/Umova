@@ -18,8 +18,6 @@ registerModule({ key: 'academics', routes: [React.cloneElement(elimuAcademicNest
 registerModule({ key: 'attendance', routes: [React.cloneElement(attendanceLayoutRoute, { key: 'attendance' })] });
 registerModule({ key: 'timetable', routes: [] });      // pages ship with the attendance group above
 registerModule({ key: 'calendar', routes: [] });
-registerModule({ key: 'rooms', routes: [] });      // pages ship with the attendance group above
-registerModule({ key: 'gate', routes: [] });
 registerModule({ key: 'reports', routes: [] });
 registerModule({ key: 'fees', routes: [
   React.cloneElement(elimuFinanceRoutes(), { key: 'finance' }),
