@@ -1,10 +1,10 @@
 import React from "react";
 import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
-import { Info } from "lucide-react";
+import { Info, Scale } from "lucide-react";
 import useCachedQuery from "../shell/useCachedQuery";
 import { formatKES } from "../shell/format";
-import { Spinner, StaleNote, Notice } from "../shell/ui";
+import { Spinner, StaleNote, Notice, Panel, SubCard, SubCardList } from "../shell/ui";
 
 // Read-only, plain-language loan rules for every member. Officials change the
 // rules in LoanRulesCard (gated there and by the database). Uses the same
@@ -40,7 +40,9 @@ export default function LoanRulesView() {
     <div>
       <StaleNote fromCache={fromCache} cachedAt={cachedAt} online={online} />
       {!custom && <Notice icon={Info}>Your Chama has not set its own loan rules yet, so these standard rules apply.</Notice>}
-      <ul className="cm-rules">{lines.map(([a, b], i) => <li key={i}>{a}{b}</li>)}</ul>
+      <Panel icon={Scale} title="How loans work here" subtitle="Rules every member follows" collapsible={false}>
+        <SubCardList>{lines.map(([a, b], i) => <SubCard key={i} tone="gold" title={`${a}${b}`} />)}</SubCardList>
+      </Panel>
     </div>
   );
 }

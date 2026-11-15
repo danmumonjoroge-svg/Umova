@@ -172,7 +172,12 @@ function InvoiceDetail({ id, tenant, staffId, onClose }) {
     <Shell onClose={onClose} title={`${inv.invoice_number} · ${customer?.name || ''}`}>
       <div className="flex items-center justify-between mb-3"><Pill s={st} /><span className="text-xs text-slate-500">Due {day(inv.due_date)}</span></div>
       <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 text-sm mb-3">
-        {d.lines.map((l) => <div key={l.id} className="flex justify-between px-3 py-2"><span>{l.charge?.charge_name || 'Charge'}</span><span>{kes(l.amount)}</span></div>)}
+        {d.lines.map((l) => <div key={l.id} className="flex justify-between px-3 py-2"><span>{l.charge?.charge_name || 'Charge'}</span><span>{kes(!l.tax_inclusive && Number(l.tax_amount) > 0 ? l.net_amount : l.amount)}</span></div>)}
+        {Number(inv.tax_total) > 0 && (inv.tax_inclusive
+          ? <div className="flex justify-between px-3 py-2 text-slate-500"><span>Includes tax ({Number(inv.tax_rate)}%)</span><span>{kes(inv.tax_total)}</span></div>
+          : <><div className="flex justify-between px-3 py-2 text-slate-500"><span>Subtotal</span><span>{kes(inv.subtotal_amount)}</span></div>
+              <div className="flex justify-between px-3 py-2 text-slate-500"><span>Tax ({Number(inv.tax_rate)}%)</span><span>{kes(inv.tax_total)}</span></div>
+              <div className="flex justify-between px-3 py-2 font-semibold"><span>Invoice total</span><span>{kes(inv.total_amount)}</span></div></>)}
         {Number(inv.previous_balance) > 0 && <div className="flex justify-between px-3 py-2 text-amber-700"><span>Previous balance</span><span>{kes(inv.previous_balance)}</span></div>}
         {Number(inv.paid_amount) > 0 && <div className="flex justify-between px-3 py-2 text-emerald-700"><span>Paid</span><span>− {kes(inv.paid_amount)}</span></div>}
         <div className="flex justify-between px-3 py-2 font-bold"><span>Amount due</span><span>{kes(inv.balance_due)}</span></div>

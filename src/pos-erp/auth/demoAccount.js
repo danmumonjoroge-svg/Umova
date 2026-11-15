@@ -133,11 +133,13 @@ export async function seedDemoDataIfEmpty({ tenant, staffId }) {
       const p = bySku[sku];
       return { product_id: p.id, quantity, unit_price: p.selling_price, cost_price: p.cost_price, name: p.name };
     };
+    // Each demo M-Pesa sale needs its OWN reference: the database now refuses one M-Pesa code on two payments (phase39).
+    let demoMpesaN = 0;
     const sale = (items, method, extra = {}) => {
       const total = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
       return saleService.create({
         ...base, cashier_id: staffId, shift_id: shift.id, items,
-        payments: [{ payment_method: method, amount: total, ...(method === "MOBILE_MONEY" ? { reference_no: "DEMO-MPESA" } : {}) }],
+        payments: [{ payment_method: method, amount: total, ...(method === "MOBILE_MONEY" ? { reference_no: `DEMOMPESA${++demoMpesaN}` } : {}) }],
         ...extra,
       });
     };

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
 import { CheckCircle, XCircle, Clock, Loader2, AlertCircle, X, ShieldAlert } from "lucide-react";
+import { Panel, SubCard } from "../shell/ui";
 import "./LoanApprovalQueue.css";
 
 // -----------------------------------------------------------------------------
@@ -174,6 +175,7 @@ export default function LoanApprovalQueue({ chamaId: chamaIdProp }) {
       ) : apps.length === 0 ? (
         <div className="laq-empty"><CheckCircle size={22} /><p>No loan applications awaiting a decision.</p></div>
       ) : (
+        <Panel icon={Clock} title="Waiting for a decision" badge={apps.length} tone="warn" collapsible={false}>
         <div className="laq-grid">
           {apps.map((app) => {
             const chain = app.approver_roles || [];
@@ -190,6 +192,7 @@ export default function LoanApprovalQueue({ chamaId: chamaIdProp }) {
                   {app.repayment_months} months at {app.interest_rate}% ({app.interest_type === "reducing_annual" ? "reducing" : "flat"})
                 </p>
 
+                <SubCard title="Sign-offs">
                 <div className="laq-chain">
                   {chain.map((role) => {
                     const decision = approvals.find((a) => a.role === role);
@@ -202,11 +205,10 @@ export default function LoanApprovalQueue({ chamaId: chamaIdProp }) {
                     );
                   })}
                 </div>
+                </SubCard>
 
                 {(app.guarantors || []).length > 0 && (
-                  <p className="laq-guarantors">
-                    Guarantors: {app.guarantors.map((g) => `${g.name} (${formatKES(g.amount)})`).join(", ")}
-                  </p>
+                  <SubCard tone="gold" title="Guarantors" sub={app.guarantors.map((g) => `${g.name} (${formatKES(g.amount)})`).join(", ")} />
                 )}
 
                 {canAct ? (
@@ -227,6 +229,7 @@ export default function LoanApprovalQueue({ chamaId: chamaIdProp }) {
             );
           })}
         </div>
+        </Panel>
       )}
 
       {modal && (

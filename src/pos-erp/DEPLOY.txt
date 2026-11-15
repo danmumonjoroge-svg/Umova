@@ -1,0 +1,8 @@
+FIRST (no deploy needed): run DIAGNOSE.sql in the Supabase SQL editor and send me the message it prints.
+
+Then, when ready:
+1. supabase functions deploy mpesa-callback --no-verify-jwt
+   (new: if a confirmed payment cannot be recorded, the reason is written on the transaction row)
+2. Run schema/phase46_mpesa_realtime.sql once in the SQL editor
+3. Replace the three app files (hooks/, components/, pages/)
+4. Optional hardening of the callback URL (MPESA_CALLBACK_TOKEN), see comments at the top of mpesa-callback/index.ts

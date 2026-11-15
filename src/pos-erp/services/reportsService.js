@@ -19,6 +19,11 @@
 // recomputing — one authority for "close the day", matching the fix
 // already made to cashierService.closeShift()/supplierService.recordPayment().
 //
+// ADDED: getItemsSold() and getExpenseBreakdown() - the "what exactly" behind the day's totals
+// (which items, how many units, which spending). Both are read-only, work for live AND closed days
+// (nothing is stored in lb_daily_closings for them), and use the SAME day boundaries and the SAME
+// sale statuses as computeSummary(), so the item revenue lines up with Total Sales.
+//
 // Payment-method -> daily_closings column mapping (per the confirmed
 // lb_payment_method enum: BANK, CARD, CASH, CREDIT, MOBILE_MONEY,
 // OTHER, VOUCHER) — still used by the live-preview path above:
@@ -119,7 +124,133 @@ async function computeSummary({ tenantId, date }) {
   };
 }
 
+
+const DAY_START = (date) => `${date}T00:00:00`;
+const DAY_END = (date) => `${date}T23:59:59.999`;
+const CHUNK = 100; // sale ids per request - keeps the URL short on busy days
+
+function chunked(list, size) {
+  const out = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+const num = (v) => Number(v || 0);
+
+/**
+ * Everything sold on one day, grouped Category -> Product -> Price.
+ * "Sold" = lines of COMPLETED / PARTIALLY_REFUNDED sales (same rule as Total Sales). Reversed or voided
+ * sales are left out. Partly-refunded sales still show their original lines (refunds are not kept per item).
+ *
+ * @returns {{salesCount:number, totalUnits:number, totalRevenue:number, categories:Array}}
+ *   category: { id, name, units, revenue, products: [ { id, name, sku, unitLabel, units, revenue, prices: [ { unit_price, units, revenue } ] } ] }
+ */
+async function getItemsSold({ tenantId, businessId, date }) {
+  let salesQuery = supabase
+    .from('lb_sales')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .in('status', ['COMPLETED', 'PARTIALLY_REFUNDED'])
+    .gte('created_at', DAY_START(date))
+    .lt('created_at', DAY_END(date));
+  if (businessId) salesQuery = salesQuery.eq('business_id', businessId);
+  const { data: sales, error: salesError } = await salesQuery;
+  if (salesError) throw salesError;
+
+  const saleIds = (sales || []).map((s) => s.id);
+  const rows = [];
+  for (const ids of chunked(saleIds, CHUNK)) {
+    const { data, error } = await supabase
+      .from('lb_sale_items')
+      .select('quantity, unit_price, total_price, selling_mode, product:lb_products(id, name, sku, category:lb_product_categories(id, name), unit:lb_product_units(code))')
+      .in('sale_id', ids);
+    if (error) throw error;
+    rows.push(...(data || []));
+  }
+
+  const cats = new Map();
+  let totalUnits = 0;
+  let totalRevenue = 0;
+
+  for (const r of rows) {
+    const qty = num(r.quantity);
+    const revenue = num(r.total_price);
+    const price = num(r.unit_price);
+    const prod = r.product || null;
+    const cat = prod?.category || null;
+
+    const catKey = cat?.id || 'none';
+    if (!cats.has(catKey)) cats.set(catKey, { id: catKey, name: cat?.name || 'Other items', units: 0, revenue: 0, products: new Map() });
+    const c = cats.get(catKey);
+
+    const prodKey = prod?.id || 'custom';
+    if (!c.products.has(prodKey)) {
+      c.products.set(prodKey, {
+        id: prodKey,
+        name: prod?.name || 'Custom / open item',
+        sku: prod?.sku || null,
+        unitLabel: r.selling_mode && r.selling_mode !== 'PER_UNIT' ? (prod?.unit?.code || null) : null,
+        units: 0, revenue: 0, prices: new Map(),
+      });
+    }
+    const p = c.products.get(prodKey);
+
+    if (!p.prices.has(price)) p.prices.set(price, { unit_price: price, units: 0, revenue: 0 });
+    const pl = p.prices.get(price);
+
+    pl.units += qty; pl.revenue += revenue;
+    p.units += qty;  p.revenue += revenue;
+    c.units += qty;  c.revenue += revenue;
+    totalUnits += qty; totalRevenue += revenue;
+  }
+
+  const categories = [...cats.values()]
+    .map((c) => ({
+      ...c,
+      products: [...c.products.values()]
+        .map((p) => ({ ...p, prices: [...p.prices.values()].sort((a, b) => b.units - a.units) }))
+        .sort((a, b) => b.units - a.units || a.name.localeCompare(b.name)),
+    }))
+    .sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name));
+
+  return { salesCount: saleIds.length, totalUnits, totalRevenue, categories };
+}
+
+/**
+ * The day's PAID spending, grouped Category -> individual entries.
+ * @returns {{total:number, categories:Array<{name,total,entries:Array<{id,description,amount}>}>}}
+ */
+async function getExpenseBreakdown({ tenantId, businessId, date }) {
+  let q = supabase
+    .from('lb_expenses')
+    .select('id, amount, description, category:lb_expense_categories(name)')
+    .eq('tenant_id', tenantId)
+    .eq('expense_date', date)
+    .eq('status', 'PAID');
+  if (businessId) q = q.eq('business_id', businessId);
+  const { data, error } = await q;
+  if (error) throw error;
+
+  const cats = new Map();
+  let total = 0;
+  for (const e of data || []) {
+    const name = e.category?.name || 'Uncategorised';
+    if (!cats.has(name)) cats.set(name, { name, total: 0, entries: [] });
+    const c = cats.get(name);
+    const amount = num(e.amount);
+    c.total += amount; total += amount;
+    c.entries.push({ id: e.id, description: e.description || name, amount });
+  }
+  const categories = [...cats.values()]
+    .map((c) => ({ ...c, entries: c.entries.sort((a, b) => b.amount - a.amount) }))
+    .sort((a, b) => b.total - a.total);
+  return { total, categories };
+}
+
 export const reportsService = {
+  getItemsSold,
+  getExpenseBreakdown,
+
   /**
    * @param {string} date - 'YYYY-MM-DD'
    */

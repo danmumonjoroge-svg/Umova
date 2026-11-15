@@ -218,7 +218,6 @@ $$;
 grant execute on function register_user(text, text, text, uuid) to anon, authenticated;
 grant execute on function authenticate_user(text, text) to anon, authenticated;
 grant execute on function get_user_memberships(uuid) to anon, authenticated;
-grant execute on function change_password(uuid, text, text) to anon, authenticated;
 grant execute on function is_chama_licensed(uuid) to anon, authenticated;
 
 -- =============================================================================

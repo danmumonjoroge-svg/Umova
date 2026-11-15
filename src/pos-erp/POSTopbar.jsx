@@ -27,41 +27,41 @@ export default function POSTopbar({ title, parent, notificationCount = 0, onMenu
   }, []);
 
   return (
-    <div className="min-h-[56px] md:min-h-[60px] bg-white border-b border-[#DDE3DD] border-t-2 border-t-[#C6A15B] flex items-center justify-between gap-2 px-3 sm:px-6 shrink-0">
+    <div className="min-h-[56px] md:min-h-[60px] bg-white border-b border-[#E3DBB8] border-t-2 border-t-[#C9A227] flex items-center justify-between gap-2 px-3 sm:px-6 shrink-0">
       <div className="flex items-center gap-1 min-w-0">
         {/* Phone-only leading control: back to the workspace on a child
             page, otherwise the menu (secondary navigation drawer). */}
         {parent ? (
-          <Link to={parent.to} className="md:hidden -ml-1 p-2.5 text-[#26352D]" aria-label={`Back to ${parent.label}`}>
+          <Link to={parent.to} className="md:hidden -ml-1 p-2.5 text-[#23382B]" aria-label={`Back to ${parent.label}`}>
             <ArrowLeft size={22} />
           </Link>
         ) : onMenuClick ? (
-          <button onClick={onMenuClick} className="md:hidden -ml-1 p-2.5 text-[#26352D]" aria-label="Open menu">
+          <button onClick={onMenuClick} className="md:hidden -ml-1 p-2.5 text-[#23382B]" aria-label="Open menu">
             <Menu size={22} />
           </button>
         ) : null}
 
         {parent && (
-          <div className="hidden md:flex items-center gap-1.5 text-sm text-[#68756D] shrink-0">
-            <Link to={parent.to} className="hover:text-[#237A52] font-medium">{parent.label}</Link>
+          <div className="hidden md:flex items-center gap-1.5 text-sm text-[#6F7461] shrink-0">
+            <Link to={parent.to} className="hover:text-[#1F6B45] font-medium">{parent.label}</Link>
             <ChevronRight size={14} />
           </div>
         )}
-        <h2 className="font-bold text-[#26352D] truncate">{title}</h2>
+        <h2 className="font-bold text-[#23382B] truncate">{title}</h2>
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 shrink-0">
         <ConnectionStatus />
-        <span className="text-xs text-[#68756D] hidden lg:block whitespace-nowrap">
+        <span className="text-xs text-[#6F7461] hidden lg:block whitespace-nowrap">
           {now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
           {" · "}
           {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
         </span>
 
-        <Link to="/pos/communication" className="relative p-2 text-[#26352D] hover:text-[#237A52]" aria-label="Notifications">
+        <Link to="/pos/communication" className="relative p-2 text-[#23382B] hover:text-[#1F6B45]" aria-label="Notifications">
           <Bell size={20} />
           {notificationCount > 0 && (
-            <span className="absolute top-0.5 right-0 bg-[#C6A15B] text-[#123C2A] text-[10px] font-bold leading-none rounded-full px-1.5 py-1">
+            <span className="absolute top-0.5 right-0 bg-[#C9A227] text-[#0F3B2A] text-[10px] font-bold leading-none rounded-full px-1.5 py-1">
               {notificationCount}
             </span>
           )}

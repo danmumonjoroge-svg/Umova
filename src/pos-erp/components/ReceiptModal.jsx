@@ -28,6 +28,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Printer, MessageCircle, Mail, X, CheckCircle2, Loader2 } from 'lucide-react';
 import { receiptService } from '../services/receiptService';
+import DocumentActions from './DocumentActions';
 
 function fmt(n) { return Number(n || 0).toLocaleString(); }
 
@@ -183,6 +184,9 @@ export default function ReceiptModal({ receipt, business, posSettings, customer,
             WhatsApp and Email open your customer's own app with the receipt ready — you'll still need to press Send there.
           </p>
 
+          {receipt.sale_id && !isOfflineSale && isOnline !== false && (
+            <div className="text-center"><DocumentActions items={[['INVOICE', 'Invoice', receipt.sale_id], ['DELIVERY_NOTE', 'Delivery note', receipt.sale_id]]} /></div>
+          )}
           <button onClick={onClose} className="w-full min-h-[44px] bg-slate-100 hover:bg-slate-200 rounded-xl text-center text-sm font-semibold text-slate-700">Done — back to sale</button>
         </div>
       </div>

@@ -8,7 +8,7 @@ import {
 import useCachedQuery from "../shell/useCachedQuery";
 import { useCapabilities, loadWork } from "../shell/work";
 import { formatKES, formatDate, firstName, monthStartISO, todayISO, roleLabel } from "../shell/format";
-import { ActionCard, CardGrid, SectionTitle, StaleNote, Spinner, Pill, Notice } from "../shell/ui";
+import { ActionCard, CardGrid, Panel, SubCard, SubCardList, StaleNote, Spinner, Pill, Notice } from "../shell/ui";
 
 const must = ({ data, error }) => { if (error) throw new Error(error.message); return data; };
 
@@ -72,14 +72,14 @@ export default function HomeWorkspace({ go }) {
   const monthName = new Date().toLocaleString(undefined, { month: "long" });
 
   const attention = [];
-  rejected.forEach((c) => attention.push({ key: `rej-${c.id}`, tone: "error", text: `Your ${formatKES(c.amount)} contribution of ${formatDate(c.contributed_on)} was not accepted. Check the details and send it again.`, route: "money/contribute", cta: "Contribute" }));
-  if (apps.length) attention.push({ key: "apps", tone: "info", text: `Your loan application${apps.length > 1 ? "s are" : " is"} waiting for approval.`, route: "loans/applications", cta: "View" });
-  if (loanWaiting.length) attention.push({ key: "wait", tone: "info", text: "Your loan is approved and waiting for the treasurer to pay it out.", route: "loans/mine", cta: "View" });
-  if (work.contribsToCheck) attention.push({ key: "chk", tone: "warn", text: `${work.contribsToCheck} contribution${work.contribsToCheck > 1 ? "s" : ""} waiting for you to check.`, route: "money/reconciliation", cta: "Check now" });
-  if (work.toDisburse) attention.push({ key: "dis", tone: "warn", text: `${work.toDisburse} approved loan${work.toDisburse > 1 ? "s" : ""} waiting to be paid out.`, route: "loans/disbursement", cta: "Pay out" });
-  if (work.loanApps) attention.push({ key: "la", tone: "warn", text: `${work.loanApps} loan application${work.loanApps > 1 ? "s" : ""} need${work.loanApps > 1 ? "" : "s"} a decision.`, route: "loans/approvals", cta: "Review" });
-  if (work.pendingMembers) attention.push({ key: "pm", tone: "warn", text: `${work.pendingMembers} new member${work.pendingMembers > 1 ? "s" : ""} waiting to be approved.`, route: "members?status=pending", cta: "Review" });
-  if (work.openCases) attention.push({ key: "wc", tone: "info", text: `${work.openCases} welfare case${work.openCases > 1 ? "s" : ""} open.`, route: "welfare/cases", cta: "Open" });
+  rejected.forEach((c) => attention.push({ key: `rej-${c.id}`, n: formatKES(c.amount), label: "Contribution not accepted", tone: "error", text: `Your ${formatKES(c.amount)} contribution of ${formatDate(c.contributed_on)} was not accepted. Check the details and send it again.`, route: "money/contribute", cta: "Contribute" }));
+  if (apps.length) attention.push({ key: "apps", n: apps.length, label: "Loan application waiting", tone: "info", text: `Your loan application${apps.length > 1 ? "s are" : " is"} waiting for approval.`, route: "loans/applications", cta: "View" });
+  if (loanWaiting.length) attention.push({ key: "wait", n: 1, label: "Loan waiting for payout", tone: "info", text: "Your loan is approved and waiting for the treasurer to pay it out.", route: "loans/mine", cta: "View" });
+  if (work.contribsToCheck) attention.push({ key: "chk", n: work.contribsToCheck, label: "Contributions to check", tone: "warn", text: `${work.contribsToCheck} contribution${work.contribsToCheck > 1 ? "s" : ""} waiting for you to check.`, route: "money/reconciliation", cta: "Check now" });
+  if (work.toDisburse) attention.push({ key: "dis", n: work.toDisburse, label: "Loans to pay out", tone: "warn", text: `${work.toDisburse} approved loan${work.toDisburse > 1 ? "s" : ""} waiting to be paid out.`, route: "loans/disbursement", cta: "Pay out" });
+  if (work.loanApps) attention.push({ key: "la", n: work.loanApps, label: "Loans need a decision", tone: "warn", text: `${work.loanApps} loan application${work.loanApps > 1 ? "s" : ""} need${work.loanApps > 1 ? "" : "s"} a decision.`, route: "loans/approvals", cta: "Review" });
+  if (work.pendingMembers) attention.push({ key: "pm", n: work.pendingMembers, label: "Members to approve", tone: "warn", text: `${work.pendingMembers} new member${work.pendingMembers > 1 ? "s" : ""} waiting to be approved.`, route: "members?status=pending", cta: "Review" });
+  if (work.openCases) attention.push({ key: "wc", n: work.openCases, label: "Welfare cases open", tone: "info", text: `${work.openCases} welfare case${work.openCases > 1 ? "s" : ""} open.`, route: "welfare/cases", cta: "Open" });
 
   // Next thing happening: welfare events and dated announcements, soonest first.
   const upcoming = [
@@ -142,47 +142,39 @@ export default function HomeWorkspace({ go }) {
       </div>
 
       {attention.length > 0 && (
-        <>
-          <SectionTitle>Needs your attention</SectionTitle>
-          <div className="cm-attn">
+        <Panel icon={AlertCircle} title="Needs your attention" badge={attention.length} tone="warn">
+          <SubCardList>
             {attention.map((a) => (
-              <button key={a.key} className={`cm-attn-item ${a.tone}`} onClick={() => go(a.route)}>
-                <span>{a.text}</span><em>{a.cta} →</em>
-              </button>
+              <SubCard key={a.key} tone={a.tone === "error" ? "error" : a.tone === "warn" ? "warn" : ""} title={a.label} value={a.n} sub={a.cta} onClick={() => go(a.route)} />
             ))}
-          </div>
-        </>
+          </SubCardList>
+        </Panel>
       )}
 
+      <Panel icon={PiggyBank} title="My money" subtitle="Savings and loan at a glance" tone="green">
+        <CardGrid>
+          <ActionCard icon={PiggyBank} title="My savings" value={formatKES(me.savings_balance)} action="View savings" onClick={() => go("money/statement?account=savings")} />
+          <ActionCard icon={HandCoins} title="Loan" value={loanOwed > 0 ? `${formatKES(loanOwed)} owed` : "No active loan"} action={loanOwed > 0 ? "Repay" : "Apply"} tone={loanOwed > 0 ? "gold" : ""} onClick={() => go(loanOwed > 0 ? "money/repay" : "loans/apply")} />
+          {next && <ActionCard icon={KIND_ICON[next.kind] || CalendarDays} title="Coming up" value={next.title} sub={`${formatDate(next.date, { weekday: "short", day: "numeric", month: "short" })}${next.place ? ` · ${next.place}` : ""}`} action="See updates" onClick={() => go("more/updates")} />}
+        </CardGrid>
+      </Panel>
+
       {desk.length > 0 && (
-        <>
-          <SectionTitle>For your role</SectionTitle>
+        <Panel icon={Users} title="For your role" subtitle="Your desk as an official" badge={desk.length}>
           <CardGrid>
             {desk.map((d) => <ActionCard key={d.title} icon={d.icon} title={d.title} value={d.value} sub={d.sub} action={d.action} onClick={() => go(d.route)} />)}
           </CardGrid>
-        </>
+        </Panel>
       )}
-      <CardGrid>
-        <ActionCard icon={PiggyBank} title="My savings" value={formatKES(me.savings_balance)} action="View savings" onClick={() => go("money/statement?account=savings")} />
-        <ActionCard icon={HandCoins} title="Loan" value={loanOwed > 0 ? `${formatKES(loanOwed)} owed` : "No active loan"} action={loanOwed > 0 ? "Repay" : "Apply"} tone={loanOwed > 0 ? "gold" : ""} onClick={() => go(loanOwed > 0 ? "money/repay" : "loans/apply")} />
-        {next && <ActionCard icon={KIND_ICON[next.kind] || CalendarDays} title="Coming up" value={next.title} sub={`${formatDate(next.date, { weekday: "short", day: "numeric", month: "short" })}${next.place ? ` · ${next.place}` : ""}`} action="See updates" onClick={() => go("more/updates")} />}
-      </CardGrid>
 
       {announcements.length > 0 && (
-        <>
-          <SectionTitle right={<button className="cm-link" onClick={() => go("more/updates")}>See all</button>}>Chama updates</SectionTitle>
-          <div className="cm-list">
-            {announcements.slice(0, 2).map((a) => {
-              const I = KIND_ICON[a.kind] || Megaphone;
-              return (
-                <button key={a.id} className="cm-list-item" onClick={() => go("more/updates")}>
-                  <span className="cm-list-icon"><I size={16} /></span>
-                  <span><strong>{a.title}</strong><small>{formatDate(a.created_at)}</small></span>
-                </button>
-              );
-            })}
-          </div>
-        </>
+        <Panel icon={Megaphone} title="Chama updates" right={<button className="cm-link" onClick={() => go("more/updates")}>See all</button>} tone="green">
+          <SubCardList>
+            {announcements.slice(0, 3).map((a) => (
+              <SubCard key={a.id} icon={KIND_ICON[a.kind] || Megaphone} title={a.title} sub={formatDate(a.created_at)} onClick={() => go("more/updates")} />
+            ))}
+          </SubCardList>
+        </Panel>
       )}
 
     </div>

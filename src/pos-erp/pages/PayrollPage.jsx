@@ -49,6 +49,7 @@ export default function PayrollPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [rateForm, setRateForm] = useState(null);
+  const [comm, setComm] = useState(null); // phase54: commission earned per person for the chosen month
   const canRun = can('payroll.access');
 
   const load = useCallback(async () => {
@@ -57,6 +58,14 @@ export default function PayrollPage() {
     catch (e) { setError(e.message); setRuns([]); }
   }, [business]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (tab !== 'commission' || !business) return;
+    let alive = true;
+    const [s, e] = monthBounds(month);
+    payrollService.commissionSummary(business, s, e).then((r) => { if (alive) { setComm(r); setError(''); } })
+      .catch((err) => { if (alive) { setComm([]); setError(err.message); } });
+    return () => { alive = false; };
+  }, [tab, month, business]);
   const openRun = async (id) => { try { setOpen(await payrollService.getRun(id)); } catch (e) { setError(e.message); } };
 
   const act = (key, fn) => singleFlight(key, async () => {
@@ -89,7 +98,7 @@ export default function PayrollPage() {
       <p className="text-xs text-slate-500">Pay is worked out from the rates below. The system records pay and prints payslips; it does not send money or file returns with KRA, NSSF or SHA.</p>
       {unconfirmed.length > 0 && <div className="text-sm bg-amber-50 text-amber-900 border border-amber-200 rounded-xl p-3">{unconfirmed.length} rate(s) are not yet confirmed. The starting rates came from public summaries. Check each against KRA, NSSF and SHA, then confirm. A run cannot be approved until then.</div>}
       {error && <div role="alert" className="text-sm bg-red-50 text-red-800 border border-red-200 rounded-xl p-3">{error}</div>}
-      <div className="flex gap-2">{[['runs', 'Pay runs'], ['rates', 'Rates']].map(([k, l]) => <button key={k} type="button" onClick={() => { setTab(k); setOpen(null); }} className={`px-3 py-1.5 rounded-full text-sm ${tab === k ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>{l}</button>)}</div>
+      <div className="flex gap-2">{[['runs', 'Pay runs'], ['commission', 'Commission'], ['rates', 'Rates']].map(([k, l]) => <button key={k} type="button" onClick={() => { setTab(k); setOpen(null); }} className={`px-3 py-1.5 rounded-full text-sm ${tab === k ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>{l}</button>)}</div>
 
       {tab === 'rates' && (
         <div className="space-y-2">
@@ -102,6 +111,22 @@ export default function PayrollPage() {
               {canRun && <button type="button" className="text-xs underline" onClick={() => setRateForm({ code: r.code, from: r.effective_from, params: JSON.stringify(r.params), source: '' })}>Change or add a new rate</button>}
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'commission' && (
+        <div className="space-y-2">
+          <div className="bg-white border border-slate-200 rounded-2xl p-3 flex gap-2 items-end flex-wrap">
+            <label className="text-sm">Month<input type="month" className={inp} value={month} onChange={(e) => setMonth(e.target.value)} /></label>
+            <p className="text-xs text-slate-500 flex-1 min-w-[200px]">Earned when a service is sold with a provider chosen. Unpaid commission joins the next pay run automatically as an allowance.</p>
+          </div>
+          {(comm || []).map((c) => (
+            <div key={c.employee_id} className="bg-white border border-slate-200 rounded-2xl p-3 flex justify-between gap-2 flex-wrap">
+              <span><span className="font-semibold">{c.name}</span> <span className="text-xs text-slate-500">· {c.services} service{c.services === 1 ? '' : 's'}</span></span>
+              <span className="tabular-nums text-sm">Earned KES {money(c.earned)} · waiting for payroll {money(c.unpaid)} · in a run {money(c.in_payroll)} · paid {money(c.paid)}</span>
+            </div>
+          ))}
+          {comm && comm.length === 0 && <p className="text-sm text-slate-500">No commission this month. Set a commission % on a service, then choose who served it on the Sell page or the booking.</p>}
         </div>
       )}
 
@@ -170,6 +195,7 @@ function LineCard({ l, editable, busy, onSave, onPrint }) {
           <button type="button" disabled={busy} onClick={() => onSave(l, a, o)} className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs">Recalculate</button>
         </div>
       )}
+      {l.notes && <p className="text-xs text-emerald-700">{l.notes}</p>}
       <button type="button" onClick={() => onPrint(l)} className="text-xs underline">Print payslip</button>
     </div>
   );

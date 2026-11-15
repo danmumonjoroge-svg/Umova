@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
 import { PlusCircle, Trash2, Loader2, AlertCircle, FileText, Clock, CheckCircle, XCircle } from "lucide-react";
+import { Panel, StatGrid, Stat } from "../shell/ui";
 import "./MemberLoanApplication.css";
 
 // -----------------------------------------------------------------------------
@@ -175,20 +176,13 @@ export default function MemberLoanApplication({ chamaId: chamaIdProp, startOpen 
         </button>
       </div>
 
-      <div className="mla-eligibility">
-        <span>Your savings</span>
-        <strong>{formatKES(mySavings)}</strong>
-        <span className="mla-divider" />
-        <span>Eligible up to</span>
-        <strong>{formatKES(maxEligible)}</strong>
-        {rules?.min_membership_months > 0 && (
-          <>
-            <span className="mla-divider" />
-            <span>Min. membership</span>
-            <strong>{rules.min_membership_months} months</strong>
-          </>
-        )}
-      </div>
+      <Panel icon={FileText} title="What you can borrow" tone="green" collapsible={false}>
+        <StatGrid cols={rules?.min_membership_months > 0 ? 3 : 2}>
+          <Stat label="Your savings" value={formatKES(mySavings)} />
+          <Stat label="Eligible up to" value={formatKES(maxEligible)} tone="gold" />
+          {rules?.min_membership_months > 0 && <Stat label="Min. membership" value={`${rules.min_membership_months} months`} />}
+        </StatGrid>
+      </Panel>
 
       {formOpen && (
         <form className="mla-form" onSubmit={submit}>
@@ -255,6 +249,7 @@ export default function MemberLoanApplication({ chamaId: chamaIdProp, startOpen 
         </form>
       )}
 
+      <Panel icon={Clock} title="My applications" badge={myApps.length || ""} collapsible={false}>
       <div className="mla-list">
         {loading ? (
           <div className="mla-loading"><Loader2 size={20} className="spin" /></div>
@@ -292,6 +287,7 @@ export default function MemberLoanApplication({ chamaId: chamaIdProp, startOpen 
           })
         )}
       </div>
+      </Panel>
 
       {toast && <div className="mla-toast">{toast}</div>}
     </div>

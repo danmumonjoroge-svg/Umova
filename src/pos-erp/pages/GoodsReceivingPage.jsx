@@ -6,6 +6,9 @@ import { ScannerModal, useBarcodeScanner, SCAN_RESULTS } from '../index';
 import { productService } from '../services/productService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { singleFlight } from '../utils/singleFlight';
+import { Truck, ScanLine, Search, Trash2, ListPlus, PackageCheck, Loader2 } from 'lucide-react';
+import { FitPage, MiniStats, Pill, IconBtn, Notice, EmptyBlock, inputCls, saveBtnCls } from '../components/CardKit';
+import Sheet from '../components/workspace/Sheet';
 
 /**
  * Goods Receiving with scanning (spec sections 14–18, 41).
@@ -47,6 +50,7 @@ export default function GoodsReceivingPage() {
   const [selectedPOId, setSelectedPOId] = useState('');
   const [quickSupplierId, setQuickSupplierId] = useState('');
   const [referenceInvoice, setReferenceInvoice] = useState('');
+  const [invoiceAmount, setInvoiceAmount] = useState(''); // what the supplier's invoice says, for the three-way match
   const [scanEntryMode, setScanEntryMode] = useState('ONE_BY_ONE'); // 'ONE_BY_ONE' | 'QUANTITY'
   const [manualQuery, setManualQuery] = useState(''); // search-and-add without scanning — for no-barcode items or when scanning just isn't wanted
 
@@ -296,6 +300,7 @@ export default function GoodsReceivingPage() {
       if (mode === 'PO') {
         grn = await createFromPO(selectedPOId, {
           invoice_no: referenceInvoice || null,
+          supplier_invoice_amount: invoiceAmount === '' ? null : Number(invoiceAmount),
           items,
           payment,
         });
@@ -303,6 +308,7 @@ export default function GoodsReceivingPage() {
         grn = await createQuickReceipt({
           supplier_id: quickSupplierId,
           invoice_no: referenceInvoice || null,
+          supplier_invoice_amount: invoiceAmount === '' ? null : Number(invoiceAmount),
           items,
           payment,
         });
@@ -311,7 +317,7 @@ export default function GoodsReceivingPage() {
       setLines([]);
       setSelectedPOId('');
       setQuickSupplierId('');
-      setReferenceInvoice('');
+      setReferenceInvoice(''); setInvoiceAmount('');
       setOverReceiveWarning('');
       setPaymentType('');
       setAmountPaid('');
@@ -336,134 +342,115 @@ export default function GoodsReceivingPage() {
     }
   });
 
-  return (
-    <div className="p-4 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Receive Stock</h1>
 
-      <div className="bg-white rounded shadow p-4 mb-4">
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => setMode('PO')}
-            className={`flex-1 py-2 rounded text-sm font-semibold ${mode === 'PO' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}
-          >
-            From Purchase Order
-          </button>
-          <button
-            onClick={() => setMode('QUICK')}
-            className={`flex-1 py-2 rounded text-sm font-semibold ${mode === 'QUICK' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}
-          >
-            Quick Receipt (no PO)
-          </button>
+  const sourceReady = mode === 'PO' ? !!selectedPOId : !!quickSupplierId;
+  const totalUnits = lines.reduce((s, l) => s + (Number(l.quantity_received) || 0), 0);
+  const money = (n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  return (
+    <FitPage
+      title="Receive Stock"
+      icon={Truck}
+      subtitle="Record a delivery, add what arrived, then say how it was paid."
+      summary={(
+        <MiniStats items={[
+          { label: 'Items', value: lines.length },
+          { label: 'Units', value: money(totalUnits) },
+          { label: 'Delivery total', value: money(grnTotal), tone: grnTotal > 0 ? 'gold' : undefined },
+        ]} />
+      )}
+    >
+      {/* ── 1. Delivery ─────────────────────────────────────────── */}
+      <StepCard n={1} title="Delivery">
+        <Segmented
+          value={mode} onChange={setMode}
+          options={[{ key: 'PO', label: 'From Purchase Order' }, { key: 'QUICK', label: 'Quick Receipt (no PO)' }]}
+        />
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          {mode === 'PO' ? (
+            <Field label="Purchase order">
+              <select value={selectedPOId} onChange={e => setSelectedPOId(e.target.value)} className={inputCls}>
+                <option value="">{poLoading ? 'Loading purchase orders…' : 'Select Purchase Order'}</option>
+                {receivablePOs.map(po => (
+                  <option key={po.id} value={po.id}>{po.po_number} — {po.supplier?.name} ({po.status})</option>
+                ))}
+              </select>
+            </Field>
+          ) : (
+            <Field label="Supplier">
+              <select value={quickSupplierId} onChange={e => setQuickSupplierId(e.target.value)} className={inputCls}>
+                <option value="">Select Supplier</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label="Reference invoice #">
+            <input placeholder="Optional" value={referenceInvoice} onChange={e => setReferenceInvoice(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Invoice amount (KES)">
+            <input type="number" min="0" step="0.01" placeholder="Total on the supplier's invoice" value={invoiceAmount} onChange={e => setInvoiceAmount(e.target.value)} className={inputCls} />
+          </Field>
         </div>
 
-        {mode === 'PO' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <select
-              value={selectedPOId}
-              onChange={e => setSelectedPOId(e.target.value)}
-              className="border rounded px-3 py-2"
-            >
-              <option value="">{poLoading ? 'Loading purchase orders…' : 'Select Purchase Order'}</option>
-              {receivablePOs.map(po => (
-                <option key={po.id} value={po.id}>
-                  {po.po_number} — {po.supplier?.name} ({po.status})
-                </option>
-              ))}
-            </select>
-            <input
-              placeholder="Reference invoice #"
-              value={referenceInvoice}
-              onChange={e => setReferenceInvoice(e.target.value)}
-              className="border rounded px-3 py-2"
-            />
-            {!poLoading && receivablePOs.length === 0 && (
-              <p className="md:col-span-2 text-xs text-amber-700 bg-amber-50 rounded px-3 py-2">
-                No approved purchase orders to receive against. Create one and approve it on the Purchase Orders page.
-              </p>
-            )}
-            {selectedPO && (
-              <div className="md:col-span-2 bg-blue-50 border border-blue-100 rounded px-3 py-2 text-sm flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="font-semibold">{selectedPO.po_number} — {selectedPO.supplier?.name}</div>
-                  <div className="text-xs text-gray-600">
-                    {selectedPO.items?.length || 0} item(s) ordered · Status: {selectedPO.status?.replace('_', ' ')}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={loadPOItems}
-                  disabled={!selectedPO.items?.length}
-                  className="bg-blue-600 text-white text-xs font-semibold px-3 py-2 rounded disabled:opacity-40 shrink-0"
-                >
-                  Load all PO items
-                </button>
+        {mode === 'PO' && !poLoading && receivablePOs.length === 0 && (
+          <div className="mt-2.5"><Notice tone="gold">No approved purchase orders to receive against. Create one and approve it on the Purchase Orders page.</Notice></div>
+        )}
+
+        {mode === 'PO' && selectedPO && (
+          <div className="mt-2.5 rounded-xl bg-[#F3F8EF] border border-[#CFE0C3] px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-[13px] font-bold text-[#1B5138] truncate">{selectedPO.po_number} — {selectedPO.supplier?.name}</div>
+              <div className="text-[11px] text-[#5E6350]">
+                {selectedPO.items?.length || 0} item(s) ordered · {selectedPO.status?.replace('_', ' ')}
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <select
-              value={quickSupplierId}
-              onChange={e => setQuickSupplierId(e.target.value)}
-              className="border rounded px-3 py-2"
+            </div>
+            <button
+              type="button" onClick={loadPOItems} disabled={!selectedPO.items?.length}
+              className="shrink-0 inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-lg bg-[#1F6B45] hover:bg-[#17553A] text-white text-[12px] font-semibold border-b-2 border-[#C9A227] disabled:opacity-40"
             >
-              <option value="">Select Supplier</option>
-              {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-            <input
-              placeholder="Reference invoice #"
-              value={referenceInvoice}
-              onChange={e => setReferenceInvoice(e.target.value)}
-              className="border rounded px-3 py-2"
-            />
+              <ListPlus size={14} /> Load all PO items
+            </button>
           </div>
         )}
-      </div>
+      </StepCard>
 
-      <div className="bg-white rounded shadow p-4 mb-4">
-        <div className="flex flex-wrap gap-3 items-center justify-between mb-3">
+      {/* ── 2. Add items ────────────────────────────────────────── */}
+      <StepCard n={2} title="Add items" dim={!sourceReady} hint={!sourceReady ? (mode === 'PO' ? 'Pick a purchase order first' : 'Pick a supplier first') : undefined}>
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={() => setShowScanner(true)}
-            disabled={mode === 'PO' ? !selectedPOId : !quickSupplierId}
-            className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-semibold disabled:opacity-40"
+            type="button" onClick={() => setShowScanner(true)} disabled={!sourceReady}
+            className="inline-flex items-center justify-center gap-2 min-h-[42px] px-4 rounded-xl bg-[#1F6B45] hover:bg-[#17553A] text-white text-[13px] font-semibold border-b-2 border-[#C9A227] disabled:opacity-40 flex-1 sm:flex-none"
           >
-            📷 Scan Product
+            <ScanLine size={16} /> Scan Product
           </button>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-500">Scan Mode:</span>
-            <label className="flex items-center gap-1">
-              <input type="radio" checked={scanEntryMode === 'ONE_BY_ONE'} onChange={() => setScanEntryMode('ONE_BY_ONE')} />
-              One by One
-            </label>
-            <label className="flex items-center gap-1">
-              <input type="radio" checked={scanEntryMode === 'QUANTITY'} onChange={() => setScanEntryMode('QUANTITY')} />
-              Quantity
-            </label>
+          <div className="flex-1 min-w-[220px]">
+            <Segmented
+              value={scanEntryMode} onChange={setScanEntryMode} small
+              options={[{ key: 'ONE_BY_ONE', label: 'One by one' }, { key: 'QUANTITY', label: 'Enter quantity' }]}
+            />
           </div>
         </div>
 
-        {/* Manual add — no scan needed. The only way to add an item with
-            no barcode (or when scanning one isn't convenient); works the
-            same for barcoded products too. */}
-        <div className="relative mb-4">
+        {/* Manual add — the only way to add an item with no barcode. */}
+        <div className="relative mt-2.5">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A59B6A]" />
           <input
-            placeholder="Or type a product name / SKU to add manually (no scanning)…"
-            value={manualQuery}
-            onChange={e => setManualQuery(e.target.value)}
-            disabled={mode === 'PO' ? !selectedPOId : !quickSupplierId}
-            className="w-full border rounded px-3 py-2.5 disabled:bg-gray-50 disabled:text-gray-400"
+            placeholder="Or type a product name / SKU to add it (no scanning)…"
+            value={manualQuery} onChange={e => setManualQuery(e.target.value)} disabled={!sourceReady}
+            className={`${inputCls} pl-9 disabled:bg-[#F6F4E8] disabled:text-[#A9A58A]`}
           />
           {manualMatches.length > 0 && (
-            <div className="absolute z-10 left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-56 overflow-y-auto">
+            <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-[#E3DBB8] rounded-xl shadow-lg max-h-56 overflow-y-auto divide-y divide-[#F0EACF]">
               {manualMatches.map(p => {
                 const poItem = mode === 'PO' ? poItemFor(p.id) : null;
                 return (
                   <button
                     type="button" key={p.id} onClick={() => addManualLine(p)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex justify-between items-center"
+                    className="w-full text-left px-3 py-2 text-[13px] hover:bg-[#FAF7EA] flex justify-between items-center gap-2"
                   >
-                    <span>{p.name} <span className="text-gray-400 text-xs">{p.sku}</span></span>
-                    {mode === 'PO' && !poItem && <span className="text-xs text-yellow-600">not on PO</span>}
+                    <span className="min-w-0 truncate font-medium text-[#23382B]">{p.name} <span className="text-[#A29E80] text-[11px] font-normal">{p.sku}</span></span>
+                    {mode === 'PO' && !poItem && <Pill tone="warn">Not on PO</Pill>}
                   </button>
                 );
               })}
@@ -471,174 +458,158 @@ export default function GoodsReceivingPage() {
           )}
         </div>
 
-        {overReceiveWarning && (
-          <div className="bg-yellow-50 text-yellow-800 text-sm rounded px-3 py-2 mb-3">
-            ⚠ {overReceiveWarning}
+        {(overReceiveWarning || postError) && (
+          <div className="mt-2.5">
+            {overReceiveWarning && <Notice tone="gold">⚠ {overReceiveWarning}</Notice>}
+            {postError && <Notice tone="bad">{postError}</Notice>}
           </div>
-        )}
-        {postError && (
-          <div className="bg-red-50 text-red-700 text-sm rounded px-3 py-2 mb-3">{postError}</div>
         )}
 
         {recentScans.length > 0 && (
-          <div className="text-xs text-gray-500 mb-3">
+          <div className="mt-2 text-[11.5px] text-[#8B8766]">
             Last scan: {recentScans[0].result === SCAN_RESULTS.RESOLVED ? recentScans[0].product.name : `not found (${recentScans[0].barcode})`}
           </div>
         )}
+      </StepCard>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2">Product</th>
-                {mode === 'PO' && <th>Ordered</th>}
-                {mode === 'PO' && <th>Prev. Received</th>}
-                <th>Received</th>
-                <th>Unit Cost</th>
-                <th>Batch</th>
-                <th>Expiry</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map(l => {
-                const poItem = poItemFor(l.product_id);
-                return (
-                  <tr key={l.product_id} className="border-t">
-                    <td className="px-3 py-2">
-                      {l.name}
-                      {l.notOnPO && <span className="ml-2 text-xs text-yellow-600">not on PO</span>}
-                    </td>
-                    {mode === 'PO' && <td>{poItem?.quantity ?? '-'}</td>}
-                    {mode === 'PO' && <td>{poItem?.received_quantity ?? 0}</td>}
-                    <td>
+      {/* ── 3. Items received (one small card each) ─────────────── */}
+      <StepCard n={3} title="Items received" right={lines.length > 0 && <Pill tone="info">{lines.length} item{lines.length === 1 ? '' : 's'}</Pill>}>
+        {lines.length === 0 ? (
+          <EmptyBlock>No items added yet. Scan a product or search above.</EmptyBlock>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            {lines.map(l => {
+              const poItem = poItemFor(l.product_id);
+              const lineTotal = (Number(l.quantity_received) || 0) * (Number(l.unit_cost) || 0);
+              return (
+                <div
+                  key={l.product_id}
+                  className={`rounded-xl border p-2.5 min-w-0 ${l.notOnPO ? 'border-[#E3DBB8] border-l-[3px] border-l-[#C9A227] bg-[#FFFDF4]' : 'border-[#E3DBB8] bg-white'}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-bold text-[#23382B] leading-tight truncate">{l.name}</div>
+                      <div className="flex flex-wrap items-center gap-1 mt-1">
+                        {l.sku && <span className="text-[10.5px] text-[#8B8766] font-mono">{l.sku}</span>}
+                        {l.notOnPO && <Pill tone="warn">Not on PO</Pill>}
+                        {mode === 'PO' && poItem && <Pill tone="info">Ordered {poItem.quantity}</Pill>}
+                        {mode === 'PO' && poItem && <Pill tone="neutral">Already got {poItem.received_quantity ?? 0}</Pill>}
+                      </div>
+                    </div>
+                    <IconBtn title="Remove item" tone="danger" onClick={() => removeLine(l.product_id)}><Trash2 size={14} /></IconBtn>
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Field label="Received" compact>
                       <input
-                        type="number"
-                        min="0"
-                        value={l.quantity_received}
+                        type="number" min="0" inputMode="decimal" value={l.quantity_received}
                         onChange={e => updateLineField(l.product_id, 'quantity_received', parseFloat(e.target.value) || 0)}
-                        className="border rounded px-2 py-1 w-20"
+                        className={`${inputCls} !min-h-[38px] font-semibold`}
                       />
-                    </td>
-                    <td>
+                    </Field>
+                    <Field label="Unit cost" compact>
                       <input
-                        type="number"
-                        min="0"
-                        value={l.unit_cost}
+                        type="number" min="0" inputMode="decimal" value={l.unit_cost}
                         onChange={e => updateLineField(l.product_id, 'unit_cost', parseFloat(e.target.value) || 0)}
-                        className="border rounded px-2 py-1 w-24"
+                        className={`${inputCls} !min-h-[38px]`}
                       />
-                    </td>
-                    <td>
+                    </Field>
+                    <Field label="Batch (optional)" compact>
                       <input
                         value={l.batch_number}
                         onChange={e => updateLineField(l.product_id, 'batch_number', e.target.value)}
-                        className="border rounded px-2 py-1 w-24"
+                        className={`${inputCls} !min-h-[38px]`}
                       />
-                    </td>
-                    <td>
+                    </Field>
+                    <Field label="Expiry (optional)" compact>
                       <input
-                        type="date"
-                        value={l.expiry_date}
+                        type="date" value={l.expiry_date}
                         onChange={e => updateLineField(l.product_id, 'expiry_date', e.target.value)}
-                        className="border rounded px-2 py-1 w-36"
+                        className={`${inputCls} !min-h-[38px] px-2`}
                       />
-                    </td>
-                    <td>
-                      <button onClick={() => removeLine(l.product_id)} className="text-red-600 text-xs">Remove</button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {lines.length === 0 && (
-                <tr><td colSpan={mode === 'PO' ? 7 : 5} className="px-3 py-8 text-center text-gray-400">No items scanned yet</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                    </Field>
+                  </div>
 
-        {/* How the goods are being paid for — feeds the supplier's balance
-            and statement. Must be chosen; nothing is assumed. */}
-        <div className="mt-4 border-t pt-4">
-          <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Payment for this delivery</div>
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            {[
-              { key: 'CASH', label: 'Paid in full' },
-              { key: 'PARTIAL', label: 'Part paid' },
-              { key: 'CREDIT', label: 'On credit' },
-            ].map(o => (
-              <button
-                key={o.key}
-                type="button"
-                onClick={() => setPaymentType(o.key)}
-                className={`py-2 rounded text-sm font-semibold ${paymentType === o.key ? 'bg-emerald-800 text-white' : 'bg-gray-100 text-gray-700'}`}
-              >
-                {o.label}
-              </button>
-            ))}
+                  <div className="mt-2 pt-1.5 border-t border-[#F0EACF] flex items-center justify-between text-[11px] text-[#8B8766]">
+                    <span>Line total</span>
+                    <span className="text-[13px] font-bold text-[#23382B]">{money(lineTotal)}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
+        )}
+      </StepCard>
 
-          {paymentType === '' && (
-            <p className="text-xs text-amber-700 bg-amber-50 rounded px-3 py-2">
-              Choose how this delivery is being paid for before posting.
-            </p>
-          )}
+      {/* ── 4. Payment ──────────────────────────────────────────── */}
+      <StepCard n={4} title="Payment for this delivery">
+        <Segmented
+          value={paymentType} onChange={setPaymentType}
+          options={[{ key: 'CASH', label: 'Paid in full' }, { key: 'PARTIAL', label: 'Part paid' }, { key: 'CREDIT', label: 'On credit' }]}
+        />
 
-          {(paymentType === 'CASH' || paymentType === 'PARTIAL') && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="border rounded px-3 py-2 min-w-0">
+        {paymentType === '' && (
+          <div className="mt-2.5"><Notice tone="gold">Choose how this delivery is being paid for before posting.</Notice></div>
+        )}
+
+        {(paymentType === 'CASH' || paymentType === 'PARTIAL') && (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <Field label="Paid by">
+              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className={inputCls}>
                 <option value="CASH">Cash</option>
                 <option value="MOBILE_MONEY">Mobile Money</option>
                 <option value="BANK">Bank</option>
                 <option value="CARD">Card</option>
                 <option value="OTHER">Other</option>
               </select>
-              {paymentType === 'PARTIAL' && (
-                <input
-                  type="number" min="0" step="0.01" placeholder="Amount paid now"
-                  value={amountPaid} onChange={e => setAmountPaid(e.target.value)}
-                  className="border rounded px-3 py-2 min-w-0"
-                />
-              )}
-              <input
-                placeholder="Payment reference (optional)"
-                value={paymentRef} onChange={e => setPaymentRef(e.target.value)}
-                className="border rounded px-3 py-2 min-w-0"
-              />
-            </div>
-          )}
+            </Field>
+            {paymentType === 'PARTIAL' && (
+              <Field label="Amount paid now">
+                <input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" value={amountPaid} onChange={e => setAmountPaid(e.target.value)} className={inputCls} />
+              </Field>
+            )}
+            <Field label="Reference (optional)">
+              <input placeholder="e.g. M-Pesa code" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} className={inputCls} />
+            </Field>
+          </div>
+        )}
 
-          {paymentType === 'PARTIAL' && partialAmount > 0 && partialAmount >= grnTotal && (
-            <p className="text-xs text-red-600 mb-2">Part payment must be less than the delivery total. Use "Paid in full" instead.</p>
-          )}
+        {paymentType === 'PARTIAL' && partialAmount > 0 && partialAmount >= grnTotal && (
+          <div className="mt-2.5"><Notice tone="bad">Part payment must be less than the delivery total. Use "Paid in full" instead.</Notice></div>
+        )}
 
-          {paymentType !== '' && (
-            <div className="text-sm space-y-1">
-              <div className="flex justify-between"><span className="text-gray-500">Delivery total</span><span className="font-semibold">{grnTotal.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Paid now</span><span className="font-semibold text-emerald-700">{paidNow.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Added to what you owe the supplier</span><span className="font-semibold text-red-600">{owedToSupplier.toLocaleString()}</span></div>
-              {activeSupplier && (
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>{activeSupplier.name}: currently owed {Number(activeSupplier.outstanding_balance || 0).toLocaleString()}</span>
-                  <span>after this: {projectedBalance.toLocaleString()}</span>
-                </div>
-              )}
-            </div>
-          )}
+        {paymentType !== '' && (
+          <div className="mt-3">
+            <MiniStats items={[
+              { label: 'Delivery total', value: money(grnTotal) },
+              { label: 'Paid now', value: money(paidNow), tone: 'good' },
+              { label: 'Owed to supplier', value: money(owedToSupplier), tone: owedToSupplier > 0 ? 'bad' : undefined },
+            ]} />
+            {activeSupplier && (
+              <div className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-[11.5px] text-[#8B8766]">
+                <span>{activeSupplier.name}: currently owed {money(activeSupplier.outstanding_balance)}</span>
+                <span>after this: <b className="text-[#3D4A3F]">{money(projectedBalance)}</b></span>
+              </div>
+            )}
+          </div>
+        )}
 
-          {overCreditLimit && (
-            <p className="mt-2 text-xs text-amber-800 bg-amber-50 rounded px-3 py-2">
-              ⚠ This would take the supplier past their credit limit ({Number(activeSupplier.credit_limit).toLocaleString()}). You can still post it.
-            </p>
-          )}
+        {overCreditLimit && (
+          <div className="mt-2.5"><Notice tone="gold">⚠ This would take the supplier past their credit limit ({money(activeSupplier.credit_limit)}). You can still post it.</Notice></div>
+        )}
+      </StepCard>
+
+      {/* ── Post bar: always in reach ───────────────────────────── */}
+      <div className="sticky bottom-0 z-10 mt-1 flex items-center gap-3 rounded-xl bg-white border border-[#E3DBB8] border-t-2 border-t-[#C9A227] p-2.5 shadow-md">
+        <div className="min-w-0">
+          <div className="text-[9.5px] font-bold uppercase tracking-wide text-[#8B8766]">Delivery total</div>
+          <div className="text-[17px] font-extrabold leading-tight text-[#23382B] truncate">{money(grnTotal)}</div>
         </div>
-
         <button
-          onClick={postGRN}
-          disabled={!canPost || posting}
-          className="mt-4 w-full bg-green-600 text-white py-3 rounded font-bold disabled:opacity-50"
+          type="button" onClick={postGRN} disabled={!canPost || posting}
+          className={`${saveBtnCls} flex-1 sm:flex-none sm:w-56 sm:ml-auto px-4 text-[13.5px] font-bold inline-flex items-center justify-center gap-2`}
         >
-          {posting ? 'Posting…' : 'POST GRN'}
+          {posting ? <><Loader2 size={15} className="animate-spin" /> Posting…</> : <><PackageCheck size={16} /> Post delivery</>}
         </button>
       </div>
 
@@ -663,26 +634,75 @@ export default function GoodsReceivingPage() {
 
       {/* Unknown barcode -> quick product create (spec section 18) */}
       {quickCreateBarcode && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitQuickCreate} className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-lg">Create Product & Add to GRN</h3>
-            <p className="text-xs text-gray-500 font-mono">Barcode: {quickCreateBarcode}</p>
-            <input required autoFocus placeholder="Product Name" value={quickCreateForm.name}
-              onChange={e => setQuickCreateForm({ ...quickCreateForm, name: e.target.value })}
-              className="w-full border rounded px-3 py-2" />
-            <input required type="number" placeholder="Selling Price" value={quickCreateForm.selling_price}
-              onChange={e => setQuickCreateForm({ ...quickCreateForm, selling_price: e.target.value })}
-              className="w-full border rounded px-3 py-2" />
-            <input type="number" placeholder="Cost Price" value={quickCreateForm.cost_price}
-              onChange={e => setQuickCreateForm({ ...quickCreateForm, cost_price: e.target.value })}
-              className="w-full border rounded px-3 py-2" />
+        <Sheet title="Create product & add to delivery" onClose={() => setQuickCreateBarcode(null)}>
+          <form onSubmit={submitQuickCreate} className="space-y-3">
+            <p className="text-[11.5px] text-[#8B8766] font-mono">Barcode: {quickCreateBarcode}</p>
+            <Field label="Product name">
+              <input required autoFocus placeholder="e.g. Cooking oil 1L" value={quickCreateForm.name}
+                onChange={e => setQuickCreateForm({ ...quickCreateForm, name: e.target.value })} className={inputCls} />
+            </Field>
+            <div className="grid grid-cols-2 gap-2.5">
+              <Field label="Selling price">
+                <input required type="number" inputMode="decimal" value={quickCreateForm.selling_price}
+                  onChange={e => setQuickCreateForm({ ...quickCreateForm, selling_price: e.target.value })} className={inputCls} />
+              </Field>
+              <Field label="Cost price">
+                <input type="number" inputMode="decimal" value={quickCreateForm.cost_price}
+                  onChange={e => setQuickCreateForm({ ...quickCreateForm, cost_price: e.target.value })} className={inputCls} />
+              </Field>
+            </div>
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setQuickCreateBarcode(null)} className="flex-1 bg-gray-100 py-2 rounded">Cancel</button>
-              <button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded">Save & Add</button>
+              <button type="button" onClick={() => setQuickCreateBarcode(null)} className="flex-1 min-h-[42px] rounded-lg bg-[#EEEBDD] text-[#5E6350] font-semibold">Cancel</button>
+              <button type="submit" className={`${saveBtnCls} flex-1`}>Save & add</button>
             </div>
           </form>
-        </div>
+        </Sheet>
       )}
+    </FitPage>
+  );
+}
+
+// ── small local building blocks ─────────────────────────────────────────
+
+/** Numbered section card: keeps the receiving flow to four clear steps. */
+function StepCard({ n, title, hint, right, dim, children }) {
+  return (
+    <section className={`mb-3 rounded-2xl bg-white border border-[#E3DBB8] border-t-[3px] border-t-[#C9A227] p-3 transition-opacity ${dim ? 'opacity-70' : ''}`}>
+      <div className="flex items-center gap-2 mb-2.5">
+        <span className="shrink-0 w-6 h-6 rounded-full bg-[#1F6B45] text-white text-[12px] font-bold flex items-center justify-center">{n}</span>
+        <h2 className="text-[14px] font-bold text-[#23382B] truncate">{title}</h2>
+        {hint && <span className="text-[11px] text-[#8A6A12] truncate">· {hint}</span>}
+        {right && <div className="ml-auto shrink-0">{right}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Field({ label, compact, children }) {
+  return (
+    <label className="block min-w-0">
+      <span className={`block font-bold uppercase tracking-wide text-[#8B8766] ${compact ? 'text-[9px] mb-0.5' : 'text-[10px] mb-1'}`}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/** Pill-style choice between a few options. */
+function Segmented({ options, value, onChange, small }) {
+  return (
+    <div className="grid gap-1 p-1 rounded-xl bg-[#F4F0DC]" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map(o => {
+        const on = o.key === value;
+        return (
+          <button
+            key={o.key} type="button" onClick={() => onChange(o.key)}
+            className={`${small ? 'min-h-[32px] text-[12px]' : 'min-h-[38px] text-[12.5px]'} px-2 rounded-lg font-semibold transition-colors ${on ? 'bg-[#1F6B45] text-white shadow-sm' : 'text-[#5E6350] hover:bg-white/70'}`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -707,29 +727,35 @@ function QtyCostPrompt({ initial, poItem, onCancel, onConfirm }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <form onSubmit={submit} className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
-        <h3 className="font-bold text-lg">{initial.name}</h3>
+    <Sheet title={initial.name} onClose={onCancel}>
+      <form onSubmit={submit} className="space-y-3">
         {poItem && (
-          <p className="text-xs text-gray-500">
-            Ordered: {poItem.quantity} · Previously received: {poItem.received_quantity || 0} · Remaining: {(poItem.quantity || 0) - (poItem.received_quantity || 0)}
-          </p>
+          <MiniStats items={[
+            { label: 'Ordered', value: poItem.quantity },
+            { label: 'Got', value: poItem.received_quantity || 0 },
+            { label: 'Remaining', value: (poItem.quantity || 0) - (poItem.received_quantity || 0), tone: 'gold' },
+          ]} />
         )}
-        <label className="text-sm text-gray-600 block">Quantity received</label>
-        <input required type="number" min="0.01" step="0.01" autoFocus value={qty}
-          onChange={e => setQty(e.target.value)} className="w-full border rounded px-3 py-2 text-lg" />
-        <label className="text-sm text-gray-600 block">Unit cost</label>
-        <input type="number" min="0" step="0.01" value={cost}
-          onChange={e => setCost(e.target.value)} className="w-full border rounded px-3 py-2" />
-        <label className="text-sm text-gray-600 block">Batch (optional)</label>
-        <input value={batch} onChange={e => setBatch(e.target.value)} className="w-full border rounded px-3 py-2" />
-        <label className="text-sm text-gray-600 block">Expiry (optional)</label>
-        <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} className="w-full border rounded px-3 py-2" />
+        <Field label="Quantity received">
+          <input required type="number" min="0.01" step="0.01" inputMode="decimal" autoFocus value={qty}
+            onChange={e => setQty(e.target.value)} className={`${inputCls} text-lg font-semibold`} />
+        </Field>
+        <Field label="Unit cost">
+          <input type="number" min="0" step="0.01" inputMode="decimal" value={cost} onChange={e => setCost(e.target.value)} className={inputCls} />
+        </Field>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Field label="Batch (optional)">
+            <input value={batch} onChange={e => setBatch(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Expiry (optional)">
+            <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} className={inputCls} />
+          </Field>
+        </div>
         <div className="flex gap-2 pt-1">
-          <button type="button" onClick={onCancel} className="flex-1 bg-gray-100 py-2 rounded">Cancel</button>
-          <button type="submit" className="flex-1 bg-blue-600 text-white py-2 rounded">Add to GRN</button>
+          <button type="button" onClick={onCancel} className="flex-1 min-h-[42px] rounded-lg bg-[#EEEBDD] text-[#5E6350] font-semibold">Cancel</button>
+          <button type="submit" className={`${saveBtnCls} flex-1`}>Add to delivery</button>
         </div>
       </form>
-    </div>
+    </Sheet>
   );
 }

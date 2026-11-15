@@ -3,21 +3,18 @@
 import React from "react";
 import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth, STAFF_ROLES } from "./Context/AuthContext";
+import { supabase } from "./supabaseClient";
+import AppLock from "./security/AppLock";
+import AndroidBackButton from "./security/AndroidBackButton";
 
-import AuthPage        from "./components/Auth/AuthPage";
-import AdminLogin      from "./components/Auth/AdminLogin";
-import UnifiedLogin     from "./components/Auth/UnifiedLogin";
-import RegisterPOSUser  from "./components/Auth/RegisterPOSUser";
-import SetPassword     from "./components/Auth/SetPassword";
-import PublicSite      from "./Public/PublicSite";
-import UmovaFinancialPage from "./Public/UmovaFinancialPage";
+import AuthPage      from "./components/Auth/AuthPage";
+import AdminLogin    from "./components/Auth/AdminLogin";
+import SetPassword   from "./components/Auth/SetPassword";
+import PublicSite    from "./Public/PublicSite";
 
-import MemberAppShell from "./member-app/MemberAppShell";
-import HomeWorkspace from "./member-app/HomeWorkspace";
-import MoneyWorkspace from "./member-app/MoneyWorkspace";
-import LoansWorkspace from "./member-app/LoansWorkspace";
-import StatementsWorkspace from "./member-app/StatementsWorkspace";
-import { MoreWorkspace, NotificationsWorkspace, SecurityWorkspace, ProfileWorkspace } from "./member-app/MoreWorkspace";
+import DashboardMain from "./components/Dashboard/DashboardMain";
+import MemberHome    from "./components/Dashboard/MemberHome";   // app-style home (replaces DashboardHome; that file can stay on disk)
+import Profile       from "./components/Dashboard/Profile";
 import Savings       from "./components/Dashboard/Savings";
 import ShareCapital  from "./components/Dashboard/ShareCapital";
 import Loans         from "./components/Dashboard/Loans";
@@ -33,17 +30,15 @@ import Statements    from "./components/Dashboard/Statements";
 // ─────────────────────────────────────────────
 import { ChamaProvider }        from "./chama-erp-advanced/ChamaContext";
 import AuthGate                 from "./chama-erp-advanced/auth/AuthGate";
-import ChamaDashboardAdvanced   from "./chama-erp-advanced/ChamaDashboardAdvanced";
+import ChamaLoginScreen         from "./chama-erp-advanced/auth/ChamaLoginScreen";
 import ChamaLock                from "./chama-erp-advanced/auth/ChamaLock";
+import ChamaDashboardAdvanced   from "./chama-erp-advanced/ChamaDashboardAdvanced";
 import PlatformAdminGate        from "./chama-erp-advanced/platform-admin/PlatformAdminGate";
 import LicenseManager           from "./chama-erp-advanced/platform-admin/LicenseManager";
 
 import AdminLayout            from "./Pages/Admin/AdminLayout";
-import AdminHub               from "./Pages/Admin/AdminHub";
 import AdminDashboard         from "./Pages/Admin/Dashboard";
 import AdminERPDashboard      from "./Pages/Admin/ERPDashboard";
-import AdminJournalEntry      from "./Pages/Admin/JournalEntry";
-import AdminAccountingPeriods from "./Pages/Admin/AccountingPeriods";
 import AdminMembers           from "./Pages/Admin/Members";
 import AdminMemberStatements  from "./Pages/Admin/MemberStatements";
 import AdminLoans             from "./Pages/Admin/Loans";
@@ -59,44 +54,34 @@ import AdminIncomeStatement   from "./Pages/Admin/IncomeStatement";
 import AdminBalanceSheet      from "./Pages/Admin/BalanceSheet";
 import AdminReports           from "./Pages/Admin/Reports";
 import AdminPayments          from "./Pages/Admin/Payments";
-import AdminWithdrawal        from "./Pages/Admin/Withdrawal";
-import AdminCashBankManagement from "./Pages/Admin/CashBankManagement";
-import AdminAccountsPayable    from "./Pages/Admin/AccountsPayable";
-import AdminAccountsReceivable from "./Pages/Admin/AccountsReceivable";
-import AdminFixedAssets        from "./Pages/Admin/FixedAssets";
 import AdminSettings          from "./Pages/Admin/Settings";
 import AdminStoryDashboard    from "./Pages/Admin/StoryDashboard";
-import POSRegistrationRequests from "./Pages/Admin/POSRegistrationRequests";
+import AdminHub               from "./Pages/Admin/AdminHub";
+import AdminWithdrawal        from "./Pages/Admin/Withdrawal";
+import AdminCashBank          from "./Pages/Admin/CashBankManagement";
+import AdminAccountsPayable   from "./Pages/Admin/AccountsPayable";
+import AdminAccountsReceivable from "./Pages/Admin/AccountsReceivable";
+import AdminFixedAssets       from "./Pages/Admin/FixedAssets";
+import AdminJournalEntry      from "./Pages/Admin/JournalEntry";
+import AdminAccountingPeriods from "./Pages/Admin/AccountingPeriods";
+import AdminPOSHub            from "./Pages/Admin/POSAdminDashboard";
+import AdminPOSTenants        from "./Pages/Admin/POSTenants";
+import AdminPOSRequests       from "./Pages/Admin/POSRegistrationRequests";
+import AdminChama             from "./Pages/Admin/ChamaAdminDashboard";
 
 // ─────────────────────────────────────────────
 // POS / INVENTORY (Universal Scanning Engine)
-// No longer staff-only / no longer under StaffGuard — POS is now an
-// independent tenant-based ERP with its own auth (POSAuthProvider +
-// POSAuthGate, real Supabase Auth session on a SEPARATE client so it
-// never collides with a staff member's session in the same browser —
-// see src/pos-erp/services/posSupabaseClient.js). POSApp is
-// self-contained, mirroring chama-erp-advanced: App.js just mounts it.
+// Self-contained under src/pos-erp/, mirroring the chama-erp-advanced
+// pattern: its own pages/hooks/services/scanning engine. It does NOT
+// get its own login — it's staff-only, so it rides the existing
+// StaffGuard/AdminLayout auth exactly like every other admin page below.
 // ─────────────────────────────────────────────
-import POSApp from "./pos-erp/POSApp";
-
-// Platform-admin control over POS *businesses* (pos_tenants/pos_staff)
-// — approve/reject/suspend/reactivate + manually add one. Separate
-// from POSRegistrationRequests below, which is a different, older
-// mechanism (see the note in POSTenants.js).
-import POSTenants from "./Pages/Admin/POSTenants";
-
-// Consolidated POS admin hub — pending counts + links into POSTenants
-// and POSRegistrationRequests, so there's one findable landing page
-// instead of a single ad-hoc button on the SACCO Dashboard. See the
-// note at the bottom of POSTenants.js: this doesn't retire either of
-// the two mechanisms below, it just makes both visible in one place.
-import POSAdminDashboard from "./Pages/Admin/POSAdminDashboard";
-
-// Financial admin's oversight hub into Chama (counts + links out), the
-// direct counterpart to POSAdminDashboard above. The Chama app itself
-// (/chama) and its platform-admin (/platform-admin) were already wired
-// in above — see the imports near the top of this file.
-import ChamaAdminDashboard from "./Pages/Admin/ChamaAdminDashboard";
+import POSApp              from "./pos-erp/POSApp";
+// Elimu school management: its own app and sign-in (same business account as POS), mounted below at /school/*.
+import ElimuApp            from "./pos-erp/elimu/ElimuApp";
+import POSPage             from "./pos-erp/pages/POSPage";
+import ProductsPage        from "./pos-erp/pages/ProductsPage";
+import GoodsReceivingPage  from "./pos-erp/pages/GoodsReceivingPage";
 
 // STAFF_ROLES is imported from AuthContext.js — single source of truth,
 // also used by AdminLogin.js so the pre-signin role gate and the post-
@@ -143,6 +128,17 @@ function UnassignedOnboarding() {
 // ─────────────────────────────────────────────
 // GUARDS
 // ─────────────────────────────────────────────
+// Fingerprint lock + the one-time "turn on fingerprint" prompt for every signed-in Finance screen
+// (members and staff). Renders nothing extra on the web: it only does anything inside the Android/iOS app.
+function FinanceAppLock({ children }) {
+  const { logout } = useAuth();
+  return (
+    <AppLock service="finance" client={supabase} onSignOut={logout}>
+      {children}
+    </AppLock>
+  );
+}
+
 function MemberGuard() {
   const { user, loading, role } = useAuth();
 
@@ -172,22 +168,12 @@ function StaffGuard() {
   return <Outlet />;
 }
 
-// ─────────────────────────────────────────────
-// ADMIN-LEVEL GUARD (for approving POS registration requests, POS
-// business approvals, and the POS admin hub — anything that controls
-// another staff/business's access, not just the signed-in staffer's
-// own work)
-// ─────────────────────────────────────────────
-function AdminLevelGuard() {
-  const { user, loading, role } = useAuth();
-  const location = useLocation();
-  const APPROVER_ROLES = ["admin", "superadmin", "manager"];
-
-  if (loading) return <Loader />;
-  if (!user) return <Navigate to="/admin-login" state={{ from: location.pathname }} replace />;
-  if (!role) return <Loader />;
+// Approver-only admin pages (admin / superadmin / manager). Same list the
+// nav uses, so hidden menu items can't be reached by typing the URL either.
+const APPROVER_ROLES = ["admin", "superadmin", "manager"];
+function ApproverOnly() {
+  const { role } = useAuth();
   if (!APPROVER_ROLES.includes(role)) return <Navigate to="/admin/dashboard" replace />;
-
   return <Outlet />;
 }
 
@@ -205,35 +191,7 @@ function PostLoginRedirect() {
   return <Navigate to="/" replace />;
 }
 
-// ─────────────────────────────────────────────
-// LOGIN ROUTE WRAPPERS
-// Each redirects an already-signed-in user straight past the login
-// screen; otherwise renders the screen itself.
-// ─────────────────────────────────────────────
-function UnifiedLoginRoute() {
-  // Primary entry point — handles staff codes and member codes from one
-  // screen. POS no longer goes through here at all: it has its own
-  // entry point at /pos (see PublicSite.js's "POS Login" button, which
-  // now navigates straight to /pos instead of here).
-  const { user, loading, role } = useAuth();
-  const location = useLocation();
-  const from = location.state?.from || "/admin/dashboard";
-
-  if (loading) return <Loader />;
-
-  if (user && role && STAFF_ROLES.includes(role)) {
-    return <Navigate to={from} replace />;
-  }
-  if (user && role === "member") {
-    return <Navigate to="/member/dashboard" replace />;
-  }
-
-  return <UnifiedLogin />;
-}
-
 function AdminLoginRoute() {
-  // Kept as a direct-to-staff-only fallback (e.g. bookmarked links) —
-  // UnifiedLogin at /login is the primary staff entry point now.
   const { user, loading, role } = useAuth();
   const location = useLocation();
   const from = location.state?.from || "/admin/dashboard";
@@ -251,9 +209,6 @@ function AdminLoginRoute() {
 }
 
 function MemberLoginRoute() {
-  // First-time setup / password reset flow, now at /member-login.
-  // UnifiedLogin's "Set up / reset here" link and its NEEDS_SETUP
-  // fallback both navigate here.
   const { user, loading, role } = useAuth();
 
   if (loading) return <Loader />;
@@ -273,25 +228,15 @@ function MemberLoginRoute() {
 // ─────────────────────────────────────────────
 function App() {
   return (
+    <>
+    <AndroidBackButton />
     <Routes>
       <Route path="/" element={<PublicSite />} />
-
-      {/* Umova Financial — savings/loans/investment product page. Split out
-          of "/" when Umova became a 3-product umbrella (Financial, Chama,
-          POS); "/" is now just the overview that links into each. */}
-      <Route path="/financial" element={<UmovaFinancialPage />} />
-
       <Route path="/unassigned-onboarding" element={<UnassignedOnboarding />} />
       <Route path="/set-password" element={<SetPassword />} />
 
-      {/* /login is the primary entry point for members, staff, and POS —
-          see UnifiedLoginRoute above. /member-login and /admin-login are
-          kept as direct fallbacks for their respective single-purpose
-          screens. */}
-      <Route path="/login" element={<UnifiedLoginRoute />} />
-      <Route path="/member-login" element={<MemberLoginRoute />} />
+      <Route path="/login" element={<MemberLoginRoute />} />
       <Route path="/admin-login" element={<AdminLoginRoute />} />
-      <Route path="/register-pos" element={<RegisterPOSUser />} />
 
       {/*
         Chama ERP Advanced — self-contained: its own provider, its own
@@ -301,18 +246,36 @@ function App() {
         passed. No route matching inside — it's a single-page sidebar
         dashboard, not a sub-router, so "/chama" is enough (no /*).
       */}
+      {/*
+        Chama is its OWN entry point with its OWN login (phone + password via
+        authenticate_user), separate from the Finance logins (/login members,
+        /admin-login staff). One ChamaProvider wraps both /chama/login and
+        /chama so multi-chama selection and licence state survive the hop
+        from the login screen to the dashboard. AuthGate sends logged-out
+        visitors to /chama/login (never to the Finance /login), and
+        ChamaLock adds the phone fingerprint lock (no-op on the web).
+      */}
       <Route
         path="/chama"
         element={
           <ChamaProvider>
+            <Outlet />
+          </ChamaProvider>
+        }
+      >
+        <Route path="login" element={<ChamaLoginScreen />} />
+        <Route
+          index
+          element={
             <AuthGate>
               <ChamaLock>
                 <ChamaDashboardAdvanced />
               </ChamaLock>
             </AuthGate>
-          </ChamaProvider>
-        }
-      />
+          }
+        />
+        <Route path="*" element={<Navigate to="/chama" replace />} />
+      </Route>
 
       {/*
         Platform-level chama licensing. Deliberately outside ChamaProvider/
@@ -331,33 +294,48 @@ function App() {
         }
       />
 
+      {/*
+        "My Business" (pos-erp) — its OWN app with its OWN login (POSAuthProvider →
+        POSAuthGate → POSLogin / tenant signup / force-password-change / pending
+        screens) and its own routes: /pos, /pos/dashboard, /pos/products,
+        /pos/customers, /pos/money ... POSApp.jsx declares those as a nested
+        <Routes>, so this parent route MUST end in "/*". It was never mounted
+        before, so every /pos/... URL (including the public site's POS button)
+        hit the catch-all at the bottom and bounced back to the public site "/".
+        Deliberately outside StaffGuard: tenants are not Finance staff.
+      */}
+      <Route path="/pos/*" element={<POSApp />} />
+
+      {/*
+        Elimu (school management) — its OWN app, deliberately outside StaffGuard like /pos. ElimuApp wraps itself in
+        POSAuthProvider -> POSAuthGate -> app lock, so a school signs in with its business account. Must end in "/*":
+        ElimuApp declares its own nested <Routes> (/school, /school/students, /school/attendance, /school/school-finance/...).
+      */}
+      <Route path="/school/*" element={<ElimuApp />} />
+
       <Route path="/redirect" element={<PostLoginRedirect />} />
 
       <Route path="/member" element={<MemberGuard />}>
-        <Route element={<MemberAppShell />}>
+        <Route element={<FinanceAppLock><DashboardMain /></FinanceAppLock>}>
           <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<HomeWorkspace />} />
-          <Route path="money" element={<MoneyWorkspace />} />
+          <Route path="dashboard" element={<MemberHome />} />
+          <Route path="profile" element={<Profile />} />
           <Route path="savings" element={<Savings />} />
           <Route path="shares" element={<ShareCapital />} />
-          <Route path="loans" element={<LoansWorkspace />} />
-          <Route path="loans/manage" element={<Loans />} />
-          <Route path="statements" element={<StatementsWorkspace />} />
+          <Route path="loans" element={<Loans />} />
           <Route path="statement" element={<Statements />} />
-          <Route path="more" element={<MoreWorkspace />} />
-          <Route path="profile" element={<ProfileWorkspace />} />
-          <Route path="notifications" element={<NotificationsWorkspace />} />
-          <Route path="security" element={<SecurityWorkspace />} />
+          {/* "statements" (plural) is what some links use; the page lives at "statement". */}
+          <Route path="statements" element={<Navigate to="/member/statement" replace />} />
+          {/* An unknown /member/... path stays inside the member app instead of
+              falling through to the public-site catch-all below. */}
+          <Route path="*" element={<Navigate to="/member/dashboard" replace />} />
         </Route>
       </Route>
 
       <Route path="/admin" element={<StaffGuard />}>
-        <Route element={<AdminLayout />}>
+        <Route element={<FinanceAppLock><AdminLayout /></FinanceAppLock>}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
-          {/* Workspace pages: card grid for a module (money, loans, members,
-              accounting, reports) and the "more" tab. Opened by the bottom bar. */}
-          <Route path="hub/:module" element={<AdminHub />} />
           <Route path="erp-dashboard" element={<AdminERPDashboard />} />
           <Route path="members" element={<AdminMembers />} />
           <Route path="member-statements" element={<AdminMemberStatements />} />
@@ -370,72 +348,56 @@ function App() {
           <Route path="loan-penalties" element={<AdminLoanPenalties />} />
           <Route path="interest-dashboard" element={<AdminInterestDashboard />} />
           <Route path="trial-balance" element={<AdminTrialBalance />} />
-          <Route path="journal-entry" element={<AdminJournalEntry />} />
-          <Route path="accounting-periods" element={<AdminAccountingPeriods />} />
           <Route path="income-statement" element={<AdminIncomeStatement />} />
           <Route path="balance-sheet" element={<AdminBalanceSheet />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="payments" element={<AdminPayments />} />
+          <Route path="settings" element={<AdminSettings />} />
+          <Route path="stories" element={<AdminStoryDashboard />} />
+
+          {/* Workspace hubs — the bottom tab bar (Money, Loans, More) and the
+              sidebar "Overview" links land here. This route was missing, so
+              every tab fell through to the "*" redirect below (= Home). */}
+          <Route path="hub/:module" element={<AdminHub />} />
+
+          {/* Money */}
           <Route path="withdrawal" element={<AdminWithdrawal />} />
-          <Route path="cash-bank" element={<AdminCashBankManagement />} />
+          <Route path="cash-bank" element={<AdminCashBank />} />
           <Route path="accounts-payable" element={<AdminAccountsPayable />} />
           <Route path="accounts-receivable" element={<AdminAccountsReceivable />} />
           <Route path="fixed-assets" element={<AdminFixedAssets />} />
-          <Route path="settings" element={<AdminSettings />} />
-          <Route path="stories" element={<AdminStoryDashboard />} />
-        </Route>
-      </Route>
 
-      {/* POS is intentionally OUTSIDE StaffGuard/AdminLayout — it has
-          its own tenant-scoped auth (see POSApp.jsx). A POS cashier is
-          not a StaffGuard-recognized role at all; they never touch
-          the main users/members tables. */}
-      <Route path="/pos/*" element={<POSApp />} />
+          {/* Accounting */}
+          <Route path="journal-entry" element={<AdminJournalEntry />} />
+          <Route path="accounting-periods" element={<AdminAccountingPeriods />} />
 
-      {/* Consolidated POS admin hub — pending-count overview + links
-          into POS Businesses and POS Requests below. This is the page
-          Dashboard.jsx's "POS Businesses" button now points at, instead
-          of jumping straight into POSTenants with no other POS nav
-          visible anywhere. */}
-      <Route path="/admin/pos" element={<AdminLevelGuard />}>
-        <Route element={<AdminLayout />}>
-          <Route index element={<POSAdminDashboard />} />
-        </Route>
-      </Route>
+          {/* POS approvals + Chama oversight (approver roles; nav hides them
+              from others, and ApproverOnly blocks direct URL access) */}
+          <Route element={<ApproverOnly />}>
+            <Route path="pos-admin" element={<AdminPOSHub />} />
+            <Route path="pos-tenants" element={<AdminPOSTenants />} />
+            <Route path="pos-requests" element={<AdminPOSRequests />} />
+            <Route path="chama" element={<AdminChama />} />
+          </Route>
 
-      {/* Platform-admin management of POS tenants (approve/reject/
-          suspend/reactivate/create) — gated the same way as the
-          POS-requests block below, via the main app's own admin roles,
-          since this controls a business's ability to use POS at all,
-          not POS's own internals. */}
-      <Route path="/admin/pos-tenants" element={<AdminLevelGuard />}>
-        <Route element={<AdminLayout />}>
-          <Route index element={<POSTenants />} />
-        </Route>
-      </Route>
-
-      {/* Approving new POS/staff registration requests — restricted to
-          admin/superadmin/manager, separate from the general StaffGuard
-          block above since ordinary staff shouldn't approve their own
-          peers' accounts. */}
-      <Route path="/admin/pos-requests" element={<AdminLevelGuard />}>
-        <Route element={<AdminLayout />}>
-          <Route index element={<POSRegistrationRequests />} />
-        </Route>
-      </Route>
-
-      {/* Financial admin's Chama oversight hub — counterpart to
-          /admin/pos above. Uses this app's own admin roles. The Chama
-          app itself (/chama) and its license manager (/platform-admin)
-          are already routed earlier in this file. */}
-      <Route path="/admin/chama" element={<AdminLevelGuard />}>
-        <Route element={<AdminLayout />}>
-          <Route index element={<ChamaAdminDashboard />} />
+          {/* POS / Inventory (Universal Scanning Engine) — staff-only,
+              same StaffGuard/AdminLayout as everything else in this block.
+              Rides the same login as the rest of the admin area; the
+              "POS Login" button on the public site sends staff to
+              /admin-login with state={{ from: "/admin/pos" }} so
+              AdminLoginRoute lands them here instead of /admin/dashboard
+              after signing in. */}
+          <Route path="pos" element={<POSPage />} />
+          <Route path="pos/products" element={<ProductsPage />} />
+          <Route path="pos/goods-receiving" element={<GoodsReceivingPage />} />
+          {/* Same idea as /member: an unknown /admin/... path stays in the admin app. */}
+          <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
         </Route>
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }
 

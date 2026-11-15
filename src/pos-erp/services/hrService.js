@@ -46,4 +46,6 @@ export const payrollService = {
   cancel: (run, reason) => rpc('pos_payroll_cancel', { p_run: run, p_reason: reason }),
   listRuns: (business) => rpc('pos_payroll_list_runs', { p_business: business }),
   getRun: (run) => rpc('pos_payroll_get_run', { p_run: run }),
+  // Phase 54: service commission earned per person (feeds the pay run automatically)
+  commissionSummary: (business, from, to) => rpc('pos_commission_summary', { p_business: business, p_from: from, p_to: to }),
 };

@@ -1,0 +1,501 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600;700&display=swap");
+
+/* ============ Design tokens ============ */
+.journal-entry-container {
+  --ink: #23200f;
+  --ink-soft: #6f6448;
+  --line: #e1d8b6;
+  --line-soft: #f3eeda;
+  --surface: #fffefa;
+  --canvas: #f6f1de;
+
+  --navy: #1f4d38;
+  --navy-deep: #123324;
+  --teal: #a8790f;
+  --teal-soft: #f7ecc4;
+  --amber: #8a5a12;
+  --amber-soft: #f6e6c6;
+  --red: #a4392f;
+  --red-soft: #f9e9e5;
+  --blue-soft: #e8f0e0;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 2px rgba(35, 32, 15, 0.05), 0 8px 24px -12px rgba(35, 32, 15, 0.16);
+
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--canvas);
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 24px 64px;
+  box-sizing: border-box;
+}
+
+.journal-entry-container * {
+  box-sizing: border-box;
+}
+
+/* ============ Header ============ */
+.journal-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.journal-title .eyebrow {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 4px;
+}
+
+.journal-title h2 {
+  font-family: "Manrope", "Inter", sans-serif;
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--navy-deep);
+}
+
+.journal-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ============ Buttons ============ */
+.btn {
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.05s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.btn-primary {
+  background: var(--navy);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--navy-deep);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--ink-soft);
+}
+
+.btn-success {
+  background: var(--teal);
+  color: #fff;
+}
+.btn-success:hover:not(:disabled) {
+  background: #0b5c55;
+}
+
+.btn-danger {
+  background: var(--surface);
+  color: var(--red);
+  border-color: #eecfcd;
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--red-soft);
+}
+
+.btn-info {
+  background: var(--surface);
+  color: var(--navy);
+  border-color: var(--line);
+}
+.btn-info:hover:not(:disabled) {
+  background: var(--blue-soft);
+}
+
+/* ============ Tabs ============ */
+.journal-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 20px;
+}
+
+.journal-tabs button {
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 6px;
+  margin-right: 18px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.journal-tabs button:hover {
+  color: var(--ink);
+}
+
+.journal-tabs button.active {
+  color: var(--navy-deep);
+  border-bottom-color: var(--teal);
+}
+
+/* ============ Cards ============ */
+.journal-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.card-header h3 {
+  font-family: "Manrope", "Inter", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy-deep);
+  margin: 0;
+}
+
+/* ============ Form grid ============ */
+.journal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px 18px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-group label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-group textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus,
+.journal-table select:focus,
+.journal-table input:focus {
+  outline: none;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(31, 77, 56, 0.16);
+}
+
+.form-group input:read-only,
+.form-group input:disabled,
+.form-group select:disabled,
+.form-group textarea:disabled {
+  background: var(--line-soft);
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
+
+/* ============ Tables ============ */
+.table-responsive {
+  overflow-x: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+}
+
+.journal-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 780px;
+}
+
+.journal-table thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: var(--canvas);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.journal-table tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: middle;
+}
+
+.journal-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.journal-table tbody tr:hover {
+  background: #fbfcfd;
+}
+
+.journal-table input,
+.journal-table select {
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  width: 100%;
+  min-width: 110px;
+}
+
+.journal-table input[type="number"] {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.journal-table input:disabled,
+.journal-table select:disabled {
+  background: var(--line-soft);
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.row-actions .btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.empty-cell {
+  text-align: center;
+  color: var(--ink-soft);
+  padding: 24px 0;
+}
+
+/* ============ Summary ============ */
+.journal-summary {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.summary-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px 22px;
+  min-width: 320px;
+}
+
+.summary-card h4 {
+  font-family: "Manrope", "Inter", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy-deep);
+  margin: 0 0 12px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line-soft);
+}
+
+.summary-row:last-of-type {
+  border-bottom: none;
+}
+
+.summary-row strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-size: 14.5px;
+}
+
+.summary-row strong.balanced {
+  color: var(--teal);
+}
+
+.summary-row strong.not-balanced {
+  color: var(--red);
+}
+
+.summary-status {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.summary-status.ok {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.summary-status.warn {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+/* ============ Transfer tab ============ */
+.transfer-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* ============ Search ============ */
+.search-box input {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(31, 77, 56, 0.16);
+}
+
+/* ============ Status badges ============ */
+.status-badge {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.status-badge.status-draft {
+  background: var(--blue-soft);
+  color: var(--navy);
+}
+
+.status-badge.status-posted,
+.status-badge.status-approved {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.status-badge.status-pending {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.status-badge.status-reversed {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+/* ============ Responsive ============ */
+@media (max-width: 900px) {
+  .journal-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .journal-entry-container {
+    padding: 18px 14px 48px;
+  }
+
+  .journal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .journal-header {
+    align-items: flex-start;
+  }
+
+  .journal-summary {
+    justify-content: stretch;
+  }
+
+  .summary-card {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* ============ Accessibility ============ */
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition: none;
+  }
+}

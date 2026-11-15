@@ -54,6 +54,8 @@ function messageFor(status) {
       return "This account isn't active. Please contact your administrator.";
     case "offline":
       return "No connection. Check your internet and try again, or use your password.";
+    case "not_enabled":
+      return "Fingerprint isn't turned on for this phone. Use your password, then turn it on in Settings.";
     default:
       return "Fingerprint sign-in isn't working right now. Use your password below.";
   }
@@ -70,6 +72,7 @@ export default function FingerprintLogin({
   const [offerHint, setOfferHint] = useState(false);   // can do fingerprint, but not turned on for this service yet
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [reference, setReference] = useState("");     // short reason shown under a generic failure, so it can be reported
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -96,17 +99,19 @@ export default function FingerprintLogin({
     if (busy) return;
     setBusy(true);
     setMessage("");
+    setReference("");
     let r;
     try {
       r = signIn ? await signIn() : await signInWithDevice({ service, client });
     } catch (e) {
       console.error("[FingerprintLogin]", e);
-      r = { ok: false, status: "server_error" };
+      r = { ok: false, status: "server_error", detail: `unexpected: ${e?.message || e}` };
     }
     if (!mounted.current) return;           // the new session already moved the user to the dashboard
     setBusy(false);
     if (r.ok) { onSignedIn?.(); return; }
     setMessage(messageFor(r.status));
+    if (r.detail && r.status !== BioStatus.CANCELLED && r.status !== BioStatus.FALLBACK) setReference(String(r.detail));
     // revoked / invalidated wipe the local setup: hide the button, the password form takes over
     setShow(await isEnabled(service).catch(() => false));
   }, [busy, service, client, onSignedIn, signIn]);
@@ -125,7 +130,10 @@ export default function FingerprintLogin({
   }
 
   const messageEl = message && (
-    <p role="status" className="mt-3 text-center text-xs text-amber-700">{message}</p>
+    <p role="status" className="mt-3 text-center text-xs text-amber-700">
+      {message}
+      {reference && <span className="block mt-2 text-xs font-medium text-slate-600 break-words">Reference: {reference}</span>}
+    </p>
   );
 
   if (position === "top") {

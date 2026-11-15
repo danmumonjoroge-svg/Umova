@@ -192,6 +192,10 @@ export const saleService = {
       selling_mode: i.selling_mode || 'PER_UNIT',
       weight_value: i.weight_value ?? null,
       notes: i.notes || null,
+      // phase54: who served this line and which booking it settles (both optional). The database writes the
+      // provider's commission and completes the booking when the item is saved.
+      employee_id: i.employee_id || null,
+      appointment_id: i.appointment_id || null,
     }));
     const { error: iErr } = await supabase.from('lb_sale_items').insert(itemRows);
     if (iErr) throw iErr;
@@ -220,7 +224,23 @@ export const saleService = {
         created_by: sale.cashier_id,
       }));
       const { error: pErr } = await supabase.from('lb_payments').insert(paymentRows);
-      if (pErr) throw pErr;
+      if (pErr) {
+        // Phase 39: the database refuses an M-Pesa code that is already on another payment (unique index
+        // uq_lb_payments_mpesa_ref). Two tills submitting the same code at once can both pass the pre-check in the
+        // till; the loser lands here. At this point nothing else has happened for this sale (no stock moved, no
+        // receipt, no payment), so the half-written header/items are removed rather than left looking like a sale
+        // with no money behind it. Best effort: if the database will not allow the delete the error below still
+        // reaches the cashier and the leftover is visible to the owner as a sale with no payment.
+        if (pErr.code === '23505' && /uq_lb_payments_mpesa_ref/.test(`${pErr.message} ${pErr.details || ''}`)) {
+          try {
+            await supabase.from('lb_sale_items').delete().eq('sale_id', headerData.id);
+            await supabase.from('lb_sales').delete().eq('id', headerData.id);
+          } catch (cleanupErr) {
+            console.error('[saleService.create] could not remove the unpaid sale', headerData.id, cleanupErr);
+          }
+        }
+        throw pErr;
+      }
     }
 
     // Single source of truth for inventory/stock movements — same

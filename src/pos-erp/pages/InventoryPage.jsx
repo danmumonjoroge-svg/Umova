@@ -9,17 +9,14 @@
 
 import React, { useState } from "react";
 import {
-  Boxes, Search, Loader2, History, SlidersHorizontal, X,
+  Boxes, Loader2, History, SlidersHorizontal, X,
 } from "lucide-react";
 import { useInventory, useStockHistory } from "../hooks/useInventory";
 import { MANUAL_ADJUSTMENT_TYPES } from "../services/inventoryService";
+import { FitPage, MiniStats, SearchBox, FilterChips, CardGrid, DataCard, IconBtn, Notice, LoadingBlock, EmptyBlock } from "../components/CardKit";
 import { singleFlight } from '../utils/singleFlight';
 
-const STATUS_STYLES = {
-  NORMAL: "bg-emerald-50 text-emerald-700",
-  LOW_STOCK: "bg-amber-50 text-amber-700",
-  OUT_OF_STOCK: "bg-red-50 text-red-700",
-};
+const STATUS_TONE = { NORMAL: "good", LOW_STOCK: "warn", OUT_OF_STOCK: "bad" };
 
 // Types where direction is fixed by what they mean — no +/- toggle needed.
 const FIXED_DIRECTION = {
@@ -31,94 +28,82 @@ const FIXED_DIRECTION = {
 export default function InventoryPage() {
   const { items, loading, error, adjustStock } = useInventory();
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
   const [adjustingProduct, setAdjustingProduct] = useState(null);
   const [historyProduct, setHistoryProduct] = useState(null);
 
-  const filtered = items.filter((p) =>
-    !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.sku?.toLowerCase().includes(search.toLowerCase())
-  );
+  const statusOf = (p) => (p.track_inventory ? (p.inventory?.stock_status || "NORMAL") : "UNTRACKED");
+  const low = items.filter((p) => statusOf(p) === "LOW_STOCK").length;
+  const out = items.filter((p) => statusOf(p) === "OUT_OF_STOCK").length;
+
+  const filtered = items.filter((p) => {
+    const q = search.toLowerCase();
+    const matches = !search || p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q);
+    const st = statusOf(p);
+    const okFilter = filter === "all" || (filter === "low" && st === "LOW_STOCK") || (filter === "out" && st === "OUT_OF_STOCK");
+    return matches && okFilter;
+  });
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Boxes size={22} className="text-emerald-600" /> My Stock
-        </h1>
-        <p className="text-slate-500 text-sm">Stock levels across your warehouse.</p>
-      </div>
+    <FitPage
+      title="My Stock"
+      icon={Boxes}
+      subtitle="Stock levels across your warehouse."
+      summary={!loading && (
+        <MiniStats items={[
+          { label: "Items", value: items.length },
+          { label: "Low", value: low, tone: low ? "gold" : undefined },
+          { label: "Out", value: out, tone: out ? "bad" : undefined },
+        ]} />
+      )}
+      toolbar={(
+        <div className="space-y-2">
+          <SearchBox value={search} onChange={setSearch} placeholder="Search by name or SKU…" />
+          <FilterChips
+            value={filter} onChange={setFilter}
+            options={[
+              { key: "all", label: "All", count: items.length },
+              { key: "low", label: "Low stock", count: low },
+              { key: "out", label: "Out of stock", count: out },
+            ]}
+          />
+        </div>
+      )}
+    >
+      {error && <Notice>{error}</Notice>}
+      {loading && <LoadingBlock text="Loading inventory…" />}
+      {!loading && filtered.length === 0 && <EmptyBlock>No products found.</EmptyBlock>}
 
-      <div className="relative mb-5">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or SKU…"
-          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
-        />
-      </div>
-
-      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">{error}</div>}
-
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-            <tr>
-              <th className="text-left px-5 py-3">Product</th>
-              <th className="text-right px-5 py-3">Quantity</th>
-              <th className="text-right px-5 py-3">Reorder Level</th>
-              <th className="text-right px-5 py-3">Avg. Cost</th>
-              <th className="text-center px-5 py-3">Status</th>
-              <th className="px-5 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading && (
-              <tr><td colSpan={6} className="text-center py-10 text-slate-400">
-                <Loader2 size={18} className="animate-spin inline mr-2" /> Loading inventory…
-              </td></tr>
-            )}
-            {!loading && filtered.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-10 text-slate-400">No products found.</td></tr>
-            )}
-            {filtered.map((p) => (
-              <tr key={p.id} className="hover:bg-slate-50 transition">
-                <td className="px-5 py-3.5">
-                  <div className="font-semibold text-slate-800">{p.name}</div>
-                  {p.sku && <div className="text-xs text-slate-400">{p.sku}</div>}
-                </td>
-                <td className="px-5 py-3.5 text-right font-semibold text-slate-700">
-                  {p.track_inventory ? (p.inventory?.quantity ?? 0) : <span className="text-slate-300">Not tracked</span>}
-                </td>
-                <td className="px-5 py-3.5 text-right text-slate-500">{p.track_inventory ? p.reorder_level : "—"}</td>
-                <td className="px-5 py-3.5 text-right text-slate-500">
-                  {p.track_inventory && p.inventory ? Number(p.inventory.average_cost || 0).toLocaleString() : "—"}
-                </td>
-                <td className="px-5 py-3.5 text-center">
-                  {p.track_inventory ? (
-                    <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${STATUS_STYLES[p.inventory?.stock_status || "NORMAL"]}`}>
-                      {(p.inventory?.stock_status || "NORMAL").replace("_", " ")}
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-slate-300">—</span>
+      <CardGrid>
+        {filtered.map((p) => {
+          const st = statusOf(p);
+          const qty = p.inventory?.quantity ?? 0;
+          return (
+            <DataCard
+              key={p.id}
+              title={p.name}
+              subtitle={p.sku || " "}
+              alert={st === "LOW_STOCK" || st === "OUT_OF_STOCK"}
+              pill={p.track_inventory ? { tone: STATUS_TONE[st], label: st.replace("_", " ") } : undefined}
+              big={p.track_inventory
+                ? { value: qty, tone: st === "OUT_OF_STOCK" ? "bad" : undefined, label: "in stock" }
+                : { value: "Not tracked", tone: "muted" }}
+              metrics={p.track_inventory ? [
+                { label: "Reorder at", value: p.reorder_level ?? 0 },
+                { label: "Avg. cost", value: p.inventory ? Number(p.inventory.average_cost || 0).toLocaleString() : "—" },
+              ] : undefined}
+              actions={(
+                <>
+                  <IconBtn title="Movement history" onClick={() => setHistoryProduct(p)}><History size={14} /></IconBtn>
+                  {p.track_inventory && (
+                    <IconBtn title="Adjust stock" onClick={() => setAdjustingProduct(p)}><SlidersHorizontal size={14} /></IconBtn>
                   )}
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center justify-end gap-3">
-                    <button onClick={() => setHistoryProduct(p)} className="text-slate-400 hover:text-emerald-700" title="Movement history">
-                      <History size={16} />
-                    </button>
-                    {p.track_inventory && (
-                      <button onClick={() => setAdjustingProduct(p)} className="text-slate-400 hover:text-emerald-700" title="Adjust stock">
-                        <SlidersHorizontal size={16} />
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </>
+              )}
+            />
+          );
+        })}
+      </CardGrid>
 
       {adjustingProduct && (
         <AdjustStockModal
@@ -131,7 +116,7 @@ export default function InventoryPage() {
       {historyProduct && (
         <StockHistoryDrawer product={historyProduct} onClose={() => setHistoryProduct(null)} />
       )}
-    </div>
+    </FitPage>
   );
 }
 
@@ -168,16 +153,16 @@ function AdjustStockModal({ product, onClose, onAdjust }) {
       <div className="bg-white rounded-2xl w-full max-w-sm p-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-bold text-slate-800">Adjust Stock</h3>
-            <p className="text-xs text-slate-500">{product.name} — currently {product.inventory?.quantity ?? 0}</p>
+            <h3 className="font-bold text-[#23382B]">Adjust Stock</h3>
+            <p className="text-xs text-[#6F7461]">{product.name} — currently {product.inventory?.quantity ?? 0}</p>
           </div>
-          <button onClick={onClose}><X size={18} className="text-slate-400" /></button>
+          <button onClick={onClose}><X size={18} className="text-[#8B8766]" /></button>
         </div>
         <form onSubmit={submit} className="space-y-3">
           {err && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg p-2.5">{err}</div>}
 
           <label className="block">
-            <div className="text-xs font-semibold text-slate-500 mb-1">Type</div>
+            <div className="text-xs font-semibold text-[#6F7461] mb-1">Type</div>
             <select value={type} onChange={(e) => setType(e.target.value)} className="input">
               {MANUAL_ADJUSTMENT_TYPES.map((t) => (
                 <option key={t} value={t}>{t.replace("_", " ")}</option>
@@ -187,26 +172,26 @@ function AdjustStockModal({ product, onClose, onAdjust }) {
 
           {!hasFixedDirection && (
             <div className="flex gap-2">
-              <button type="button" onClick={() => setDirection(1)} className={`flex-1 py-2 rounded-xl text-sm font-semibold border ${direction === 1 ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "border-slate-200 text-slate-500"}`}>Add</button>
-              <button type="button" onClick={() => setDirection(-1)} className={`flex-1 py-2 rounded-xl text-sm font-semibold border ${direction === -1 ? "bg-red-50 border-red-300 text-red-700" : "border-slate-200 text-slate-500"}`}>Remove</button>
+              <button type="button" onClick={() => setDirection(1)} className={`flex-1 py-2 rounded-xl text-sm font-semibold border ${direction === 1 ? "bg-[#E3F1E7] border-[#1F6B45] text-[#1B5138]" : "border-[#E3DBB8] text-[#6F7461]"}`}>Add</button>
+              <button type="button" onClick={() => setDirection(-1)} className={`flex-1 py-2 rounded-xl text-sm font-semibold border ${direction === -1 ? "bg-red-50 border-red-300 text-red-700" : "border-[#E3DBB8] text-[#6F7461]"}`}>Remove</button>
             </div>
           )}
 
           <label className="block">
-            <div className="text-xs font-semibold text-slate-500 mb-1">Quantity</div>
+            <div className="text-xs font-semibold text-[#6F7461] mb-1">Quantity</div>
             <input type="number" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className="input" required />
           </label>
 
           <label className="block">
-            <div className="text-xs font-semibold text-slate-500 mb-1">Reason</div>
+            <div className="text-xs font-semibold text-[#6F7461] mb-1">Reason</div>
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="input" required />
           </label>
 
-          <button type="submit" disabled={saving} className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl transition">
+          <button type="submit" disabled={saving} className="w-full bg-[#1F6B45] hover:bg-[#17553A] border-b-2 border-[#C9A227] disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl transition">
             {saving ? "Saving…" : "Apply adjustment"}
           </button>
         </form>
-        <style>{`.input { width: 100%; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 0.6rem 0.75rem; font-size: 0.875rem; }`}</style>
+        <style>{`.input { width: 100%; border: 1px solid #E3DBB8; border-radius: 0.75rem; padding: 0.6rem 0.75rem; font-size: 0.875rem; }`}</style>
       </div>
     </div>
   );
@@ -218,20 +203,20 @@ function StockHistoryDrawer({ product, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/30 flex justify-end z-50">
       <div className="bg-white w-full max-w-md h-full overflow-y-auto shadow-2xl">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="font-bold text-slate-800">{product.name}</h2>
-          <button onClick={onClose}><X size={18} className="text-slate-400" /></button>
+        <div className="p-5 border-b border-[#F0EACF] flex items-center justify-between">
+          <h2 className="font-bold text-[#23382B]">{product.name}</h2>
+          <button onClick={onClose}><X size={18} className="text-[#8B8766]" /></button>
         </div>
         <div className="p-5">
-          {loading && <div className="text-center text-slate-400 text-sm py-8"><Loader2 size={16} className="animate-spin inline mr-2" /> Loading…</div>}
-          {!loading && movements.length === 0 && <div className="text-center text-slate-400 text-sm py-8">No stock movements yet.</div>}
+          {loading && <div className="text-center text-[#8B8766] text-sm py-8"><Loader2 size={16} className="animate-spin inline mr-2" /> Loading…</div>}
+          {!loading && movements.length === 0 && <div className="text-center text-[#8B8766] text-sm py-8">No stock movements yet.</div>}
           {!loading && movements.map((m) => (
-            <div key={m.id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0">
+            <div key={m.id} className="flex items-center justify-between py-3 border-b border-[#F6F1DA] last:border-0">
               <div>
-                <div className="text-sm font-semibold text-slate-700">{m.movement_type.replace("_", " ")}</div>
-                <div className="text-xs text-slate-400">{new Date(m.created_at).toLocaleString()}{m.notes ? ` · ${m.notes}` : ""}</div>
+                <div className="text-sm font-semibold text-[#23382B]">{m.movement_type.replace("_", " ")}</div>
+                <div className="text-xs text-[#8B8766]">{new Date(m.created_at).toLocaleString()}{m.notes ? ` · ${m.notes}` : ""}</div>
               </div>
-              <div className={`text-sm font-bold ${m.quantity > 0 ? "text-emerald-600" : "text-red-600"}`}>
+              <div className={`text-sm font-bold ${m.quantity > 0 ? "text-[#1F6B45]" : "text-red-600"}`}>
                 {m.quantity > 0 ? "+" : ""}{m.quantity}
               </div>
             </div>

@@ -1,0 +1,15 @@
+.grp .grp-sec { display: none; }
+.grp .grp-sec.on { display: block; }
+.grp .grp-print-title { display: none; margin: 18px 0 6px; font-size: 1rem; color: var(--forest); }
+.grp .cm-table tr.grp-total td { font-weight: 800; background: var(--brand-tint); }
+.grp .cm-table td:first-child { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+@media print {
+  .grp .grp-sec { display: block; break-inside: avoid-page; }
+  .grp .grp-print-title { display: block; }
+  .grp .cm-table-wrap { overflow: visible; }
+  .grp .cm-table td:first-child { position: static; }
+}
+.grp .cm-sub-value .in { color: var(--ok-ink); }
+.grp .cm-sub-detail .cm-stats { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.grp .cm-sub-detail .cm-stat { padding: 6px 8px; }
+.grp .cm-sub-detail .cm-stat strong { font-size: 0.85rem; }

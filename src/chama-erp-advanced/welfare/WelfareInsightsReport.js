@@ -3,6 +3,7 @@ import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
 import { TrendingUp, TrendingDown, Award, AlertTriangle, Loader2, Lock, CalendarDays, AlertCircle } from "lucide-react";
 import { formatKES } from "./welfareFormat";
+import { Panel, SubCard, SubCardList, StatGrid, Stat } from "../shell/ui";
 import "./WelfareInsightsReport.css";
 
 // -----------------------------------------------------------------------------
@@ -108,79 +109,55 @@ export default function WelfareInsightsReport({ chamaId: chamaIdProp }) {
         <div className="wir-error"><AlertCircle size={14} /> Couldn't load some data: {error}</div>
       )}
 
-      <div className="wir-summary-strip">
-        <div><span>Total raised</span><strong>{formatKES(contributions.reduce((s, c) => s + Number(c.amount), 0))}</strong></div>
-        <div><span>Open cases</span><strong>{cases.filter((c) => c.status === "open").length}</strong></div>
-        <div><span>Closed cases</span><strong>{cases.filter((c) => c.status === "closed").length}</strong></div>
-        <div><span>Events planned</span><strong>{events.length}</strong></div>
-      </div>
+      <Panel icon={TrendingUp} title="Welfare at a glance" tone="green" collapsible={false}>
+        <StatGrid>
+          <Stat label="Total raised" value={formatKES(contributions.reduce((s, c) => s + Number(c.amount), 0))} tone="gold" />
+          <Stat label="Open cases" value={cases.filter((c) => c.status === "open").length} />
+          <Stat label="Closed cases" value={cases.filter((c) => c.status === "closed").length} />
+          <Stat label="Events planned" value={events.length} />
+        </StatGrid>
+      </Panel>
 
-      <div className="wir-columns">
-        <section className="wir-panel">
-          <h3><TrendingUp size={15} className="up" /> Highest-raising cases</h3>
+      <div className="cm-panels-2">
+        <Panel icon={TrendingUp} title="Highest-raising cases" badge={highCases.length || ""} tone="green">
           {highCases.length === 0 ? <p className="wir-empty">No data yet.</p> : (
-            <ul className="wir-list">
-              {highCases.map((c) => (
-                <li key={c.id}>
-                  <span>{c.title}</span>
-                  <strong>{formatKES(c.total)}</strong>
-                  <small>{c.contributorCount} contributor{c.contributorCount === 1 ? "" : "s"}</small>
-                </li>
-              ))}
-            </ul>
+            <SubCardList>
+              {highCases.map((c) => <SubCard key={c.id} title={c.title} sub={`${c.contributorCount} contributor${c.contributorCount === 1 ? "" : "s"}`} value={formatKES(c.total)} />)}
+            </SubCardList>
           )}
-        </section>
+        </Panel>
 
-        <section className="wir-panel">
-          <h3><TrendingDown size={15} className="down" /> Lowest-raising cases</h3>
+        <Panel icon={TrendingDown} title="Lowest-raising cases" badge={lowCases.length || ""} defaultOpen={false}>
           {lowCases.length === 0 ? <p className="wir-empty">No data yet.</p> : (
-            <ul className="wir-list">
-              {lowCases.map((c) => (
-                <li key={c.id}>
-                  <span>{c.title}</span>
-                  <strong>{formatKES(c.total)}</strong>
-                  <small>{c.contributorCount} contributor{c.contributorCount === 1 ? "" : "s"}</small>
-                </li>
-              ))}
-            </ul>
+            <SubCardList>
+              {lowCases.map((c) => <SubCard key={c.id} tone="gold" title={c.title} sub={`${c.contributorCount} contributor${c.contributorCount === 1 ? "" : "s"}`} value={formatKES(c.total)} />)}
+            </SubCardList>
           )}
-        </section>
+        </Panel>
 
-        <section className="wir-panel">
-          <h3><Award size={15} className="up" /> Most generous members</h3>
+        <Panel icon={Award} title="Most generous members" badge={highMembers.length || ""} tone="green" defaultOpen={false}>
           {highMembers.length === 0 ? <p className="wir-empty">No data yet.</p> : (
-            <ul className="wir-list">
-              {highMembers.map((m) => (
-                <li key={m.memberId}><span>{m.name}</span><strong>{formatKES(m.total)}</strong></li>
-              ))}
-            </ul>
+            <SubCardList>
+              {highMembers.map((m) => <SubCard key={m.memberId} title={m.name} value={formatKES(m.total)} />)}
+            </SubCardList>
           )}
-        </section>
+        </Panel>
 
-        <section className="wir-panel">
-          <h3><AlertTriangle size={15} className="down" /> Lowest / non-contributors</h3>
-          <ul className="wir-list">
-            {lowMembers.map((m) => (
-              <li key={m.memberId}><span>{m.name}</span><strong>{formatKES(m.total)}</strong></li>
-            ))}
-            {nonContributors.slice(0, Math.max(0, 5 - lowMembers.length)).map((m) => (
-              <li key={m.id}><span>{m.name}</span><strong className="wir-zero">KES 0</strong></li>
-            ))}
-          </ul>
-        </section>
+        <Panel icon={AlertTriangle} title="Lowest / non-contributors" defaultOpen={false}>
+          <SubCardList>
+            {lowMembers.map((m) => <SubCard key={m.memberId} tone="gold" title={m.name} value={formatKES(m.total)} />)}
+            {nonContributors.slice(0, Math.max(0, 5 - lowMembers.length)).map((m) => <SubCard key={m.id} tone="warn" title={m.name} value="KES 0" />)}
+          </SubCardList>
+        </Panel>
       </div>
 
-      <section className="wir-panel wir-events-panel">
-        <h3><CalendarDays size={15} /> Events by status</h3>
-        <div className="wir-events-strip">
+      <Panel icon={CalendarDays} title="Events by status" tone="green">
+        <StatGrid>
           {["planned", "ongoing", "completed", "cancelled"].map((s) => (
-            <div className={`wir-event-chip ${s}`} key={s}>
-              <span>{s}</span>
-              <strong>{eventsSummary[s] || 0}</strong>
-            </div>
+            <Stat key={s} label={s[0].toUpperCase() + s.slice(1)} value={eventsSummary[s] || 0} />
           ))}
-        </div>
-      </section>
+        </StatGrid>
+      </Panel>
     </div>
   );
 }

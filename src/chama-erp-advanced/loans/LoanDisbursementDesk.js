@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
 import { Wallet, Loader2, CheckCircle, ShieldAlert, X, AlertCircle } from "lucide-react";
+import { Panel } from "../shell/ui";
 import "./LoanDisbursementDesk.css";
 
 function formatKES(v) {
@@ -92,6 +93,7 @@ export default function LoanDisbursementDesk({ chamaId: chamaIdProp }) {
       ) : loans.length === 0 ? (
         <div className="ldd-empty"><CheckCircle size={22} /><p>Nothing waiting on disbursement.</p></div>
       ) : (
+        <Panel icon={Wallet} title="Ready to pay out" badge={loans.length} tone="warn" collapsible={false}>
         <div className="ldd-grid">
           {loans.map((loan) => (
             <div className="ldd-card" key={loan.id}>
@@ -106,6 +108,7 @@ export default function LoanDisbursementDesk({ chamaId: chamaIdProp }) {
             </div>
           ))}
         </div>
+        </Panel>
       )}
 
       {modal && (

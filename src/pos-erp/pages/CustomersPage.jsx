@@ -28,14 +28,15 @@ import { useCustomers } from '../hooks/useCustomers';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { paymentService } from '../services/paymentService';
 import { receivablesService } from '../services/receivablesService';
-import { useTemplates, useCommunicationLog } from '../hooks/useCommunication';
-import { normalizePhoneForWhatsApp } from '../services/communicationService';
+import ContactActions from '../components/ContactActions';
 // Phase 16: proper statement — printable, with the customer's own
 // contact details and a purchased/paid/balance summary, not just a bare
 // transaction list. Shares the same print utility the sale receipt uses
 // (utils/printDocument.js) rather than a second print implementation.
 import { printDocument, escapeHtml } from '../utils/printDocument';
-import { Printer } from 'lucide-react';
+import { Printer, UserRound, Plus, Pencil, Power } from 'lucide-react';
+import { FitPage, AddButton, SearchBox, FilterChips, MiniStats, DataCard, IconTile, IconBtn, TextBtn, Notice, LoadingBlock, EmptyBlock, formCard, inputCls, saveBtnCls } from '../components/CardKit';
+import Sheet from '../components/workspace/Sheet';
 import { singleFlight } from '../utils/singleFlight';
 
 const CUSTOMER_TYPES = ['WALK_IN', 'REGISTERED', 'BUSINESS', 'CREDIT'];
@@ -57,60 +58,16 @@ export default function CustomersPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [receivablesOnly, setReceivablesOnly] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all'); // all | owing | inactive
 
   const [payingCustomer, setPayingCustomer] = useState(null);
   const [paymentForm, setPaymentForm] = useState(EMPTY_PAYMENT);
   const [paymentError, setPaymentError] = useState('');
   const [payingBusy, setPayingBusy] = useState(false);
 
-  // §7 — "Remind John". Reuses the shared WhatsApp path; no second
-  // message-sending implementation lives on this page.
-  const { templates } = useTemplates();
-  const { prepareWhatsApp, markOpened, markSent, markNotSent } = useCommunicationLog();
-  const [remindError, setRemindError] = useState('');
-  const [remindingId, setRemindingId] = useState(null);
-  const [awaitingConfirm, setAwaitingConfirm] = useState(null); // { logId, customerName }
-
-  const reminderTemplate = templates.find(t => t.channel === 'WHATSAPP' && t.message_type === 'PAYMENT_DUE');
-
-  const handleRemind = async (customer) => {
-    setRemindError('');
-    if (!reminderTemplate) {
-      setRemindError('The WhatsApp reminder wording has not loaded yet. Give it a moment, or check Messages if it keeps failing.');
-      return;
-    }
-    setRemindingId(customer.id);
-    try {
-      const { log, url } = await prepareWhatsApp({
-        customer,
-        template: reminderTemplate,
-        variables: { balance: fmt(customer.outstanding_balance), amount: fmt(customer.outstanding_balance) },
-      });
-      const win = window.open(url, '_blank', 'noopener,noreferrer');
-      if (win) {
-        await markOpened(log.id);
-        setAwaitingConfirm({ logId: log.id, customerName: customer.name });
-      } else {
-        setRemindError('Your browser blocked the WhatsApp window. The reminder is saved under Messages — open it from there.');
-      }
-    } catch (err) {
-      setRemindError(err.message);
-    } finally {
-      setRemindingId(null);
-    }
-  };
-
-  const confirmReminderSent = async (didSend) => {
-    if (!awaitingConfirm) return;
-    try {
-      await (didSend ? markSent(awaitingConfirm.logId) : markNotSent(awaitingConfirm.logId));
-    } catch (err) {
-      setRemindError(err.message);
-    } finally {
-      setAwaitingConfirm(null);
-    }
-  };
+  // Reminders now go through the shared MessageComposer (ContactActions): the wording is chosen from today's date and
+  // the customer's real balance, shown for review and editing, and recorded honestly in Messages.
 
   const [statementCustomer, setStatementCustomer] = useState(null);
   const [statementRows, setStatementRows] = useState([]);
@@ -250,250 +207,209 @@ export default function CustomersPage() {
     `, `table { font-size: 12px; } th { text-align: left; border-bottom: 1px solid #ccc; }`);
   };
 
-  const visibleCustomers = receivablesOnly ? customers.filter(c => Number(c.outstanding_balance) > 0) : customers;
+
+  const owingList = customers.filter(c => Number(c.outstanding_balance) > 0);
+  const totalOwed = owingList.reduce((n, c) => n + Number(c.outstanding_balance || 0), 0);
+  const inactiveCount = customers.filter(c => !c.is_active).length;
+
+  const q = search.trim().toLowerCase();
+  const visibleCustomers = customers.filter(c => {
+    const okFilter = filter === 'all' || (filter === 'owing' && Number(c.outstanding_balance) > 0) || (filter === 'inactive' && !c.is_active);
+    const okSearch = !q || (c.name || '').toLowerCase().includes(q) || (c.phone || '').toLowerCase().includes(q);
+    return okFilter && okSearch;
+  });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">Customers</h1>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <input type="checkbox" checked={receivablesOnly} onChange={e => setReceivablesOnly(e.target.checked)} />
-            With outstanding balance only
-          </label>
-          <button
-            onClick={() => (showForm ? setShowForm(false) : openCreateForm())}
-            className="bg-emerald-800 hover:bg-emerald-900 text-white px-4 py-2 rounded-xl font-semibold shadow-[0_2px_0_0_rgba(251,191,36,0.6)]"
-          >
-            {showForm ? 'Cancel' : '+ Customer'}
-          </button>
-        </div>
-      </div>
-
-      {remindError && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{remindError}</div>
+    <FitPage
+      title="Customers"
+      icon={UserRound}
+      subtitle="The people you sell to, and who still owes you."
+      action={<AddButton onClick={() => (showForm ? setShowForm(false) : openCreateForm())} open={showForm} label="Customer" icon={Plus} />}
+      summary={!loading && !error && (
+        <MiniStats items={[
+          { label: 'Customers', value: customers.length },
+          { label: 'Owing', value: owingList.length, tone: owingList.length ? 'gold' : undefined },
+          { label: 'Total owed', value: fmt(totalOwed), tone: totalOwed > 0 ? 'gold' : undefined },
+        ]} />
       )}
+      toolbar={(
+        <div className="space-y-2">
+          <SearchBox value={search} onChange={setSearch} placeholder="Search name or phone…" />
+          <FilterChips
+            value={filter} onChange={setFilter}
+            options={[
+              { key: 'all', label: 'All', count: customers.length },
+              { key: 'owing', label: 'Owing', count: owingList.length },
+              ...(inactiveCount > 0 ? [{ key: 'inactive', label: 'Inactive', count: inactiveCount }] : []),
+            ]}
+          />
+        </div>
+      )}
+    >
 
       {/* We know WhatsApp opened. We do not know the owner pressed Send. */}
-      {awaitingConfirm && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-          <span className="text-sm text-amber-900 font-semibold">
-            Did you press Send in WhatsApp for {awaitingConfirm.customerName}?
-          </span>
-          <button type="button" onClick={() => confirmReminderSent(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-800 text-white hover:bg-emerald-900">Yes, I sent it</button>
-          <button type="button" onClick={() => confirmReminderSent(false)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Not yet</button>
-        </div>
-      )}
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white p-4 rounded-2xl shadow mb-6 grid grid-cols-1 md:grid-cols-3 gap-3 border border-slate-100">
-          {formError && <div className="md:col-span-3 bg-red-50 text-red-700 text-sm rounded px-3 py-2">{formError}</div>}
-          <input required placeholder="Customer Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2 focus:border-emerald-700 focus:ring-4 focus:ring-amber-100 outline-none" />
-          <input placeholder="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2 focus:border-emerald-700 focus:ring-4 focus:ring-amber-100 outline-none" />
-          <input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2 focus:border-emerald-700 focus:ring-4 focus:ring-amber-100 outline-none" />
-          <input placeholder="Address" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2 focus:border-emerald-700 focus:ring-4 focus:ring-amber-100 outline-none md:col-span-2" />
-          <select value={form.customer_type} onChange={e => setForm({ ...form, customer_type: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2">
+        <form onSubmit={handleSubmit} className={`${formCard} grid grid-cols-1 md:grid-cols-3 gap-2.5`}>
+          <div className="md:col-span-3 text-[13px] font-bold text-[#23382B]">{editingCustomer ? `Edit ${editingCustomer.name}` : 'New customer'}</div>
+          {formError && <div className="md:col-span-3"><Notice tone="bad">{formError}</Notice></div>}
+          <input required placeholder="Customer name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} />
+          <input placeholder="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} />
+          <input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className={inputCls} />
+          <input placeholder="Address" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className={`${inputCls} md:col-span-3`} />
+          <select value={form.customer_type} onChange={e => setForm({ ...form, customer_type: e.target.value })} className={inputCls}>
             {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
           </select>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">Credit limit</label>
-            <input type="number" min="0" value={form.credit_limit} onChange={e => setForm({ ...form, credit_limit: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
+          <div className="md:col-span-2">
+            <input type="number" min="0" placeholder="Credit limit" aria-label="Credit limit" value={form.credit_limit} onChange={e => setForm({ ...form, credit_limit: e.target.value })} className={inputCls} />
           </div>
-          <button type="submit" disabled={saving} className="bg-emerald-800 hover:bg-emerald-900 text-white px-6 py-2 rounded-xl md:col-span-3 disabled:opacity-60 font-semibold shadow-[0_2px_0_0_rgba(251,191,36,0.6)]">
-            {saving ? 'Saving…' : editingCustomer ? 'Save changes' : 'Save'}
+          <button type="submit" disabled={saving} className={`${saveBtnCls} md:col-span-3`}>
+            {saving ? 'Saving…' : editingCustomer ? 'Save changes' : 'Save customer'}
           </button>
         </form>
       )}
 
       {loading ? (
-        <div className="text-center py-10 text-slate-500">Loading...</div>
+        <LoadingBlock text="Loading customers…" />
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-4 py-3">
-          Couldn't load customers: {error}
-        </div>
+        <Notice tone="bad">Couldn't load customers: {error}</Notice>
+      ) : visibleCustomers.length === 0 ? (
+        <EmptyBlock>{customers.length === 0 ? 'No customers yet. Add your first one.' : 'No customers match.'}</EmptyBlock>
       ) : (
-        <div className="bg-white rounded-2xl shadow overflow-x-auto border border-slate-100">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-2">Name</th><th>Phone</th><th>Type</th>
-                <th>Credit limit</th><th>Balance</th><th>Status</th><th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleCustomers.map(c => (
-                <tr key={c.id} className="border-t border-slate-100">
-                  <td className="px-4 py-2 font-medium text-slate-800">{c.name}</td>
-                  <td>{c.phone || '-'}</td>
-                  <td className="text-slate-500">{c.customer_type}</td>
-                  <td>{fmt(c.credit_limit)}</td>
-                  <td className={Number(c.outstanding_balance) > 0 ? 'font-bold text-amber-700' : 'text-slate-500'}>
-                    {fmt(c.outstanding_balance)}
-                  </td>
-                  <td>
-                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${c.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                      {c.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="flex flex-wrap gap-3 py-2 pr-4">
-                    <button onClick={() => openEditForm(c)} className="text-emerald-700 text-sm hover:underline">Edit</button>
-                    <button onClick={() => openPaymentModal(c)} className="text-amber-700 text-sm hover:underline">Record Payment</button>
-                    <button onClick={() => openStatement(c)} className="text-slate-600 text-sm hover:underline">Statement</button>
-                    {/* Only offered when there is actually something to
-                        chase, and only when the number can be turned
-                        into a real wa.me link — a reminder sent to an
-                        unparseable number opens a chat with a stranger. */}
-                    {Number(c.outstanding_balance) > 0 && (
-                      <button
-                        onClick={() => handleRemind(c)}
-                        disabled={remindingId === c.id || !normalizePhoneForWhatsApp(c.phone)}
-                        title={normalizePhoneForWhatsApp(c.phone) ? 'Send a WhatsApp reminder' : 'No usable WhatsApp number on this customer'}
-                        className="text-emerald-700 text-sm hover:underline disabled:text-slate-300 disabled:no-underline disabled:cursor-not-allowed"
+        // Customer cards carry more than a stock card (balance + five actions), so they run wider: 1 across on a small phone.
+        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2">
+          {visibleCustomers.map(c => {
+            const owes = Number(c.outstanding_balance) > 0;
+            const limit = Number(c.credit_limit) || 0;
+            return (
+              <DataCard
+                key={c.id}
+                alert={owes}
+                dim={!c.is_active}
+                thumb={<IconTile icon={UserRound} tone={owes ? 'gold' : 'green'} />}
+                title={c.name}
+                subtitle={c.phone || 'No phone number'}
+                pill={!c.is_active ? { tone: 'neutral', label: 'Inactive' } : owes ? { tone: 'warn', label: 'Owes' } : { tone: 'info', label: (c.customer_type || '').replace('_', ' ') }}
+                big={{ value: fmt(c.outstanding_balance), tone: owes ? 'gold' : 'muted', label: owes ? 'owed to you' : 'no balance' }}
+                metrics={[
+                  { label: 'Credit limit', value: limit > 0 ? fmt(limit) : 'None' },
+                  { label: 'Type', value: (c.customer_type || '—').replace('_', ' ') },
+                ]}
+                actions={(
+                  <>
+                    <TextBtn onClick={() => openPaymentModal(c)} tone="gold">Record payment</TextBtn>
+                    <TextBtn onClick={() => openStatement(c)}>Statement</TextBtn>
+                    <ContactActions size="sm" recipient={{ kind: 'CUSTOMER', id: c.id, name: c.name, phone: c.phone, email: c.email }} purpose={owes ? 'PAYMENT_REMINDER' : 'CUSTOMER_WELCOME'} />
+                    <span className="ml-auto flex items-center gap-1.5">
+                      <IconBtn title="Edit customer" onClick={() => openEditForm(c)}><Pencil size={14} /></IconBtn>
+                      <IconBtn
+                        title={c.is_active ? 'Deactivate customer' : 'Reactivate customer'}
+                        tone={c.is_active ? 'danger' : undefined}
+                        onClick={() => (c.is_active ? deactivate(c.id) : reactivate(c.id))}
                       >
-                        {remindingId === c.id ? 'Opening…' : 'Remind'}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => (c.is_active ? deactivate(c.id) : reactivate(c.id))}
-                      className="text-sm text-slate-500 hover:text-red-600"
-                    >
-                      {c.is_active ? 'Deactivate' : 'Reactivate'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {visibleCustomers.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-500">No customers</td></tr>
-              )}
-            </tbody>
-          </table>
+                        <Power size={14} />
+                      </IconBtn>
+                    </span>
+                  </>
+                )}
+              />
+            );
+          })}
         </div>
       )}
 
       {/* Record standalone payment */}
       {payingCustomer && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitPayment} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-lg text-slate-800">Record Payment</h3>
-            <p className="text-sm text-slate-500">
-              {payingCustomer.name} — owes <span className="font-bold text-amber-700">{fmt(payingCustomer.outstanding_balance)}</span>
-            </p>
-            {paymentError && <div className="bg-red-50 text-red-700 text-sm rounded px-3 py-2">{paymentError}</div>}
+        <Sheet title="Record payment" onClose={() => setPayingCustomer(null)}>
+          <form onSubmit={submitPayment} className="space-y-3">
+            <div className="rounded-xl bg-[#FBF3D5] border border-[#EBD98A] px-3 py-2 text-[13px] text-[#6B4F0B]">
+              <span className="font-bold">{payingCustomer.name}</span> owes <span className="font-extrabold">{fmt(payingCustomer.outstanding_balance)}</span>
+            </div>
+            {paymentError && <Notice tone="bad">{paymentError}</Notice>}
             <input
-              required autoFocus type="number" step="0.01" min="0.01" placeholder="Amount"
+              required autoFocus type="number" step="0.01" min="0.01" inputMode="decimal" placeholder="Amount"
               value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 focus:border-emerald-700 focus:ring-4 focus:ring-amber-100 outline-none"
+              className={`${inputCls} text-lg font-semibold`}
             />
-            <select
-              value={paymentForm.payment_method}
-              onChange={e => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2"
-            >
+            <select value={paymentForm.payment_method} onChange={e => setPaymentForm({ ...paymentForm, payment_method: e.target.value })} className={inputCls}>
               {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m.replace('_', ' ')}</option>)}
             </select>
-            <input
-              placeholder="Reference no. (optional)" value={paymentForm.reference_no}
-              onChange={e => setPaymentForm({ ...paymentForm, reference_no: e.target.value })}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2"
-            />
-            <input
-              placeholder="Notes (optional)" value={paymentForm.notes}
-              onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2"
-            />
+            <input placeholder="Reference no. (optional)" value={paymentForm.reference_no} onChange={e => setPaymentForm({ ...paymentForm, reference_no: e.target.value })} className={inputCls} />
+            <input placeholder="Notes (optional)" value={paymentForm.notes} onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })} className={inputCls} />
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setPayingCustomer(null)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-xl">Cancel</button>
-              <button type="submit" disabled={payingBusy} className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white py-2 rounded-xl font-semibold disabled:opacity-60">
-                {payingBusy ? 'Saving…' : 'Save Payment'}
-              </button>
+              <button type="button" onClick={() => setPayingCustomer(null)} className="flex-1 min-h-[42px] rounded-lg bg-[#EEEBDD] text-[#5E6350] font-semibold">Cancel</button>
+              <button type="submit" disabled={payingBusy} className={`${saveBtnCls} flex-1`}>{payingBusy ? 'Saving…' : 'Save payment'}</button>
             </div>
           </form>
-        </div>
+        </Sheet>
       )}
 
       {/* Statement */}
       {statementCustomer && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl p-5 max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-start mb-1">
-              <div>
-                <h3 className="font-bold text-lg text-slate-800">{statementCustomer.name} — Statement</h3>
-                {/* Personal info the statement should carry, not just a
-                    name — the phone/email an owner would need to reach
-                    this customer about the balance. */}
-                <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 mt-0.5">
-                  {statementCustomer.phone && <span>{statementCustomer.phone}</span>}
-                  {statementCustomer.email && <span>{statementCustomer.email}</span>}
-                </div>
-              </div>
-              <button onClick={() => setStatementCustomer(null)} className="text-slate-400 hover:text-slate-600 shrink-0">✕</button>
+        <Sheet title={`${statementCustomer.name} — Statement`} onClose={() => setStatementCustomer(null)}>
+          {/* Personal info the statement should carry — the phone/email an owner needs to reach this customer about the balance. */}
+          {(statementCustomer.phone || statementCustomer.email) && (
+            <div className="text-[11.5px] text-[#6F7461] flex flex-wrap gap-x-3 -mt-2 mb-3">
+              {statementCustomer.phone && <span>{statementCustomer.phone}</span>}
+              {statementCustomer.email && <span>{statementCustomer.email}</span>}
             </div>
+          )}
 
-            <div className="grid grid-cols-3 gap-2 my-3">
-              <div className="bg-slate-50 rounded-lg px-2 py-2 text-center">
-                <div className="text-[10px] font-bold text-slate-400 uppercase">Purchased</div>
-                <div className="font-bold text-slate-700 text-sm">{fmt(statementTotals.purchased)}</div>
+          <MiniStats items={[
+            { label: 'Purchased', value: fmt(statementTotals.purchased) },
+            { label: 'Paid', value: fmt(statementTotals.paid), tone: 'good' },
+            { label: 'Owes', value: fmt(statementCustomer.outstanding_balance), tone: Number(statementCustomer.outstanding_balance) > 0 ? 'gold' : undefined },
+          ]} />
+
+          {statementFolios.length > 0 && (
+            <div className="mt-3">
+              <div className="text-[10px] font-bold text-[#8B8766] uppercase tracking-wide mb-1">Bills &amp; stays</div>
+              <div className="border border-[#E3DBB8] rounded-xl divide-y divide-[#F0EACF] overflow-hidden">
+                {statementFolios.slice(0, 5).map((f) => (
+                  <Link key={f.id} to={`/pos/folios?folio=${f.id}`} className="flex justify-between items-center gap-3 px-3 py-2 text-[13px] hover:bg-[#FAF7EA]">
+                    <span className="min-w-0 truncate">{f.title || f.folio_number}<span className="text-[11px] text-[#8B8766]"> · {f.status === 'OPEN' ? 'open' : `paid ${f.settled_at ? new Date(f.settled_at).toLocaleDateString() : ''}`}</span></span>
+                    <span className={`font-semibold shrink-0 ${f.status === 'OPEN' ? 'text-[#8A6A12]' : 'text-[#3D4A3F]'}`}>{fmt(f.status === 'OPEN' ? f.balance_due : f.total_charges)}</span>
+                  </Link>
+                ))}
               </div>
-              <div className="bg-emerald-50 rounded-lg px-2 py-2 text-center">
-                <div className="text-[10px] font-bold text-emerald-600 uppercase">Paid</div>
-                <div className="font-bold text-emerald-700 text-sm">{fmt(statementTotals.paid)}</div>
-              </div>
-              <div className="bg-amber-50 rounded-lg px-2 py-2 text-center">
-                <div className="text-[10px] font-bold text-amber-600 uppercase">Owes</div>
-                <div className="font-bold text-amber-700 text-sm">{fmt(statementCustomer.outstanding_balance)}</div>
-              </div>
+              {statementFolios.length > 5 && <div className="text-[11px] text-[#8B8766] mt-1">and {statementFolios.length - 5} older</div>}
             </div>
+          )}
 
-            {statementFolios.length > 0 && (
-              <div className="mb-3">
-                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Bills &amp; stays</div>
-                <div className="border border-slate-100 rounded-lg divide-y divide-slate-100">
-                  {statementFolios.slice(0, 5).map((f) => (
-                    <Link key={f.id} to={`/pos/folios?folio=${f.id}`} className="flex justify-between items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50">
-                      <span className="min-w-0 truncate">{f.title || f.folio_number}<span className="text-xs text-slate-500"> · {f.status === 'OPEN' ? 'open' : `paid ${f.settled_at ? new Date(f.settled_at).toLocaleDateString() : ''}`}</span></span>
-                      <span className={`font-semibold shrink-0 ${f.status === 'OPEN' ? 'text-amber-700' : 'text-slate-700'}`}>{fmt(f.status === 'OPEN' ? f.balance_due : f.total_charges)}</span>
-                    </Link>
-                  ))}
-                </div>
-                {statementFolios.length > 5 && <div className="text-xs text-slate-500 mt-1">and {statementFolios.length - 5} older</div>}
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto min-h-0">
-              {statementLoading ? (
-                <div className="text-center py-8 text-slate-500">Loading…</div>
-              ) : (
-                <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm min-w-[380px]">
-                  <thead className="bg-slate-50 text-slate-500 sticky top-0">
-                    <tr><th className="px-2 py-1">Date</th><th>Type</th><th>Amount</th><th>Balance</th></tr>
+          <div className="mt-3">
+            {statementLoading ? (
+              <LoadingBlock />
+            ) : statementRows.length === 0 ? (
+              <EmptyBlock>No transactions yet</EmptyBlock>
+            ) : (
+              <div className="border border-[#E3DBB8] rounded-xl overflow-x-auto">
+                <table className="w-full text-left text-[12.5px] min-w-[360px]">
+                  <thead className="bg-[#FAF7EA] text-[#8B8766] text-[10px] uppercase tracking-wide">
+                    <tr><th className="px-2.5 py-1.5">Date</th><th>Type</th><th className="text-right">Amount</th><th className="text-right pr-2.5">Balance</th></tr>
                   </thead>
                   <tbody>
                     {statementRows.map(r => (
-                      <tr key={r.id} className="border-t border-slate-100">
-                        <td className="px-2 py-1 whitespace-nowrap">{new Date(r.created_at).toLocaleDateString()}</td>
-                        <td>{r.transaction_type}{r.notes ? ` — ${r.notes}` : ''}</td>
-                        <td className={Number(r.amount) < 0 ? 'text-emerald-700' : 'text-slate-800'}>{fmt(r.amount)}</td>
-                        <td className="font-semibold">{fmt(r.balance_after)}</td>
+                      <tr key={r.id} className="border-t border-[#F0EACF]">
+                        <td className="px-2.5 py-1.5 whitespace-nowrap text-[#6F7461]">{new Date(r.created_at).toLocaleDateString()}</td>
+                        <td className="py-1.5">{r.transaction_type}{r.notes ? <span className="text-[#8B8766]"> — {r.notes}</span> : null}</td>
+                        <td className={`py-1.5 text-right ${Number(r.amount) < 0 ? 'text-[#1B6B45]' : 'text-[#23382B]'}`}>{fmt(r.amount)}</td>
+                        <td className="py-1.5 pr-2.5 text-right font-semibold">{fmt(r.balance_after)}</td>
                       </tr>
                     ))}
-                    {statementRows.length === 0 && (
-                      <tr><td colSpan={4} className="px-2 py-6 text-center text-slate-500">No transactions yet</td></tr>
-                    )}
                   </tbody>
                 </table>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={printStatement}
-              className="mt-3 w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold py-2.5 rounded-xl"
-            >
-              <Printer size={15} /> Print Statement
-            </button>
+              </div>
+            )}
           </div>
-        </div>
+
+          <button
+            onClick={printStatement}
+            className={`${saveBtnCls} mt-3 w-full flex items-center justify-center gap-2 text-sm`}
+          >
+            <Printer size={15} /> Print statement
+          </button>
+        </Sheet>
       )}
-    </div>
+    </FitPage>
   );
 }

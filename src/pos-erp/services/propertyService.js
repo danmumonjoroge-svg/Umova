@@ -108,6 +108,7 @@ export const recurringChargeService = {
         due_day: charge.due_day || null,
         start_date: charge.start_date || new Date().toISOString().slice(0, 10),
         end_date: charge.end_date || null,
+        taxable: charge.taxable !== false, // follows the business tax rate in Settings unless switched off for this charge
         created_by: charge.created_by ?? null,
       })
       .select('*, customer:lb_customers(id, name), unit:lb_units(id, unit_number)')

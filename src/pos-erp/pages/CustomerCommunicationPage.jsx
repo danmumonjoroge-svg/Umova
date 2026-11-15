@@ -1,294 +1,129 @@
 // src/pos-erp/pages/CustomerCommunicationPage.jsx
 //
-// Messages (brief §15) — customer-facing communication. Separate from
-// pages/CommunicationPage.jsx (internal notifications, already built).
-//
-// Two channels behave differently here, and the difference is the point:
-//
-//   SMS / EMAIL  — no provider is connected. Saving writes a QUEUED row
-//                  and stops. Nothing is sent.
-//   WHATSAPP     — no provider is NEEDED (§16). Umova renders the
-//                  message, opens wa.me, and the owner presses Send
-//                  inside WhatsApp themselves.
-//
-// §16's three WhatsApp states are tracked and shown apart from each
-// other, and none of them is ever shown as "Delivered":
-//   Prepared → Opened in WhatsApp → Sent by you (owner-attested)
-//
-// Offline note: preparing a message still writes to Supabase today, so
-// it needs internet like everything else. §23's "prepare offline, open
-// online" split arrives with the Stage 1B offline work, not here.
-
-import React, { useState } from 'react';
-import { MessageSquare, Send, Loader2, Clock, CheckCircle2, XCircle, ExternalLink, AlertTriangle } from 'lucide-react';
-import { useTemplates, useCommunicationLog } from '../hooks/useCommunication';
+// Messages hub (phase 50). Replaces the old single-purpose Messages screen; the same route (/pos/messages).
+//   To send   messages My Business prepared for you (due payments, deliveries, appointments...). Review, edit, send.
+//   History   every message with an honest status: Prepared, Opened, Handed to sender, Sent, Delivered, Read, Failed.
+//   Wording   the business's own templates.      Settings   greeting, timing and what gets prepared.
+// New messages are started from the record itself (customer, supplier, order, appointment) via ContactActions, or "New message" here.
+// Internal alerts live in Notifications (CommunicationPage), not here.
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Loader2, Plus, RefreshCw } from 'lucide-react';
+import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useCustomers } from '../hooks/useCustomers';
-import { normalizePhoneForWhatsApp } from '../services/communicationService';
+import { useSuppliers } from '../hooks/useSuppliers';
+import { commEngineService } from '../services/commEngineService';
+import { PURPOSE_BY_KEY, CHANNEL_LABEL, describeStatus, manualActions } from '../utils/comm';
+import MessageComposer from '../components/MessageComposer';
+import TemplateEditor from '../components/comm/TemplateEditor';
+import CommSettings from '../components/comm/CommSettings';
+import Sheet, { fieldClass } from '../components/workspace/Sheet';
 
-// Owner-facing wording, per §1. "Sent by you" rather than "Sent" on
-// WhatsApp is deliberate — we know the owner said they pressed Send; we
-// do not know WhatsApp delivered it, and §43 forbids implying we do.
-function statusMeta(row) {
-  const isWhatsApp = row.channel === 'WHATSAPP';
-  switch (row.status) {
-    case 'OPENED':
-      return { label: 'Opened in WhatsApp', bg: 'bg-amber-50 text-amber-700', Icon: ExternalLink };
-    case 'SENT':
-      return { label: isWhatsApp ? 'Sent by you' : 'Sent', bg: 'bg-emerald-50 text-emerald-700', Icon: CheckCircle2 };
-    case 'DELIVERED':
-      return { label: 'Delivered', bg: 'bg-emerald-50 text-emerald-700', Icon: CheckCircle2 };
-    case 'FAILED':
-      return { label: 'Failed', bg: 'bg-red-50 text-red-700', Icon: XCircle };
-    default:
-      return { label: 'Prepared', bg: 'bg-slate-100 text-slate-600', Icon: Clock };
-  }
-}
+const TABS = [['send', 'To send'], ['history', 'History'], ['wording', 'Wording'], ['settings', 'Settings']];
+const TONE = { good: 'bg-emerald-50 text-emerald-700', warn: 'bg-amber-50 text-amber-700', bad: 'bg-red-50 text-red-700', neutral: 'bg-slate-100 text-slate-600', info: 'bg-sky-50 text-sky-700' };
+const when = (t) => (t ? new Date(t).toLocaleString('en-KE', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
 
 export default function CustomerCommunicationPage() {
-  const { templates, loading: templatesLoading } = useTemplates();
-  const { history, loading: historyLoading, send, prepareWhatsApp, markOpened, markSent, markNotSent } = useCommunicationLog();
+  const { tenant, isAdmin } = usePosErpAuth();
   const { customers } = useCustomers();
+  const { suppliers } = useSuppliers();
+  const [tab, setTab] = useState('send');
+  const [jobs, setJobs] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [composer, setComposer] = useState(null); // { recipient, purpose, channel, reference, jobId }
+  const [picker, setPicker] = useState(false);
+  const [q, setQ] = useState('');
 
-  const [customerId, setCustomerId] = useState('');
-  const [templateId, setTemplateId] = useState('');
-  const [amount, setAmount] = useState('');
-  const [sendError, setSendError] = useState('');
-  const [sending, setSending] = useState(false);
-  const [preview, setPreview] = useState('');
-  // The message we just opened WhatsApp for, awaiting the owner's answer.
-  const [awaitingConfirm, setAwaitingConfirm] = useState(null);
+  const names = useMemo(() => ({ ...Object.fromEntries((customers || []).map((c) => [c.id, c.name])), ...Object.fromEntries((suppliers || []).map((s) => [s.id, s.name])) }), [customers, suppliers]);
 
-  const customer = customers.find(c => c.id === customerId);
-  const template = templates.find(t => t.id === templateId);
-  const isWhatsApp = template?.channel === 'WHATSAPP';
-  const waPhone = customer ? normalizePhoneForWhatsApp(customer.phone) : null;
-
-  const updatePreview = (tId, custId, amt) => {
-    const t = templates.find(x => x.id === tId);
-    const c = customers.find(x => x.id === custId);
-    if (!t) { setPreview(''); return; }
-    const vars = { customer_name: c?.name || '{{customer_name}}', amount: amt || '{{amount}}', balance: c?.outstanding_balance ?? '{{balance}}' };
-    setPreview(t.body.replace(/\{\{(\w+)\}\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m)));
-  };
-
-  const resetForm = () => { setAmount(''); setPreview(''); };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSendError('');
-    if (!customer || !template) { setSendError('Select a customer and a message.'); return; }
-    setSending(true);
+  const load = useCallback(async () => {
+    if (!tenant?.id) return;
+    setLoading(true); setError('');
     try {
-      if (isWhatsApp) {
-        const { log, url } = await prepareWhatsApp({ customer, template, variables: { amount, balance: customer.outstanding_balance } });
-        // Opened in a new tab, not the same one — losing the POS page
-        // mid-shift to a WhatsApp Web redirect would be worse than a
-        // pop-up warning. If the browser blocks it, the history row's
-        // own "Open WhatsApp" button is the fallback.
-        const win = window.open(url, '_blank', 'noopener,noreferrer');
-        if (win) {
-          await markOpened(log.id);
-          setAwaitingConfirm(log.id);
-        } else {
-          setSendError('Your browser blocked the WhatsApp window. The message is prepared — use "Open WhatsApp" on its row below.');
-        }
-        resetForm();
-      } else {
-        await send({ customer, template, variables: { amount, balance: customer.outstanding_balance } });
-        resetForm();
-      }
-    } catch (err) {
-      setSendError(err.message);
-    } finally {
-      setSending(false);
-    }
-  };
+      const [j, h] = await Promise.all([commEngineService.toSend({ tenantId: tenant.id, businessId: tenant.business_id }), commEngineService.history({ tenantId: tenant.id, businessId: tenant.business_id })]);
+      setJobs(j); setHistory(h);
+    } catch { setError('Could not load messages. Check your connection.'); }
+    finally { setLoading(false); }
+  }, [tenant]);
+  useEffect(() => { load(); }, [load]);
 
-  // Re-open a message that was prepared but never opened (or opened and
-  // not sent). Rebuilds the link from what was actually logged, so it
-  // can't drift from the message the history shows.
-  const reopen = async (row) => {
-    setSendError('');
-    const phone = normalizePhoneForWhatsApp(row.recipient);
-    if (!phone) { setSendError('That message has no usable WhatsApp number on it.'); return; }
-    const win = window.open(`https://wa.me/${phone}?text=${encodeURIComponent(row.rendered_message)}`, '_blank', 'noopener,noreferrer');
-    if (!win) { setSendError('Your browser blocked the WhatsApp window. Allow pop-ups for this site.'); return; }
-    try {
-      await markOpened(row.id);
-      setAwaitingConfirm(row.id);
-    } catch (err) { setSendError(err.message); }
-  };
+  const act = async (row, status) => { try { await commEngineService.setStatus(row.id, status); load(); } catch { setError('Could not update that message.'); } };
+  const retry = async (row) => { const r = await commEngineService.sendViaProvider(row.id); if (!r.ok) setError(r.message || 'Not sent.'); load(); };
 
-  const confirmSent = async (id, didSend) => {
-    try {
-      await (didSend ? markSent(id) : markNotSent(id));
-    } catch (err) {
-      setSendError(err.message);
-    } finally {
-      setAwaitingConfirm(null);
-    }
-  };
+  const people = [...(customers || []).map((c) => ({ ...c, kind: 'CUSTOMER' })), ...(suppliers || []).map((s) => ({ ...s, kind: 'SUPPLIER' }))].filter((p) => !q || p.name?.toLowerCase().includes(q.toLowerCase())).slice(0, 30);
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <MessageSquare size={22} className="text-amber-600" /> Messages
-        </h1>
-        <p className="text-slate-500 text-sm">
-          Send a customer a WhatsApp message — Umova writes it, you press Send in WhatsApp. SMS and email messages are only saved for now; no SMS or email provider is connected yet.
-        </p>
+    <div className="p-4 md:p-8 max-w-3xl mx-auto">
+      <div className="flex items-center justify-between mb-3">
+        <h1 className="text-2xl font-bold text-[#23382B]">Messages</h1>
+        <div className="flex gap-2">
+          <button onClick={load} className="w-10 h-10 rounded-full border border-[#E3DBB8] flex items-center justify-center" aria-label="Refresh">{loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}</button>
+          <button onClick={() => setPicker(true)} className="min-h-[40px] px-4 rounded-full bg-[#1F6B45] text-white text-sm font-semibold border-b-2 border-[#C9A227] flex items-center gap-1"><Plus size={16} />New message</button>
+        </div>
       </div>
+      <div className="flex gap-1 mb-4 overflow-x-auto" role="tablist">
+        {TABS.map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`px-4 min-h-[40px] rounded-full text-sm font-semibold whitespace-nowrap border ${tab === k ? 'bg-[#1F6B45] text-white border-[#C9A227]' : 'bg-white border-[#E3DBB8] text-[#23382B]'}`}>{label}{k === 'send' && jobs.length ? ` (${jobs.length})` : ''}</button>)}
+      </div>
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-3">{error}</div>}
 
-      {/* Compose */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-6">
-        <h2 className="font-bold text-slate-800 mb-3">Write a Message</h2>
-        {sendError && <div className="mb-3 bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2">{sendError}</div>}
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <select
-            value={customerId}
-            onChange={e => { setCustomerId(e.target.value); updatePreview(templateId, e.target.value, amount); }}
-            className="border border-slate-200 rounded-xl px-3 py-2 text-sm"
-          >
-            <option value="">Select customer</option>
-            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select
-            value={templateId}
-            onChange={e => { setTemplateId(e.target.value); updatePreview(e.target.value, customerId, amount); }}
-            className="border border-slate-200 rounded-xl px-3 py-2 text-sm"
-          >
-            <option value="">Select message</option>
-            {templates.map(t => <option key={t.id} value={t.id}>{t.message_type.replace(/_/g, ' ')} ({t.channel === 'WHATSAPP' ? 'WhatsApp' : t.channel})</option>)}
-          </select>
-          <input
-            placeholder="Amount (if relevant)"
-            value={amount}
-            onChange={e => { setAmount(e.target.value); updatePreview(templateId, customerId, e.target.value); }}
-            className="border border-slate-200 rounded-xl px-3 py-2 text-sm"
-          />
-
-          {preview && (
-            <div className="md:col-span-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-600 italic">"{preview}"</div>
-          )}
-
-          {/* Caught before the owner presses the button, not after — a
-              wa.me link built from a bad number opens a chat with a
-              stranger, and nothing here would be able to tell. */}
-          {isWhatsApp && customer && !waPhone && (
-            <div className="md:col-span-3 flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-4 py-3">
-              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-              <span>
-                {customer.name} has no usable WhatsApp number{customer.phone ? ` (${customer.phone})` : ''}. Add a Kenyan mobile number like 0712345678 on the customer first.
-              </span>
-            </div>
-          )}
-
-          <button
-            type="submit" disabled={sending || !customer || !template || (isWhatsApp && !waPhone)}
-            className="md:col-span-3 flex items-center justify-center gap-2 bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-semibold py-2.5 rounded-xl disabled:opacity-50 shadow-[0_2px_0_0_rgba(251,191,36,0.6)]"
-          >
-            {isWhatsApp ? <ExternalLink size={15} /> : <Send size={15} />}
-            {sending ? 'Working…' : isWhatsApp ? 'Open in WhatsApp' : 'Save Message'}
-          </button>
-
-          {isWhatsApp && (
-            <p className="md:col-span-3 text-xs text-slate-400 text-center">
-              WhatsApp opens with the message ready. You still have to press Send there — Umova cannot send it for you.
-            </p>
-          )}
-        </form>
-
-        {/* §16: we know we opened WhatsApp. We do not know the owner sent
-            anything. Ask, rather than assume. */}
-        {awaitingConfirm && (
-          <div className="mt-4 flex flex-wrap items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-            <span className="text-sm text-amber-900 font-semibold">Did you press Send in WhatsApp?</span>
-            <button type="button" onClick={() => confirmSent(awaitingConfirm, true)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-800 text-white hover:bg-emerald-900">Yes, I sent it</button>
-            <button type="button" onClick={() => confirmSent(awaitingConfirm, false)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Not yet</button>
-          </div>
-        )}
-      </section>
-
-      {/* Templates */}
-      <section>
-        <h2 className="font-bold text-slate-800 mb-3">Message Wording</h2>
-        {templatesLoading ? (
-          <div className="text-slate-400 text-sm py-4"><Loader2 size={16} className="animate-spin inline mr-2" /> Loading…</div>
-        ) : (
-          <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100">
-            {templates.map(t => (
-              <div key={t.id} className="px-5 py-3 flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-800">
-                    {t.message_type.replace(/_/g, ' ')}{' '}
-                    <span className="text-xs font-normal text-slate-400">— {t.channel === 'WHATSAPP' ? 'WhatsApp' : t.channel}</span>
-                  </div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.body}</div>
-                </div>
-                <span className={`shrink-0 text-[11px] font-bold px-2 py-1 rounded-full ${t.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>{t.is_active ? 'Active' : 'Inactive'}</span>
+      {tab === 'send' && (
+        <div className="space-y-2">
+          {!loading && jobs.length === 0 && <div className="text-center text-[#8A8A70] py-10">Nothing waiting. When a payment is due or a delivery is late, a ready message appears here.</div>}
+          {jobs.map((j) => (
+            <div key={j.id} className="bg-white border border-[#E3DBB8] rounded-2xl p-3 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-[#23382B] truncate">{names[j.customer_id || j.supplier_id] || 'Recipient'}</div>
+                <div className="text-xs text-[#6F7461]">{PURPOSE_BY_KEY[j.purpose]?.label || j.purpose} · {CHANNEL_LABEL[j.channel] || j.channel}</div>
               </div>
+              <button onClick={() => commEngineService.dismissJob(j.id).then(load)} className="text-xs text-[#8A8A70] underline">Dismiss</button>
+              <button onClick={() => setComposer({ recipient: { kind: j.recipient_kind, id: j.customer_id || j.supplier_id, name: names[j.customer_id || j.supplier_id] }, purpose: j.purpose, channel: j.channel, reference: j.reference_id ? { type: j.reference_type, id: j.reference_id } : undefined, jobId: j.id })} className="min-h-[40px] px-4 rounded-xl bg-[#1F6B45] text-white text-sm font-semibold">Review</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div className="space-y-2">
+          {!loading && history.length === 0 && <div className="text-center text-[#8A8A70] py-10">No messages yet.</div>}
+          {history.map((h) => {
+            const st = describeStatus(h); const acts = manualActions(h);
+            return (
+              <div key={h.id} className="bg-white border border-[#E3DBB8] rounded-2xl p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold text-[#23382B] truncate">{h.recipient_name || names[h.customer_id || h.supplier_id] || h.recipient}</div>
+                  <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${TONE[st.tone] || TONE.neutral}`}>{st.label}</span>
+                </div>
+                <div className="text-xs text-[#6F7461]">{PURPOSE_BY_KEY[h.purpose]?.label || h.message_type} · {CHANNEL_LABEL[h.channel]} · {when(h.created_at)}{h.was_edited ? ' · edited' : ''}</div>
+                <p className="text-sm text-[#4A5240] mt-1 whitespace-pre-wrap line-clamp-3">{h.rendered_message}</p>
+                {(h.failure_reason || st.note) && <p className="text-xs text-[#8F2E24] mt-1">{h.failure_reason || st.note}</p>}
+                <div className="flex gap-3 mt-2">
+                  {acts.includes('MARK_SENT') && <button onClick={() => act(h, 'SENT')} className="text-xs font-semibold text-[#1F6B45] underline">I sent it</button>}
+                  {acts.includes('MARK_NOT_SENT') && h.status === 'OPENED' && <button onClick={() => act(h, 'QUEUED')} className="text-xs underline text-[#6F7461]">Not sent</button>}
+                  {h.status === 'FAILED' && <button onClick={() => retry(h)} className="text-xs font-semibold text-[#1F6B45] underline">Try again</button>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {tab === 'wording' && <TemplateEditor canEdit={isAdmin} />}
+      {tab === 'settings' && <CommSettings canEdit={isAdmin} />}
+
+      {picker && (
+        <Sheet title="Who is it for?" onClose={() => setPicker(false)}>
+          <input className={fieldClass} placeholder="Search customers and suppliers" value={q} onChange={(e) => setQ(e.target.value)} />
+          <div className="mt-2 divide-y divide-[#EFE8C8]">
+            {people.map((p) => (
+              <button key={`${p.kind}${p.id}`} className="w-full text-left py-3 flex justify-between" onClick={() => { setPicker(false); setComposer({ recipient: { kind: p.kind, id: p.id, name: p.name, phone: p.phone, email: p.email } }); }}>
+                <span className="font-medium text-[#23382B]">{p.name}</span><span className="text-xs text-[#8A8A70]">{p.kind === 'SUPPLIER' ? 'Supplier' : 'Customer'}</span>
+              </button>
             ))}
           </div>
-        )}
-      </section>
-
-      {/* History */}
-      <section>
-        <h2 className="font-bold text-slate-800 mb-3">Messages</h2>
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-              <tr>
-                <th className="text-left px-5 py-3">Date</th><th className="text-left px-5 py-3">Customer</th>
-                <th className="text-left px-5 py-3">Type</th><th className="text-left px-5 py-3">Message</th>
-                <th className="text-center px-5 py-3">Status</th><th className="text-right px-5 py-3">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {historyLoading && <tr><td colSpan={6} className="text-center py-8 text-slate-400"><Loader2 size={16} className="animate-spin inline mr-2" /> Loading…</td></tr>}
-              {!historyLoading && history.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-slate-400">No messages yet.</td></tr>}
-              {history.map(h => {
-                const meta = statusMeta(h);
-                const canReopen = h.channel === 'WHATSAPP' && h.status !== 'SENT';
-                return (
-                  <tr key={h.id}>
-                    <td className="px-5 py-3 whitespace-nowrap text-slate-500">{new Date(h.created_at).toLocaleString()}</td>
-                    {/* Phase 10: this history table is shared with supplier
-                        reminders sent from Payables (same lb_communication_log),
-                        so a row may have a supplier instead of a customer. */}
-                    <td className="px-5 py-3 text-slate-700">{h.customer?.name || h.supplier?.name}</td>
-                    <td className="px-5 py-3 text-slate-500 whitespace-nowrap">
-                      {h.message_type.replace(/_/g, ' ')}
-                      <span className="block text-[11px] text-slate-400">{h.channel === 'WHATSAPP' ? 'WhatsApp' : h.channel}</span>
-                    </td>
-                    <td className="px-5 py-3 text-slate-600 max-w-xs truncate">{h.rendered_message}</td>
-                    <td className="px-5 py-3 text-center">
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full whitespace-nowrap ${meta.bg}`}>
-                        <meta.Icon size={11} /> {meta.label}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right whitespace-nowrap">
-                      {canReopen && (
-                        <div className="inline-flex gap-2">
-                          <button type="button" onClick={() => reopen(h)} className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-emerald-800 hover:bg-emerald-50">
-                            Open WhatsApp
-                          </button>
-                          {h.status === 'OPENED' && (
-                            <button type="button" onClick={() => confirmSent(h.id, true)} className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-800 text-white hover:bg-emerald-900">
-                              I sent it
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        </Sheet>
+      )}
+      {composer && <MessageComposer {...composer} onRecorded={(row) => { if (composer.jobId) commEngineService.completeJob(composer.jobId, row.id).catch(() => {}); }} onClose={() => { setComposer(null); load(); }} />}
     </div>
   );
 }

@@ -16,6 +16,9 @@ export function useCapabilities() {
     welfare: hasRole(["welfare_officer", "secretary", "treasurer", "chairperson"]),
     accounts: hasRole(["treasurer", "chairperson"]),
     post: hasRole(["secretary", "chairperson"]),
+    record: hasRole(["treasurer"]),
+    approveFunds: ["chairperson", "chairman", "admin"].includes(String(member?.role || "").toLowerCase()),
+    reports: hasRole(["secretary", "treasurer", "chairperson"]),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [member?.role]);
 }
@@ -30,6 +33,7 @@ export async function loadWork(chamaId, can) {
   if (can.reconcile) jobs.push(count("chama_contribution_requests").eq("chama_id", chamaId).in("status", ["PENDING", "VERIFIED"]).then((r) => { work.contribsToCheck = n(r); }));
   if (can.disburse) jobs.push(count("chama_loans").eq("chama_id", chamaId).eq("disbursed", false).then((r) => { work.toDisburse = n(r); }));
   if (can.approveLoans) jobs.push(count("chama_loan_applications").eq("chama_id", chamaId).in("status", ["Pending", "Awaiting Approval"]).then((r) => { work.loanApps = n(r); }));
+  if (can.approveFunds) jobs.push(count("chama_fund_requests").eq("chama_id", chamaId).eq("status", "pending").then((r) => { work.fundsToApprove = n(r); }));
   if (can.members) jobs.push(count("chama_members").eq("chama_id", chamaId).eq("status", "pending").then((r) => { work.pendingMembers = n(r); }));
   if (can.welfare) jobs.push(count("welfare_cases").eq("chama_id", chamaId).eq("status", "open").then((r) => { work.openCases = n(r); }));
   await Promise.all(jobs);

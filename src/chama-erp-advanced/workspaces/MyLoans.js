@@ -4,7 +4,7 @@ import { useChama } from "../ChamaContext";
 import { HandCoins, AlertCircle, Clock } from "lucide-react";
 import useCachedQuery from "../shell/useCachedQuery";
 import { formatKES, formatDate } from "../shell/format";
-import { Spinner, StaleNote, Notice, EmptyState, Pill, ActionCard, CardGrid } from "../shell/ui";
+import { Spinner, StaleNote, Notice, EmptyState, Pill, ActionCard, CardGrid, Panel, SubCard, SubCardList } from "../shell/ui";
 
 // My Loans — loans that exist (chama_loans) with what is still owed. The
 // application form / application tracking stays in MemberLoanApplication.
@@ -37,30 +37,24 @@ export default function MyLoans({ go }) {
         <ActionCard icon={Clock} title="Loan applications" sub="See where your application is" action="View" onClick={() => go("loans/applications")} />
       </CardGrid>
 
-      {loans.length === 0 ? <EmptyState icon={HandCoins}>You have no loans.</EmptyState> : (
-        <ul className="cm-txns">
-          {loans.map((l) => (
-            <li key={l.id}>
-              <div>
-                <strong>{formatKES(l.amount)} loan</strong>
-                <small>
-                  {l.disbursed ? `Paid out ${formatDate(l.disbursement_date)}` : "Approved — waiting to be paid out"}
-                  {l.disbursed && l.status === "active" ? ` · ${formatKES(l.balance ?? l.amount)} still owed` : ""}
-                </small>
-              </div>
-              <Pill tone={l.status === "closed" ? "ok" : l.disbursed ? "gold" : "neutral"}>{l.status === "closed" ? "Fully repaid" : l.disbursed ? "Repaying" : "Waiting"}</Pill>
-            </li>
-          ))}
-        </ul>
-      )}
+      <Panel icon={HandCoins} title="My loans" badge={loans.length || ""} tone="green">
+        {loans.length === 0 ? <EmptyState icon={HandCoins}>You have no loans.</EmptyState> : (
+          <SubCardList>
+            {loans.map((l) => (
+              <SubCard key={l.id} tone={l.status === "closed" ? "ok" : l.disbursed ? "gold" : ""} title={`${formatKES(l.amount)} loan`}
+                sub={`${l.disbursed ? `Paid out ${formatDate(l.disbursement_date)}` : "Approved — waiting to be paid out"}${l.disbursed && l.status === "active" ? ` · ${formatKES(l.balance ?? l.amount)} still owed` : ""}`}
+                right={<Pill tone={l.status === "closed" ? "ok" : l.disbursed ? "gold" : "neutral"}>{l.status === "closed" ? "Fully repaid" : l.disbursed ? "Repaying" : "Waiting"}</Pill>} />
+            ))}
+          </SubCardList>
+        )}
+      </Panel>
 
       {repayments.length > 0 && (
-        <>
-          <h4 className="cm-subhead">Recent repayments</h4>
-          <ul className="cm-txns">
-            {repayments.map((r) => <li key={r.id}><div><strong>{formatKES(r.amount)}</strong><small>{formatDate(r.paid_on)}</small></div><span className="in">Paid</span></li>)}
-          </ul>
-        </>
+        <Panel icon={Clock} title="Recent repayments" badge={repayments.length} defaultOpen={false}>
+          <SubCardList>
+            {repayments.map((r) => <SubCard key={r.id} title={formatKES(r.amount)} sub={formatDate(r.paid_on)} right={<span className="cm-pill ok">Paid</span>} />)}
+          </SubCardList>
+        </Panel>
       )}
     </div>
   );

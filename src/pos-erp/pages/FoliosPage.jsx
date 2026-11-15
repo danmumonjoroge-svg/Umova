@@ -6,17 +6,20 @@
 // ("Charge to folio"); this page shows the bill, lets staff add a manual
 // charge or a discount, and settles it.
 //
+// Phase 54: payment is NOT taken here. "Settle account" opens the Sell page with this bill loaded, so every payment
+// (cash, card, M-Pesa code or M-Pesa prompt, split) is taken in one place. This page is the bill: add charges,
+// give a discount, print it.
+//
 // Layout: a list of open folios as cards; tap one for its bill (same
 // route, ?folio=<id>). Phone-first: one column, 48px targets, no tables.
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Printer, BookUser, Loader2 } from 'lucide-react';
 import { folioService } from '../services/folioService';
 import { customerService } from '../services/customerService';
 import { serviceDetailsService } from '../services/salonService';
 import { packageService } from '../services/packageService';
-import { useCashierShifts } from '../hooks/useCashierShifts';
 import { useCapabilities } from '../navigation/CapabilitiesContext';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { useNetStatus } from '../offline/useNetStatus';
@@ -24,7 +27,6 @@ import { WorkspacePage, SectionTitle, kes } from '../components/workspace/Worksp
 import Sheet, { fieldClass } from '../components/workspace/Sheet';
 import { printDocument } from '../utils/printDocument';
 import { buildFolioDocumentHtml } from '../utils/folioDocument';
-import { normalizeMpesaCode, isValidMpesaCode } from '../utils/mpesa';
 import { singleFlight } from '../utils/singleFlight';
 const newKey = () => `FL-${(window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)}`;
 
@@ -37,15 +39,16 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
   const { isOnline } = useNetStatus();
   const [folio, setFolio] = useState(null);
   const [error, setError] = useState('');
-  const [sheet, setSheet] = useState(null); // 'charge' | 'discount' | 'settle'
+  const [sheet, setSheet] = useState(null); // 'charge' | 'discount'
   const [busy, setBusy] = useState(false);
   const [services, setServices] = useState([]); // quick picks for "Add charge"
-  const { activeShift } = useCashierShifts(); // folio payments are tied to the open till shift when there is one
+  const navigate = useNavigate();
+  const goSettle = () => navigate(`/pos/sell?folio=${folioId}`); // one place takes payment: Sell
   const { enabled } = useCapabilities();
   const packagesOn = enabled.includes('packages');
   const [packages, setPackages] = useState([]);
   const [pkg, setPkg] = useState(null); // { pkg, qty } chosen in the charge sheet
-  const [form, setForm] = useState({ type: 'OTHER', description: '', quantity: '1', price: '', method: 'CASH', code: '' });
+  const [form, setForm] = useState({ type: 'OTHER', description: '', quantity: '1', price: '' });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   useEffect(() => {
     if (sheet !== 'charge' || services.length) return;
@@ -62,16 +65,16 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
     catch (err) { setError(err.message || 'Could not load this folio.'); }
   }, [folioId]);
   useEffect(() => { load(); }, [load]);
-  // Arriving from check-out (?settle=1): go straight to the settle sheet once the bill has loaded.
+  // Arriving from check-out (?settle=1): go straight to Sell with this bill once it has loaded.
   const settleOpened = React.useRef(false);
   const chargeKey = React.useRef(null); // idempotency key for the charge being added; the server ignores a repeat of the same key
   useEffect(() => {
-    if (openSettle && folio && folio.status === 'OPEN' && Number(folio.balance_due) > 0 && !settleOpened.current) { settleOpened.current = true; setSheet('settle'); }
+    if (openSettle && folio && folio.status === 'OPEN' && Number(folio.balance_due) > 0 && !settleOpened.current) { settleOpened.current = true; goSettle(); }
   }, [openSettle, folio]);
 
   const act = singleFlight('FoliosPage.act', async (fn) => {
     setBusy(true); setError('');
-    try { await fn(); chargeKey.current = null; setSheet(null); setForm((f) => ({ ...f, description: '', quantity: '1', price: '', code: '' })); await load(); }
+    try { await fn(); chargeKey.current = null; setSheet(null); setForm((f) => ({ ...f, description: '', quantity: '1', price: '' })); await load(); }
     catch (err) { setError(err.message || 'That did not work.'); }
     finally { setBusy(false); }
   });
@@ -84,16 +87,6 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
     try { printDocument(`${kind === 'receipt' ? 'Receipt' : 'Invoice'} ${folio.customer?.name || ''}`, buildFolioDocumentHtml(folio, kind)); }
     catch (err) { setError(err.message); }
   };
-
-  const settle = () => act(async () => {
-    const balance = Number(folio.balance_due);
-    if (form.method === 'MOBILE_MONEY') {
-      const code = normalizeMpesaCode(form.code);
-      if (!isValidMpesaCode(code)) throw new Error('Enter the M-Pesa code from the SMS (like SHK7X9ABCD).');
-      return folioService.settle({ folioId, settledBy: staffId, shiftId: activeShift?.id || null, tenantId: tenant?.id, payments: [{ payment_method: 'MOBILE_MONEY', amount: balance, reference_no: code }] });
-    }
-    return folioService.settle({ folioId, settledBy: staffId, shiftId: activeShift?.id || null, tenantId: tenant?.id, payments: [{ payment_method: form.method, amount: balance }] });
-  });
 
   return (
     <div>
@@ -152,8 +145,8 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
           <button onClick={() => setSheet('charge')} disabled={!isOnline} className="min-h-[48px] rounded-xl border border-[#DDE3DD] bg-white text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"><Plus size={16} /> Add charge</button>
           <button onClick={() => setSheet('discount')} disabled={!isOnline} className="min-h-[48px] rounded-xl border border-[#DDE3DD] bg-white text-sm font-semibold disabled:opacity-50">Give discount</button>
           <button onClick={() => print('invoice')} className="min-h-[48px] rounded-xl border border-[#DDE3DD] bg-white text-sm font-semibold flex items-center justify-center gap-1.5"><Printer size={16} /> Print bill</button>
-          <button onClick={() => setSheet('settle')} disabled={!isOnline || Number(folio.balance_due) <= 0}
-            className="min-h-[48px] rounded-xl bg-[#237A52] hover:bg-[#1B5138] text-white text-sm font-bold disabled:opacity-50">Settle account</button>
+          <button onClick={goSettle} disabled={!isOnline || Number(folio.balance_due) <= 0}
+            className="min-h-[48px] rounded-xl bg-[#237A52] hover:bg-[#1B5138] text-white text-sm font-bold disabled:opacity-50">Settle on Sell</button>
         </>) : (<>
           <button onClick={() => print('invoice')} className="min-h-[48px] rounded-xl border border-[#DDE3DD] bg-white text-sm font-semibold flex items-center justify-center gap-1.5"><Printer size={16} /> Invoice</button>
           <button onClick={() => print('receipt')} className="min-h-[48px] rounded-xl bg-[#237A52] text-white text-sm font-bold flex items-center justify-center gap-1.5"><Printer size={16} /> Receipt</button>
@@ -212,21 +205,6 @@ function FolioBill({ folioId, onBack, openSettle = false }) {
             <button disabled={busy || !form.description.trim() || !(Number(form.price) > 0)} onClick={() => act(() => folioService.addAdjustment({ folioId, description: form.description, amount: Number(form.price), createdBy: staffId }))}
               className="w-full min-h-[48px] rounded-xl bg-[#237A52] text-white font-bold disabled:opacity-50">{busy ? 'Saving…' : 'Take off the bill'}</button>
           </div>
-        </Sheet>
-      )}
-      {sheet === 'settle' && (
-        <Sheet title={`Settle · ${kes(folio.balance_due)}`} onClose={() => setSheet(null)}>
-          <p className="text-sm text-[#68756D] mb-3">One payment clears the whole account. You get one invoice and one receipt.</p>
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            {METHODS.map(([k, l]) => (
-              <button key={k} onClick={() => setForm((f) => ({ ...f, method: k }))} aria-pressed={form.method === k}
-                className={`min-h-[48px] rounded-xl text-sm font-semibold border ${form.method === k ? 'bg-[#237A52] text-white border-[#237A52]' : 'bg-white border-[#DDE3DD]'}`}>{l}</button>
-            ))}
-          </div>
-          {form.method === 'MOBILE_MONEY' && (
-            <input className={`${field} font-mono tracking-wider mb-3`} placeholder="M-Pesa code from the SMS" maxLength={12} autoCapitalize="characters" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: normalizeMpesaCode(e.target.value) }))} />
-          )}
-          <button disabled={busy} onClick={settle} className="w-full min-h-[52px] rounded-xl bg-[#237A52] hover:bg-[#1B5138] text-white font-bold disabled:opacity-50">{busy ? 'Settling…' : `Settle KES ${Number(folio.balance_due).toLocaleString()}`}</button>
         </Sheet>
       )}
     </div>

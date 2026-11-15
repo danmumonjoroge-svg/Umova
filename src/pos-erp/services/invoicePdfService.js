@@ -1,9 +1,10 @@
 // src/pos-erp/services/invoicePdfService.js
 // Builds a real PDF document (text + drawn table) from invoiceService.getDetail() data —
 // not a screenshot of the UI. Requires the `jspdf` package (npm i jspdf).
+import { savePdf } from '../utils/reportPdf';
 import { jsPDF } from 'jspdf';
 
-const money = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { maximumFractionDigits: 2 })}`;
+const money = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const day = (d) => (d ? new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 /** [label, value] rows for the HOW TO PAY block. Only what the owner has actually entered; a label of '' = free text. */
 export function paymentLines({ payInfo = {}, mpesa, invoice, business }) {
@@ -63,13 +64,18 @@ export function buildInvoicePdf({ invoice, lines, payments, customer, unit, busi
   lines.forEach((l, i) => {
     ensure(9);
     if (i % 2) { doc.setFillColor(247, 246, 240); doc.rect(M, y, W - 2 * M, 8, 'F'); }
-    text(l.charge?.charge_name || 'Charge', M + 3, y + 5.3); text(money(l.amount), W - M - 3, y + 5.3, { align: 'right' }); y += 8;
+    const shown = !l.tax_inclusive && Number(l.tax_amount) > 0 ? l.net_amount : l.amount; // tax added on top: line shows the price before tax
+    text(l.charge?.charge_name || 'Charge', M + 3, y + 5.3); text(money(shown), W - M - 3, y + 5.3, { align: 'right' }); y += 8;
   });
   y += 4;
 
   // totals
   const paid = Number(invoice.paid_amount || 0), due = Number(invoice.balance_due || 0), prev = Number(invoice.previous_balance || 0);
-  const rows = [['Invoice total', money(invoice.total_amount)]];
+  const taxTotal = Number(invoice.tax_total || 0), taxPct = Number(invoice.tax_rate || 0);
+  const rows = [];
+  if (taxTotal > 0 && invoice.tax_inclusive === false) rows.push(['Subtotal', money(invoice.subtotal_amount)], [`Tax (${taxPct}%)`, money(taxTotal)]);
+  rows.push(['Invoice total', money(invoice.total_amount)]);
+  if (taxTotal > 0 && invoice.tax_inclusive !== false) rows.push([`Includes tax (${taxPct}%)`, money(taxTotal)]);
   if (prev > 0) rows.unshift(['Previous balance', money(prev)]);
   if (paid > 0) rows.push(['Payments received', `− ${money(paid)}`]);
   rows.push(['Amount due now', money(due)]);
@@ -124,13 +130,14 @@ export function buildReceiptPdf({ invoice, customer, unit, business, logo }, pay
   });
   y += 2; doc.setFillColor(247, 246, 240); doc.rect(M, y, W - 2 * M, 12, 'F');
   text('Amount received', M + 3, y + 7.5, { bold: true }); text(money(payment.amount), W - M - 3, y + 7.5, { bold: true, size: 12, color: green, align: 'right' }); y += 18;
+  if (Number(payment.tax_amount) > 0) { text(`Of this, tax (${Number(invoice.tax_rate || 0)}%): ${money(payment.tax_amount)}`, M, y, { size: 9, color: grey }); y += 5; }
   text(`Invoice balance after this payment: ${money(invoice.balance_due)}`, M, y, { size: 9, color: grey });
   text('Thank you.', M, 138, { size: 9, color: grey });
   return { doc, filename: `${payment.receipt_number || 'receipt'}.pdf` };
 }
-export const downloadReceiptPdf = (detail, payment) => { const { doc, filename } = buildReceiptPdf(detail, payment); doc.save(filename); };
+export const downloadReceiptPdf = (detail, payment) => { const { doc, filename } = buildReceiptPdf(detail, payment); savePdf(doc, filename).catch(() => {}); };
 
-export const downloadInvoicePdf = (detail) => { const { doc, filename } = buildInvoicePdf(detail); doc.save(filename); };
+export const downloadInvoicePdf = (detail) => { const { doc, filename } = buildInvoicePdf(detail); savePdf(doc, filename).catch(() => {}); };
 
 /** Prints the real PDF through a hidden iframe (browser print dialog; "Save as PDF" also lives there). */
 export function printInvoicePdf(detail) {

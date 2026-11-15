@@ -51,4 +51,26 @@ export const supabase = createClient(
   }
 );
 
+/**
+ * Chama client.
+ *
+ * Chama users sign in with phone + password, then the chama-session edge
+ * function turns that into a real Supabase session that carries chama_id /
+ * member_id / chama_role. It uses its OWN storage key so it never overwrites
+ * (or is overwritten by) the SACCO / My Business session in this browser.
+ */
+export const chamaSupabase = createClient(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    auth: {
+      storage: window.localStorage,
+      storageKey: "umova-chama-auth",
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+    },
+  }
+);
+
 export default supabase;

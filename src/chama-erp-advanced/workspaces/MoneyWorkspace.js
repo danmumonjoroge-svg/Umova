@@ -1,5 +1,5 @@
 import React from "react";
-import { PiggyBank, TrendingUp, HeartHandshake, Send, FileText, HandCoins, ScanSearch, Building2, Wallet, BarChart3 } from "lucide-react";
+import { PiggyBank, TrendingUp, HeartHandshake, Send, FileText, HandCoins, ScanSearch, Building2, Wallet, BarChart3, UserCheck, ClipboardList, ArrowLeftRight, Briefcase } from "lucide-react";
 import { formatKES } from "../shell/format";
 import { useCapabilities, useMine, useWork } from "../shell/work";
 import { ActionCard, CardGrid, SectionTitle, WorkspaceHeader, StaleNote } from "../shell/ui";
@@ -13,7 +13,7 @@ export default function MoneyWorkspace({ go }) {
   const { work } = useWork();
   const me = mine.data?.me;
   const owed = mine.data?.owed || 0;
-  const officialMoney = can.reconcile || can.accounts;
+  const officialMoney = can.reconcile || can.accounts || can.reports;
 
   const memberSection = (
     <React.Fragment key="m">
@@ -33,10 +33,14 @@ export default function MoneyWorkspace({ go }) {
     <React.Fragment key="o">
       <SectionTitle>Chama money</SectionTitle>
       <CardGrid>
+        {can.record && <ActionCard icon={UserCheck} title="Record for a member" sub="Cash or payments from members without a phone" action="Record" onClick={() => go("money/record")} />}
         {can.reconcile && <ActionCard icon={ScanSearch} title="Contributions to check" value={work.contribsToCheck ?? "…"} sub="waiting for you" action="Check" tone={work.contribsToCheck > 0 ? "warn" : ""} onClick={() => go("money/reconciliation")} />}
         {can.accounts && <ActionCard icon={Building2} title="Chama accounts" sub="Bank & M-Pesa accounts" action="Open" onClick={() => go("money/accounts")} />}
+        {can.accounts && <ActionCard icon={ArrowLeftRight} title="Move money" sub="Transfers, expenses, project payments" value={can.approveFunds ? (work.fundsToApprove ?? "…") : undefined} action={can.approveFunds ? "Approve" : "Open"} tone={work.fundsToApprove > 0 ? "warn" : ""} onClick={() => go("money/move")} />}
+        {can.accounts && <ActionCard icon={Briefcase} title="Projects" sub="Investments and businesses" action="Open" onClick={() => go("money/projects")} />}
         {can.reconcile && <ActionCard icon={HandCoins} title="Loan collections" sub="Record loan repayments" action="Open" onClick={() => go("loans/repayments")} />}
         {can.welfare && <ActionCard icon={HeartHandshake} title="Welfare funds" sub="Fund position & insights" action="View" onClick={() => go("welfare/insights")} />}
+        {can.reports && <ActionCard icon={ClipboardList} title="Group report" sub="Savings, loan book, fines, welfare" action="Open" onClick={() => go("money/group-report")} />}
         {can.accounts && <ActionCard icon={BarChart3} title="Financial information" sub="Totals across the Chama" action="View" onClick={() => go("money/finances")} />}
         {can.approveLoans && !can.reconcile && <ActionCard icon={Wallet} title="Loans" sub="Applications and payouts" action="Open" onClick={() => go("loans")} />}
       </CardGrid>

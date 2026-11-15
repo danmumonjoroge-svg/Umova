@@ -1,10 +1,10 @@
 import React from "react";
 import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
-import { Phone, MessageCircle, FileText, AlertCircle, Lock } from "lucide-react";
+import { Phone, MessageCircle, FileText, AlertCircle, Lock, Wallet, History, IdCard } from "lucide-react";
 import useCachedQuery from "../shell/useCachedQuery";
 import { formatKES, formatDate, initials, roleLabel } from "../shell/format";
-import { Spinner, StaleNote, Notice, ActionCard, SectionTitle, Pill, EmptyState } from "../shell/ui";
+import { Spinner, StaleNote, Notice, ActionCard, Panel, Stat, StatGrid, SubCard, SubCardList, Pill, EmptyState } from "../shell/ui";
 
 // -----------------------------------------------------------------------------
 // MemberProfile — what you see depends on who you are:
@@ -76,32 +76,37 @@ export default function MemberProfile({ memberId, go }) {
         </div>
       )}
 
-      {isOfficial && m.national_id && <div className="cm-kv"><div><span>National ID</span><strong>{m.national_id}</strong></div></div>}
+      {isOfficial && m.national_id && (
+        <Panel icon={IdCard} title="Details" collapsible={false}>
+          <StatGrid cols={2}><Stat label="National ID" value={m.national_id} /></StatGrid>
+        </Panel>
+      )}
 
       {!seeMoney ? (
         <Notice icon={Lock}>Savings, loans and contributions are private to each member and the Chama officials.</Notice>
       ) : (
         <>
-          <SectionTitle>Money</SectionTitle>
-          <div className="cm-kv">
-            <div><span>Savings</span><strong>{formatKES(m.savings_balance)}</strong></div>
-            <div><span>Shares</span><strong>{formatKES(m.shares_balance)}</strong></div>
-            <div><span>Welfare</span><strong>{formatKES(m.welfare_balance)}</strong></div>
-            <div><span>Loan owed</span><strong>{owed > 0 ? formatKES(owed) : "None"}</strong></div>
-          </div>
-          <ActionCard icon={FileText} title={isSelf ? "My statement" : `${m.name.split(" ")[0]}'s statement`} sub="Everything paid in and out" action="Open statement" onClick={() => go(isSelf ? "money/statement" : `money/statement?member=${m.id}`)} />
+          <Panel icon={Wallet} title="Money" tone="green">
+            <StatGrid>
+              <Stat label="Savings" value={formatKES(m.savings_balance)} />
+              <Stat label="Shares" value={formatKES(m.shares_balance)} />
+              <Stat label="Welfare" value={formatKES(m.welfare_balance)} />
+              <Stat label="Loan owed" value={owed > 0 ? formatKES(owed) : "None"} tone={owed > 0 ? "gold" : ""} />
+            </StatGrid>
+            <div style={{ marginTop: 10 }}>
+              <ActionCard icon={FileText} title={isSelf ? "My statement" : `${m.name.split(" ")[0]}'s statement`} sub="Everything paid in and out" action="Open statement" onClick={() => go(isSelf ? "money/statement" : `money/statement?member=${m.id}`)} />
+            </div>
+          </Panel>
 
-          <SectionTitle>Recent contributions</SectionTitle>
-          {history.length === 0 ? <EmptyState>No contributions recorded.</EmptyState> : (
-            <ul className="cm-txns">
-              {history.map((h) => (
-                <li key={h.id}>
-                  <div><strong>{formatKES(h.amount)} · {h.contribution_type === "loan_repayment" ? "Loan repayment" : h.contribution_type}</strong><small>{formatDate(h.contributed_on)}</small></div>
-                  <Pill tone={REQ_TONE[h.status] || "neutral"}>{REQ_LABEL[h.status] || h.status}</Pill>
-                </li>
-              ))}
-            </ul>
-          )}
+          <Panel icon={History} title="Recent contributions" badge={history.length || ""} defaultOpen={history.length > 0}>
+            {history.length === 0 ? <EmptyState>No contributions recorded.</EmptyState> : (
+              <SubCardList>
+                {history.map((h) => (
+                  <SubCard key={h.id} title={`${formatKES(h.amount)} · ${h.contribution_type === "loan_repayment" ? "Loan repayment" : h.contribution_type}`} sub={formatDate(h.contributed_on)} right={<Pill tone={REQ_TONE[h.status] || "neutral"}>{REQ_LABEL[h.status] || h.status}</Pill>} />
+                ))}
+              </SubCardList>
+            )}
+          </Panel>
         </>
       )}
     </div>

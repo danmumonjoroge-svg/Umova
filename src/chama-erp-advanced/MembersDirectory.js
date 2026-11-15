@@ -5,6 +5,7 @@ import {
   Search, Users, Phone, IdCard, Wallet, CheckCircle, XCircle, Clock,
   ShieldAlert, X, Loader2, UserCheck, UserX, Pencil, UserPlus, AlertCircle,
 } from "lucide-react";
+import { Panel } from "./shell/ui";
 import "./MembersDirectory.css";
 
 // -----------------------------------------------------------------------------
@@ -230,6 +231,7 @@ export default function MembersDirectory({ chamaId: chamaIdProp, onSelectMember,
       ) : filtered.length === 0 ? (
         <div className="mdr-empty"><Users size={22} /><p>No members match.</p></div>
       ) : (
+        <Panel icon={Users} title="Members" badge={filtered.length} tone="green" collapsible={false}>
         <div className="mdr-grid">
           {filtered.map((m) => {
             const meta = STATUS_META[m.status || "active"] || STATUS_META.active;
@@ -279,6 +281,7 @@ export default function MembersDirectory({ chamaId: chamaIdProp, onSelectMember,
             );
           })}
         </div>
+        </Panel>
       )}
 
       {editing && (

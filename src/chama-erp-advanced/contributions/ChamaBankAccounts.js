@@ -2,6 +2,8 @@ import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
 import { Landmark, PlusCircle, Lock, Loader2, Power } from "lucide-react";
+import { formatKES } from "../shell/format";
+import { Panel, SubCard, SubCardList, StatGrid, Stat } from "../shell/ui";
 import "./ChamaBankAccounts.css";
 
 // -----------------------------------------------------------------------------
@@ -16,11 +18,13 @@ import "./ChamaBankAccounts.css";
 const emptyForm = { account_name: "", account_type: "bank", account_number: "", provider: "", opening_balance: "" };
 
 export default function ChamaBankAccounts({ chamaId: chamaIdProp }) {
-  const { chama, hasRole } = useChama();
+  const { chama, member, hasRole } = useChama();
   const chamaId = chamaIdProp || chama?.id;
   const canManage = hasRole(["treasurer", "chairperson", "admin"]);
 
   const [accounts, setAccounts] = useState([]);
+  const [balances, setBalances] = useState({});
+  const [unassigned, setUnassigned] = useState(null);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -31,8 +35,21 @@ export default function ChamaBankAccounts({ chamaId: chamaIdProp }) {
     setLoading(true);
     const { data } = await supabase.from("chama_bank_accounts").select("*").eq("chama_id", chamaId).order("created_at", { ascending: true });
     setAccounts(data || []);
+    // Each account's own balance: opening balance + money in - money out, worked out by the database.
+    if (member?.id) {
+      const { data: bal } = await supabase.rpc("chama_account_balances", { p_chama_id: chamaId, p_requester: member.id });
+      if (bal) {
+        setBalances(Object.fromEntries((bal.accounts || []).map((b) => [b.id, b])));
+        setUnassigned(bal.unassigned && bal.unassigned.count > 0 ? bal.unassigned : null);
+        // the cash account is created by the database on first use, so reload the list if it is new
+        if ((bal.accounts || []).some((b) => !(data || []).some((a) => a.id === b.id))) {
+          const again = await supabase.from("chama_bank_accounts").select("*").eq("chama_id", chamaId).order("created_at", { ascending: true });
+          setAccounts(again.data || []);
+        }
+      }
+    }
     setLoading(false);
-  }, [chamaId]);
+  }, [chamaId, member?.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -120,19 +137,37 @@ export default function ChamaBankAccounts({ chamaId: chamaIdProp }) {
       ) : accounts.length === 0 ? (
         <p className="cba-empty">No accounts configured yet.</p>
       ) : (
-        <div className="cba-list">
-          {accounts.map((a) => (
-            <div className={`cba-row ${!a.is_active ? "inactive" : ""}`} key={a.id}>
-              <div>
-                <strong>{a.account_name}</strong>
-                <span>{a.provider} {a.account_number ? `· ${a.account_number}` : ""} · {a.account_type}</span>
-              </div>
-              <button className="cba-toggle" onClick={() => toggleActive(a)}>
-                <Power size={13} /> {a.is_active ? "Active" : "Disabled"}
-              </button>
-            </div>
-          ))}
-        </div>
+        <>
+          {unassigned && (
+            <p className="cba-unassigned">
+              Older entries not tied to an account: in {formatKES(unassigned.paid_in)}, out {formatKES(unassigned.paid_out)} ({unassigned.count} entries). They are not in any balance above.
+            </p>
+          )}
+          <Panel icon={Landmark} title="Accounts" badge={accounts.length} tone="green" collapsible={false}>
+            <SubCardList>
+              {accounts.map((a) => (
+                <SubCard key={a.id} tone={a.is_active ? "gold" : ""} title={a.account_name}
+                  sub={`${a.provider || ""}${a.account_number ? ` · ${a.account_number}` : ""} · ${a.account_type === "cash" ? "cash in hand" : a.account_type}`}
+                  value={balances[a.id] ? formatKES(balances[a.id].balance) : undefined}>
+                  {balances[a.id] && (
+                    <StatGrid cols={3}>
+                      <Stat label="Paid in" value={formatKES(balances[a.id].paid_in)} />
+                      <Stat label="Paid out" value={formatKES(balances[a.id].paid_out)} />
+                      <Stat label="Opened with" value={formatKES(balances[a.id].opening || 0)} />
+                    </StatGrid>
+                  )}
+                  {a.account_type !== "cash" && (
+                    <span className="cm-sub-actions">
+                      <button className="cba-toggle" onClick={() => toggleActive(a)}>
+                        <Power size={13} /> {a.is_active ? "Active" : "Disabled"}
+                      </button>
+                    </span>
+                  )}
+                </SubCard>
+              ))}
+            </SubCardList>
+          </Panel>
+        </>
       )}
     </div>
   );

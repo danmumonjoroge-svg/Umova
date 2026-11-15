@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import logo from "../asset/logo/umovalogo.png";
+import { savePdf } from "./saveFile";
 
 const ACC = {
   SAVINGS: 1018,
@@ -21,7 +22,8 @@ const format = (v) =>
     maximumFractionDigits: 2,
   });
 
-export const generateStatementPDF = (member, ledger = []) => {
+// Async: resolves once the file is saved (browser) or the share sheet has been opened (phone app).
+export const generateStatementPDF = async (member, ledger = []) => {
   const doc = new jsPDF();
 
   let y = 20;
@@ -335,5 +337,5 @@ export const generateStatementPDF = (member, ledger = []) => {
 
   drawFooter();
 
-  doc.save(`STATEMENT_${member?.member_no || "UNKNOWN"}.pdf`);
+  return savePdf(doc, `STATEMENT_${member?.member_no || "UNKNOWN"}.pdf`);
 };

@@ -38,6 +38,10 @@
 //   Inventory Value = SUM(lb_inventory.quantity * average_cost)
 //   Accounts Receivable = SUM(lb_customers.outstanding_balance) + open folio balances (phase19)
 //   Accounts Payable = SUM(lb_suppliers.outstanding_balance)
+//   Loans (phase37) = principal still to repay on active loans. Cash & Bank also moves: + loan money received after the app was
+//     used, - principal repaid through the app. Interest and fees are ordinary PAID expenses (category "Loan Interest & Charges"),
+//     so the cash estimate and the income statement already count them -- they are NOT counted again here. Repaying principal
+//     is not an expense and never changes profit.
 //   Owner's Equity = Assets - Liabilities (a PLUG, not a tracked figure —
 //     there is no capital-contributions/drawings ledger in this schema,
 //     so equity can only ever be "whatever balances the sheet", labeled
@@ -45,6 +49,7 @@
 
 import { posSupabase as supabase } from './posSupabaseClient';
 import { assetService } from './assetService';
+import { loanService } from './loanService';
 
 const NON_CASH_METHODS = new Set(['CREDIT']);
 
@@ -202,7 +207,9 @@ export const financialReportsService = {
       cashIn += Number(p.amount);
     }
 
-    const cashAndBank = cashIn - cashOut;
+    // Loans (phase37): borrowed money received adds cash; principal repaid takes it away. Zeros if loans are not installed.
+    const loanTotals = await loanService.getTotals({ businessId });
+    const cashAndBank = cashIn - cashOut + loanTotals.receivedInApp - loanTotals.principalRepaid;
 
     // --- Inventory value ---
     let invQuery = supabase.from('lb_inventory').select('quantity, average_cost').eq('tenant_id', tenantId);
@@ -244,13 +251,14 @@ export const financialReportsService = {
     const fixedAssets = assetSummary.netBookValue;
 
     const totalAssets = cashAndBank + inventoryValue + accountsReceivable + fixedAssets;
-    const totalLiabilities = accountsPayable;
+    const loansOwed = loanTotals.outstandingPrincipal;
+    const totalLiabilities = accountsPayable + loansOwed;
     const ownersEquity = totalAssets - totalLiabilities; // plug — see header note
 
     return {
       asOf: new Date().toISOString().slice(0, 10),
       assets: { cashAndBank, inventoryValue, accountsReceivable, fixedAssets, total: totalAssets },
-      liabilities: { accountsPayable, total: totalLiabilities },
+      liabilities: { accountsPayable, loans: loansOwed, total: totalLiabilities },
       equity: { ownersEquity, total: ownersEquity },
     };
   },

@@ -1,0 +1,1 @@
+export const productService = { getAll: async () => ({ data: [{ id: '00000000-0000-0000-0000-0000000000c7', name: 'Race Item', image_url: null, wholesale_price: null, selling_price: 9 }], count: 1 }) };

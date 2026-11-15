@@ -53,7 +53,21 @@ async function getAccessToken(baseUrl: string, consumerKey: string, consumerSecr
   return data.access_token;
 }
 
+// Browsers send an OPTIONS "preflight" before calling a function from the app. Without an OK answer to it (and these headers on every
+// reply) the call is blocked with "CORS policy ... does not have HTTP ok status" and nothing ever reaches the code below.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+const withCors = (res: Response) => { Object.entries(CORS).forEach(([k, v]) => res.headers.set(k, v)); return res; };
+
 serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers: CORS });
+  return withCors(await handle(req));
+});
+
+async function handle(req: Request): Promise<Response> {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   try {
@@ -69,11 +83,11 @@ serve(async (req) => {
     });
 
     const body = await req.json();
-    const { businessId, tenantId, phone, cartSnapshot, customerId, shiftId, requestedBy, rentInvoiceId } = body;
+    const { businessId, tenantId, phone, cartSnapshot, customerId, shiftId, requestedBy, rentInvoiceId, folioId } = body;
     let { amount } = body;
 
-    if (!businessId || !tenantId || !phone || !amount || (!cartSnapshot?.length && !rentInvoiceId)) {
-      return new Response(JSON.stringify({ error: "businessId, tenantId, phone, amount, and a cart or an invoice are required." }), { status: 400 });
+    if (!businessId || !tenantId || !phone || !amount || (!cartSnapshot?.length && !rentInvoiceId && !folioId)) {
+      return new Response(JSON.stringify({ error: "businessId, tenantId, phone, amount, and a cart, an invoice or a folio are required." }), { status: 400 });
     }
 
     // Rent invoice: the amount is checked against the DATABASE, never trusted from the browser.
@@ -93,6 +107,40 @@ serve(async (req) => {
       const { data: live } = await supabase.from("lb_mpesa_transactions").select("id").eq("rent_invoice_id", rentInvoiceId).eq("status", "PENDING").limit(1);
       if (live?.length) return new Response(JSON.stringify({ error: "A payment prompt for this invoice is already waiting on the customer's phone." }), { status: 409 });
       invoiceNumber = inv.invoice_number;
+    }
+
+    // Folio (phase54): a customer's running bill settled from the Sell page. The amount is the folio's balance read from
+    // the DATABASE; the browser's number is only checked against it. A prompt pays the WHOLE bill (settle_folio takes
+    // payments that add up to the balance), so a balance with cents cannot be paid by prompt.
+    let folioNumber = "";
+    if (folioId) {
+      const { data: fol } = await supabase.from("lb_folio_summary")
+        .select("id, folio_number, status, balance_due, business_id")
+        .eq("id", folioId).eq("business_id", businessId).maybeSingle();
+      if (!fol) return new Response(JSON.stringify({ error: "Folio not found for this business." }), { status: 404 });
+      if (fol.status !== "OPEN") return new Response(JSON.stringify({ error: `This folio is already ${String(fol.status).toLowerCase()}.` }), { status: 409 });
+      const bal = Number(fol.balance_due);
+      if (!(bal >= 1) || Math.abs(bal - Math.round(bal)) > 0.005) {
+        return new Response(JSON.stringify({ error: `The folio balance is KES ${bal}. M-Pesa prompts work in whole shillings: enter the M-Pesa code instead, or adjust the bill.` }), { status: 400 });
+      }
+      if (Math.abs(Number(amount) - bal) > 0.5) {
+        return new Response(JSON.stringify({ error: `The amount does not match the folio balance (KES ${bal}). Refresh and try again.` }), { status: 400 });
+      }
+      amount = Math.round(bal);
+      const { data: live } = await supabase.from("lb_mpesa_transactions").select("id").eq("folio_id", folioId).eq("status", "PENDING").limit(1);
+      if (live?.length) return new Response(JSON.stringify({ error: "A payment prompt for this folio is already waiting on the customer's phone." }), { status: 409 });
+      folioNumber = fol.folio_number;
+    }
+
+    // POS cart: the amount is checked against the cart the request carries, never trusted on its own. (The confirmed
+    // sale is later built from this same snapshot, so a total that disagrees with it would record a sale for one
+    // amount and take another.) Rounded to whole shillings, the same way the STK request itself is.
+    if (cartSnapshot?.length && !rentInvoiceId && !folioId) {
+      const cartTotal = cartSnapshot.reduce((s: number, i: any) =>
+        s + Number(i.quantity) * Number(i.unit_price) - Number(i.discount_amount || 0), 0);
+      if (!Number.isFinite(cartTotal) || Math.abs(cartTotal - Number(amount)) > 0.5 || Math.abs(Number(amount) - Math.round(Number(amount))) > 0.005) {
+        return new Response(JSON.stringify({ error: "The amount does not match the items in this sale. Refresh the sale and try again." }), { status: 400 });
+      }
     }
 
     // Phone must already be normalised 2547XXXXXXXX by the caller
@@ -152,8 +200,8 @@ serve(async (req) => {
         PartyB: config.shortcode,
         PhoneNumber: phone,
         CallBackURL: CALLBACK_URL,
-        AccountReference: invoiceNumber ? invoiceNumber.slice(-12) : "Umova",
-        TransactionDesc: invoiceNumber ? `Rent ${invoiceNumber}`.slice(0, 13) : "Umova sale payment",
+        AccountReference: invoiceNumber ? invoiceNumber.slice(-12) : folioNumber ? folioNumber.slice(-12) : "Umova",
+        TransactionDesc: invoiceNumber ? `Rent ${invoiceNumber}`.slice(0, 13) : folioNumber ? "Folio payment" : "Umova sale payment",
       }),
     });
 
@@ -164,7 +212,13 @@ serve(async (req) => {
       // phone at their end, etc.) — nothing was sent to the customer's
       // phone, so nothing is recorded as PENDING. Section 43: don't
       // record a request that never actually reached the customer.
-      return new Response(JSON.stringify({ error: stkData.errorMessage || stkData.ResponseDescription || "Daraja rejected the STK request." }), { status: 502 });
+      // Logged (never the keys, passkey or token) so the Supabase function log shows what Safaricom said and which mode was used.
+      console.error("[mpesa-stk-push] Daraja refused the STK request", JSON.stringify({ environment: config.environment, shortcode: config.shortcode, httpStatus: stkRes.status, daraja: stkData }));
+      const raw = stkData.errorMessage || stkData.ResponseDescription || "Daraja rejected the STK request.";
+      const hint = /invalid access token/i.test(raw)
+        ? ` Safaricom did not accept the keys for ${config.environment === "production" ? "LIVE" : "TEST (sandbox)"} mode. Check that the mode matches where the keys came from, and that the Daraja app has M-Pesa Express (STK Push) enabled.`
+        : "";
+      return new Response(JSON.stringify({ error: raw + hint }), { status: 502 });
     }
 
     // Only now — after Safaricom has actually accepted the request and
@@ -178,8 +232,9 @@ serve(async (req) => {
         customer_id: customerId ?? null,
         phone,
         amount: Number(amount),
-        cart_snapshot: cartSnapshot?.length ? cartSnapshot : null,
+        cart_snapshot: cartSnapshot?.length && !folioId ? cartSnapshot : null,
         rent_invoice_id: rentInvoiceId ?? null,
+        folio_id: folioId ?? null,
         merchant_request_id: stkData.MerchantRequestID,
         checkout_request_id: stkData.CheckoutRequestID,
         status: "PENDING",
@@ -195,4 +250,4 @@ serve(async (req) => {
     console.error("[mpesa-stk-push]", err);
     return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500 });
   }
-});
+}

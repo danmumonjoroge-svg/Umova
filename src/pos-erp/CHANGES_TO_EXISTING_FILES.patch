@@ -1,0 +1,162 @@
+--- pos-erp/navigation/navConfig.js	2026-10-22 15:51:30.000000000 +0000
++++ /home/claude/proj/pos-erp/navigation/navConfig.js	2026-10-27 01:16:59.342552991 +0000
+@@ -22,7 +22,7 @@
+   LayoutDashboard, ShoppingCart, ShoppingBag, Package, Boxes, Truck, Users, UserRound,
+   Wallet, Receipt, Building2, Home, Repeat, Gauge, FileText, Wrench, Scissors, CalendarClock, MessageSquare,
+   Settings, ShieldCheck, Landmark, Smartphone, BarChart3, FileBarChart, HardHat, ClipboardList,
+-  Bell, UserCog, RotateCcw, Calculator, Briefcase, ClipboardCheck, Banknote, MoreHorizontal, BookUser, BedDouble, DoorOpen, Dumbbell, Factory, ChefHat,
++  Search, Store, Bell, UserCog, RotateCcw, Calculator, Briefcase, ClipboardCheck, Banknote, MoreHorizontal, BookUser, BedDouble, DoorOpen, Dumbbell, Factory, ChefHat,
+ } from 'lucide-react';
+ 
+ // `optIn: true` -- a capability that is NEVER on just because the owner hasn't chosen yet. Existing
+@@ -33,6 +33,11 @@
+ const RETAIL_PERMS = ['products.manage', 'inventory.view', 'inventory.scan', 'inventory.receive', 'inventory.adjust', 'inventory.stocktake', 'inventory.transfer', 'purchases.create'];
+ const MONEY_PERMS = ['finance.view', 'balances.view', 'expenses.record', 'reports.export'];
+ const PEOPLE_PERMS = ['sales.view', 'sales.create', 'balances.view', 'payments.record'];
++// My Business Network reuses these existing keys (no new permission keys): publish = products.manage, order = purchases.create,
++// receive = inventory.receive, answer/dispatch incoming = sales.create. The database enforces them; this only decides what to show.
++const NETWORK_PERMS = ['products.manage', 'purchases.create', 'inventory.receive', 'sales.view', 'sales.create'];
++const NETWORK_FIND_PERMS = ['purchases.create', 'inventory.view'];
++const NETWORK_ORDER_PERMS = ['purchases.create', 'inventory.receive', 'sales.view', 'sales.create'];
+ 
+ export const CAPABILITIES = {
+   retail: { label: 'Retail', hint: 'Sell items and manage stock, suppliers and purchases' },
+@@ -43,6 +48,7 @@
+   production: { label: 'Production', hint: 'Make things from your materials: bakery, butchery, kitchen, juice. See yield, wastage and real cost', optIn: true },
+   packages: { label: 'Packages', hint: 'Sell a bundle at one price (Family Package, Bed & Breakfast). Needs Customer Folios', optIn: true, requires: ['folios'] },
+   efficiency: { label: 'How we are doing', hint: 'Occupancy, guest spend, yield and wastage, worked out from your real records', optIn: true },
++  network: { label: 'My Business Network', hint: 'Find stock from other businesses, order it, and sell to them. You choose what you publish', optIn: true },
+   rooms: { label: 'Rooms & Stays', hint: 'Rooms, bookings, check-in and check-out. Each guest gets one bill (turns on Customer Folios too)', optIn: true, requires: ['folios'] },
+ };
+ 
+@@ -82,6 +88,16 @@
+     ],
+   },
+   {
++    key: 'network', perm: NETWORK_PERMS, label: 'Network', icon: Store, to: '/pos/network', capability: 'network',
++    blurb: 'Find stock from suppliers, order and track delivery',
++    children: [
++      { to: '/pos/network/find', label: 'Find Stock', icon: Search, perm: NETWORK_FIND_PERMS },
++      { to: '/pos/network/orders', label: 'My Orders', icon: ClipboardList, perm: NETWORK_ORDER_PERMS },
++      { to: '/pos/network/suppliers', label: 'My Suppliers', icon: Users, perm: NETWORK_ORDER_PERMS },
++      { to: '/pos/network/offers', label: 'My Offers', icon: Package, perm: ['products.manage'] },
++    ],
++  },
++  {
+     key: 'rentals', label: 'Rentals', icon: Building2, to: '/pos/rentals', capability: 'rentals',
+     blurb: 'Units, rent, meters, invoices and maintenance',
+     children: [
+@@ -226,6 +242,7 @@
+   reports: MONEY_PERMS, financials: MONEY_PERMS,
+   customers: PEOPLE_PERMS, folios: PEOPLE_PERMS,
+   reversals: ['refunds.request', 'refunds.approve'],
++  'network/find': NETWORK_FIND_PERMS, 'network/orders': NETWORK_ORDER_PERMS, 'network/suppliers': NETWORK_ORDER_PERMS, 'network/offers': ['products.manage'],
+   settings: ['settings.manage'], audit: ['audit.view'], staff: ['@owner'],
+   reconcile: ['finance.view'], hr: ['employees.manage'], payroll: ['payroll.access'], control: ['audit.view'],
+ };
+--- pos-erp/POSApp.jsx	2026-10-22 15:51:26.000000000 +0000
++++ /home/claude/proj/pos-erp/POSApp.jsx	2026-10-27 01:13:13.058111770 +0000
+@@ -46,6 +46,11 @@
+ import ReportsPage from "./pages/ReportsPage";
+ import InventoryPage from "./pages/InventoryPage";
+ import RetailWorkspace from "./pages/workspaces/RetailWorkspace";
++import NetworkWorkspace from "./pages/workspaces/NetworkWorkspace";
++import FindStockPage from "./pages/FindStockPage";
++import NetworkOrdersPage from "./pages/NetworkOrdersPage";
++import MySuppliersPage from "./pages/MySuppliersPage";
++import MyOffersPage from "./pages/MyOffersPage";
+ import MoneyWorkspace from "./pages/workspaces/MoneyWorkspace";
+ import PeopleWorkspace from "./pages/workspaces/PeopleWorkspace";
+ import MessagesWorkspace from "./pages/workspaces/MessagesWorkspace";
+@@ -130,6 +135,11 @@
+ 
+       {/* Workspaces -- one full-screen landing page per module */}
+       <Route path="retail" element={<RetailWorkspace />} />
++      <Route path="network" element={<NetworkWorkspace />} />
++      <Route path="network/find" element={<RequirePermission perm={ROUTE_PERMISSIONS["network/find"]}><FindStockPage /></RequirePermission>} />
++      <Route path="network/orders" element={<RequirePermission perm={ROUTE_PERMISSIONS["network/orders"]}><NetworkOrdersPage /></RequirePermission>} />
++      <Route path="network/suppliers" element={<RequirePermission perm={ROUTE_PERMISSIONS["network/suppliers"]}><MySuppliersPage /></RequirePermission>} />
++      <Route path="network/offers" element={<RequirePermission perm={ROUTE_PERMISSIONS["network/offers"]}><MyOffersPage /></RequirePermission>} />
+       <Route path="money" element={<MoneyWorkspace />} />
+       <Route path="people" element={<PeopleWorkspace />} />
+       <Route path="comms" element={<MessagesWorkspace />} />
+--- pos-erp/components/workspace/WorkspaceKit.jsx	2026-10-22 20:14:06.000000000 +0000
++++ /home/claude/proj/pos-erp/components/workspace/WorkspaceKit.jsx	2026-10-27 01:13:13.057413187 +0000
+@@ -25,6 +25,7 @@
+ // ── accents ────────────────────────────────────────────────────────────
+ const ACCENTS = {
+   retail:     '#1F6B45',
++  network:    '#2A7357',
+   money:      '#B8921C',
+   people:     '#3E8A5A',
+   comms:      '#9C7A1B',
+--- pos-erp/pages/ProductsPage.jsx	2026-10-22 15:51:32.000000000 +0000
++++ /home/claude/proj/pos-erp/pages/ProductsPage.jsx	2026-10-27 01:13:33.191671188 +0000
+@@ -22,9 +22,14 @@
+ import { usePosErpAuth } from '../auth/usePosErpAuth';
+ import { checkBarcodeAvailable } from '../services/productResolverService';
+ import { productService } from '../services/productService';
+-import { Image as ImageIcon, Package, Plus, Pencil, Power } from 'lucide-react';
++import { Image as ImageIcon, Package, Plus, Pencil, Power, Store } from 'lucide-react';
+ import { FitPage, AddButton, SearchBox, FilterChips, MiniStats, CardGrid, DataCard, IconBtn, IconTile, Pill, Notice, LoadingBlock, EmptyBlock } from '../components/CardKit';
+ import { singleFlight } from '../utils/singleFlight';
++// My Business Network: only used when the owner has switched the capability on AND this person may manage items.
++import { useCapabilities } from '../navigation/CapabilitiesContext';
++import { usePermissions } from '../navigation/PermissionsContext';
++import PublishSheet from '../components/network/PublishSheet';
++import { networkService } from '../services/networkService';
+ 
+ const EMPTY_FORM = {
+   name: '', sku: '', barcode: '', selling_price: '', cost_price: '',
+@@ -45,6 +50,17 @@
+   const [uploadingImage, setUploadingImage] = useState(false);
+   const [search, setSearch] = useState('');
+   const [filter, setFilter] = useState('all');
++  // Publish to Network (added): which of my items are on the network, and the item being published right now.
++  const { enabled: enabledCapabilities } = useCapabilities();
++  const { can: canDo } = usePermissions();
++  const networkOn = enabledCapabilities.includes('network') && canDo('products.manage');
++  const [netOffers, setNetOffers] = useState({});
++  const [publishFor, setPublishFor] = useState(null);
++  const loadNetOffers = React.useCallback(() => {
++    if (!networkOn) return;
++    networkService.myOffers().then((rows) => setNetOffers(Object.fromEntries(rows.map((o) => [o.product_id, o])))).catch(() => {});  // a failure just hides the badge
++  }, [networkOn]);
++  React.useEffect(() => { loadNetOffers(); }, [loadNetOffers]);
+ 
+   // On the product form, scanning a barcode that ISN'T registered yet is the
+   // normal/expected outcome — it just fills the field. If it happens to
+@@ -274,6 +290,12 @@
+                 actions={(
+                   <>
+                     <IconBtn title="Edit" onClick={() => openEditForm(p)}><Pencil size={14} /></IconBtn>
++                    {networkOn && active && (
++                      <IconBtn
++                        title={netOffers[p.id]?.status === 'ACTIVE' ? 'On the network (tap to change)' : netOffers[p.id] ? 'Paused on the network (tap to change)' : 'Publish to Network'}
++                        onClick={() => setPublishFor(p)}
++                      ><Store size={14} className={netOffers[p.id]?.status === 'ACTIVE' ? 'text-[#C9A227]' : undefined} /></IconBtn>
++                    )}
+                     <IconBtn
+                       title={active ? 'Deactivate' : 'Reactivate'}
+                       tone={active ? 'danger' : undefined}
+@@ -286,6 +308,7 @@
+           })}
+         </CardGrid>
+       )}
++      {publishFor && <PublishSheet product={publishFor} offer={netOffers[publishFor.id] || null} onClose={() => setPublishFor(null)} onSaved={loadNetOffers} />}
+     </FitPage>
+   );
+ }
+--- pos-erp/schema/tests/README.md	2026-10-22 15:51:28.000000000 +0000
++++ /home/claude/proj/pos-erp/schema/tests/README.md	2026-10-26 18:22:49.451822333 +0000
+@@ -9,3 +9,10 @@
+ 
+ The stubs fake lb_businesses, lb_customers, record_expense(), record_customer_payment(), expense categories, auth.role().
+ Passing here proves the new logic; it does NOT prove the live record_expense()/record_customer_payment() behave the same — retest on a staging project.
++
++# Phase 36 SQL tests (My Business Network) - scratch database ONLY
++Needs a local PostgreSQL server (the script defaults to socket /var/tmp/pgnet, port 5536; override PGHOST / PGPORT).
++Run:  sh phase36_run.sh      (loads phase35_stubs.sql + phase36_stubs.sql, then the REAL phase35 and phase36 files twice to prove re-runnability,
++then phase36_scenarios.sql, then a two-session concurrency race). Expected last line: `TOTAL 98 FAIL 0`.
++The stubs fake the lb_* tables from the columns the app code uses; passing here proves the new logic, NOT that the live database matches.
++Run schema/diagnostics/network_precheck.sql on staging first and compare.

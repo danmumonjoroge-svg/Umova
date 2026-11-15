@@ -57,9 +57,13 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ShoppingCart, Package, ArrowRight, CalendarClock,
+  ShoppingCart, Package, ArrowRight, CalendarClock, ChevronRight,
   TrendingUp, TrendingDown, Users, Receipt, Truck, Building2,
+  Smartphone, Printer, Target, Wallet, AlertTriangle, HandCoins,
 } from "lucide-react";
+import { usePermissions } from "../navigation/PermissionsContext";
+import { ROUTE_PERMISSIONS } from "../navigation/navConfig";
+import { mpesaService } from "../services/mpesaService";
 import { useCapabilities } from "../navigation/CapabilitiesContext";
 import { usePosErpAuth } from "../auth/usePosErpAuth";
 import { useCashierShifts } from "../hooks/useCashierShifts";
@@ -94,6 +98,14 @@ export default function POSDashboard() {
   const [weekTrend, setWeekTrend] = useState(null);
   const [peopleCounts, setPeopleCounts] = useState(null); // { totalCustomers, customersOwing, totalSuppliers, suppliersOwed }
   const [loadError, setLoadError] = useState(null);
+  const { canAny } = usePermissions();
+  const seeMoney = canAny(["finance.view", "sales.view", "balances.view"]);
+  // Payments customers sent to the till that nobody has matched to a bill yet (phase43). Best effort: no table / no access = no row.
+  const [mpesaWaiting, setMpesaWaiting] = useState(0);
+  useEffect(() => {
+    if (!tenant?.business_id || !canAny(["payments.record", "finance.view"])) { setMpesaWaiting(0); return; }
+    mpesaService.c2bList(tenant.business_id, { status: "OPEN", limit: 50 }).then((r) => setMpesaWaiting(r.length)).catch(() => setMpesaWaiting(0));
+  }, [tenant?.business_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!tenant?.id) return;
@@ -158,6 +170,14 @@ export default function POSDashboard() {
   // fabricated due dates (see header note). Each item links to where the
   // owner would actually act on it.
   const attention = [];
+  if (mpesaWaiting > 0) {
+    attention.push({
+      tone: "red",
+      text: `${mpesaWaiting} M-Pesa payment${mpesaWaiting === 1 ? "" : "s"} waiting to be matched to a bill`,
+      to: "/pos/mpesa",
+      action: "Clear bills",
+    });
+  }
   if (lowStockCount > 0) {
     attention.push({
       tone: "amber",
@@ -166,7 +186,7 @@ export default function POSDashboard() {
       action: "Check Stock",
     });
   }
-  if (balances && balances.assets.accountsReceivable > 0) {
+  if (seeMoney && balances && balances.assets.accountsReceivable > 0) {
     attention.push({
       tone: "red",
       text: `${peopleCounts ? `${peopleCounts.customersOwing} ${peopleCounts.customersOwing === 1 ? "person owes" : "people owe"} you` : "People owe you"} ${fmt(balances.assets.accountsReceivable)} in total`,
@@ -174,7 +194,7 @@ export default function POSDashboard() {
       action: "View",
     });
   }
-  if (balances && balances.liabilities.accountsPayable > 0) {
+  if (seeMoney && balances && balances.liabilities.accountsPayable > 0) {
     attention.push({
       tone: "amber",
       text: `You owe ${peopleCounts ? `${peopleCounts.suppliersOwed} supplier${peopleCounts.suppliersOwed === 1 ? "" : "s"}` : "suppliers"} ${fmt(balances.liabilities.accountsPayable)} in total`,
@@ -203,94 +223,109 @@ export default function POSDashboard() {
   const rentalsOn = enabledCaps.includes("rentals");
   const salonOn = enabledCaps.includes("salon");
 
-  const quick = [
-    { to: "/pos", icon: ShoppingCart, title: "Sell", subtitle: "Ring up a sale", primary: true },
-    retailOn && { to: "/pos/goods-receiving", icon: Truck, title: "Receive stock", subtitle: "Record a delivery" },
-    { to: "/pos/expenses", icon: Receipt, title: "Record spending", subtitle: "Log what you spent" },
-    { to: "/pos/customers", icon: Users, title: "Customers", subtitle: "See who owes you" },
-    retailOn && { to: "/pos/inventory", icon: Package, title: "Check stock", subtitle: "See what you have" },
-    salonOn && { to: "/pos/appointments", icon: CalendarClock, title: "Appointments", subtitle: "Book or complete a service" },
-    rentalsOn && units.length > 0 && { to: "/pos/units", icon: Building2, title: "Rentals", subtitle: "Units and rent" },
+  // Shortcuts: only what this person is allowed to open (same keys as the menu), so a cashier never sees a dead button.
+  const allowed = (route) => canAny(ROUTE_PERMISSIONS[route]);
+  const shortcuts = [
+    allowed("sell") && { to: "/pos", icon: ShoppingCart, title: "Sell", color: "#1F6B45" },
+    retailOn && allowed("goods-receiving") && { to: "/pos/goods-receiving", icon: Truck, title: "Receive", color: "#2A7357" },
+    allowed("expenses") && { to: "/pos/expenses", icon: Receipt, title: "Spending", color: "#B8921C" },
+    allowed("mpesa") && { to: "/pos/mpesa", icon: Smartphone, title: "M-Pesa", color: "#3E8A5A", badge: mpesaWaiting },
+    allowed("customers") && { to: "/pos/customers", icon: Users, title: "Customers", color: "#5E8F3E" },
+    retailOn && allowed("inventory") && { to: "/pos/inventory", icon: Package, title: "Stock", color: "#17553A" },
+    allowed("budgets") && { to: "/pos/budgets", icon: Target, title: "Budget", color: "#8A6A12" },
+    allowed("report-centre") && { to: "/pos/report-centre", icon: Printer, title: "Reports", color: "#9C7A1B" },
+    salonOn && allowed("appointments") && { to: "/pos/appointments", icon: CalendarClock, title: "Bookings", color: "#C2A02E" },
+    rentalsOn && units.length > 0 && allowed("units") && { to: "/pos/units", icon: Building2, title: "Rentals", color: "#5E8F3E" },
   ].filter(Boolean);
 
+  const dateLine = new Date().toLocaleDateString("en-KE", { weekday: "long", day: "numeric", month: "long" });
+  const weekTotal = weekTrend ? weekTrend.reduce((a, v) => a + v, 0) : null;
+
   return (
-    <div className="px-4 py-4 sm:p-6 lg:p-8 max-w-4xl mx-auto min-w-0">
-      <div className="mb-4">
-        <h1 className="text-xl md:text-2xl font-bold text-[#26352D]">
-          {greeting}{staffName ? `, ${staffName}` : ""}
-        </h1>
-        <p className="text-sm text-[#68756D]">{tenant?.business_name || "Your business"}</p>
+    <div className="px-3.5 py-3.5 sm:p-6 lg:p-8 max-w-4xl mx-auto min-w-0">
+      {/* Hero: greeting + today's money + the week at a glance, on one dark card */}
+      <div className="rounded-3xl bg-[#17553A] text-white p-4 sm:p-5 mb-4 relative overflow-hidden">
+        <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-[#C9A227]/15" aria-hidden="true" />
+        <div className="absolute -right-2 top-16 w-20 h-20 rounded-full bg-white/5" aria-hidden="true" />
+        <div className="relative">
+          <div className="text-[12px] text-white/70">{dateLine}</div>
+          <h1 className="text-xl font-bold leading-tight">{greeting}{staffName ? `, ${staffName.split(" ")[0]}` : ""}</h1>
+          <div className="text-[12.5px] text-white/70 truncate">{tenant?.business_name || "Your business"}</div>
+
+          {seeMoney ? (
+            <>
+              <div className="flex items-end justify-between gap-3 mt-4">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[#E8C65A]">Made today</div>
+                  <div className="text-[32px] leading-none font-extrabold mt-1 break-words">{income ? fmt(income.revenue) : "…"}</div>
+                </div>
+                {vsYesterday != null && <ChangeBadge pct={vsYesterday} />}
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 mt-4">
+                <div className="rounded-2xl bg-white/10 px-3 py-2">
+                  <div className="text-[10.5px] uppercase tracking-wide text-white/70">Profit</div>
+                  <div className={`text-[15px] font-bold ${income && income.netIncome < 0 ? "text-red-200" : ""}`}>{income ? fmt(income.netIncome) : "…"}</div>
+                </div>
+                <div className="rounded-2xl bg-white/10 px-3 py-2">
+                  <div className="text-[10.5px] uppercase tracking-wide text-white/70">Spent</div>
+                  <div className="text-[15px] font-bold">{income ? fmt(income.totalExpenses) : "…"}</div>
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-white/15">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-white/70">This week</div>
+                  <div className="text-[12.5px] font-bold">{weekTotal != null ? fmt(weekTotal) : "…"}</div>
+                </div>
+                {weekTrend ? <WeekTrend values={weekTrend} /> : <div className="h-16 flex items-center justify-center text-white/60 text-sm">Loading…</div>}
+              </div>
+            </>
+          ) : (
+            <div className="mt-4 rounded-2xl bg-white/10 px-4 py-3 text-[13px] text-white/90">
+              {activeShift ? "Your shift is open. Ready to sell." : "Start your shift from the Sell screen."}
+            </div>
+          )}
+        </div>
       </div>
 
       {loadError && (
-        <div className="mb-4 text-xs text-[#7a5f1f] bg-[#C6A15B]/15 border border-[#C6A15B]/40 rounded-lg px-3 py-2">{loadError}</div>
+        <div className="mb-3 text-xs text-[#7a5f1f] bg-[#C9A227]/15 border border-[#C9A227]/40 rounded-xl px-3 py-2">{loadError}</div>
       )}
 
-      {/* 1. What happened today? */}
-      <div className="bg-[#1B5138] text-white rounded-xl p-4 sm:p-5 mb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-white/70">Made today</div>
-            <div className="text-3xl font-bold mt-0.5 break-words">{income ? fmt(income.revenue) : "…"}</div>
-          </div>
-          {vsYesterday != null && <ChangeBadge pct={vsYesterday} />}
+      {/* Shortcuts: round buttons, what you do most */}
+      <div className="grid grid-cols-4 sm:grid-cols-5 gap-x-2 gap-y-3 mb-5">
+        {shortcuts.map((q) => <Shortcut key={q.title} {...q} />)}
+      </div>
+
+      {/* What needs me */}
+      <SectionLabel>Needs your attention</SectionLabel>
+      {attention.length > 0 ? (
+        <div className="bg-white border border-[#E3DBB8] rounded-2xl divide-y divide-[#EFE9CD] overflow-hidden mb-5">
+          {attention.map((item, i) => (
+            <Link key={i} to={item.to} className="flex items-center justify-between gap-3 px-4 py-3 min-h-[52px] hover:bg-[#FAF7EA] active:bg-[#FAF7EA]">
+              <div className="flex items-center gap-3 min-w-0">
+                <Dot tone={item.tone} />
+                <span className="text-[13.5px] text-[#23382B] leading-snug">{item.text}</span>
+              </div>
+              <span className="text-xs font-bold text-[#1F6B45] flex items-center gap-1 shrink-0">{item.action} <ArrowRight size={12} /></span>
+            </Link>
+          ))}
         </div>
-        <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-white/15">
-          <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-wide text-white/70">My profit</div>
-            <div className={`text-lg font-bold ${income && income.netIncome < 0 ? "text-red-200" : ""}`}>{income ? fmt(income.netIncome) : "…"}</div>
-          </div>
-          <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-wide text-white/70">Spent today</div>
-            <div className="text-lg font-bold">{income ? fmt(income.totalExpenses) : "…"}</div>
-          </div>
-        </div>
-      </div>
+      ) : (
+        <div className="bg-[#EEF5E8] border border-[#CFE0C3] rounded-2xl px-4 py-3.5 text-[13.5px] text-[#1B5138] mb-5">All clear. Nothing needs you right now.</div>
+      )}
 
-      <div className="bg-white border border-[#DDE3DD] rounded-xl p-4 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D]">This week</div>
-          <div className="text-sm font-bold text-[#26352D]">
-            {weekTrend ? fmt(weekTrend.reduce((a, v) => a + v, 0)) : "…"} <span className="text-[#68756D] font-normal text-xs">total</span>
+      {/* Where things stand: coloured tiles */}
+      {seeMoney && (
+        <>
+          <SectionLabel>Where things stand</SectionLabel>
+          <div className="grid grid-cols-2 gap-2.5 mb-2">
+            {retailOn && <StandTile to="/pos/inventory" icon={Package} label="My stock" value={balances ? fmt(balances.assets.inventoryValue) : "…"} sub={lowStockCount > 0 ? `${lowStockCount} running low` : stockLoading ? null : "All stocked up"} warn={lowStockCount > 0} color="#1F6B45" />}
+            <StandTile to="/pos/customers" icon={HandCoins} label="Owed to me" value={balances ? fmt(balances.assets.accountsReceivable) : "…"} sub={peopleCounts ? `${peopleCounts.customersOwing} of ${peopleCounts.totalCustomers} customers` : null} color="#B8921C" />
+            {retailOn && <StandTile to="/pos/payables" icon={Wallet} label="I owe" value={balances ? fmt(balances.liabilities.accountsPayable) : "…"} sub={peopleCounts ? `${peopleCounts.suppliersOwed} of ${peopleCounts.totalSuppliers} suppliers` : null} color="#9C7A1B" />}
+            {rentalsOn && units.length > 0 && <StandTile to="/pos/units" icon={Building2} label="Rented units" value={`${occupiedUnits} of ${units.length}`} color="#5E8F3E" />}
           </div>
-        </div>
-        {weekTrend ? <WeekTrend values={weekTrend} /> : <div className="h-16 flex items-center justify-center text-[#68756D] text-sm">Loading…</div>}
-      </div>
-
-      {/* 2. What needs my attention? */}
-      <div className="mb-6">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-2">Needs your attention</div>
-        {attention.length > 0 ? (
-          <div className="bg-white border border-[#DDE3DD] rounded-xl divide-y divide-[#DDE3DD] overflow-hidden">
-            {attention.map((item, i) => (
-              <Link key={i} to={item.to} className="flex items-center justify-between gap-3 px-4 py-3 min-h-[52px] hover:bg-[#F7F6F0] active:bg-[#F7F6F0]">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Dot tone={item.tone} />
-                  <span className="text-sm text-[#26352D]">{item.text}</span>
-                </div>
-                <span className="text-xs font-semibold text-[#237A52] flex items-center gap-1 shrink-0">{item.action} <ArrowRight size={12} /></span>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="bg-white border border-[#DDE3DD] rounded-xl px-4 py-4 text-sm text-[#68756D]">Nothing needs you right now.</div>
-        )}
-      </div>
-
-      {/* 3. What can I do quickly? */}
-      <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-2">Quick actions</div>
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-        {quick.map((q) => <QuickTile key={q.title} {...q} />)}
-      </div>
-
-      {/* Where things stand -- a quiet list, not a wall of KPI cards */}
-      <div className="text-[11px] font-bold uppercase tracking-wider text-[#68756D] mb-2">Where things stand</div>
-      <div className="bg-white border border-[#DDE3DD] rounded-xl divide-y divide-[#DDE3DD] overflow-hidden">
-        {retailOn && <StandRow to="/pos/inventory" icon={Package} label="My stock" value={balances ? fmt(balances.assets.inventoryValue) : "…"} sub={lowStockCount > 0 ? `${lowStockCount} running low` : stockLoading ? null : "All stocked up"} subTone={lowStockCount > 0 ? "warn" : null} />}
-        <StandRow to="/pos/customers" icon={Users} label="People who owe me" value={balances ? fmt(balances.assets.accountsReceivable) : "…"} sub={peopleCounts ? `${peopleCounts.customersOwing} of ${peopleCounts.totalCustomers} customers` : null} />
-        {retailOn && <StandRow to="/pos/payables" icon={Truck} label="People I owe" value={balances ? fmt(balances.liabilities.accountsPayable) : "…"} sub={peopleCounts ? `${peopleCounts.suppliersOwed} of ${peopleCounts.totalSuppliers} suppliers` : null} />}
-        {rentalsOn && units.length > 0 && <StandRow to="/pos/units" icon={Building2} label="Rented units" value={`${occupiedUnits} of ${units.length}`} />}
-      </div>
+        </>
+      )}
     </div>
   );
 }
@@ -299,77 +334,76 @@ function fmt(n) {
   return `KES ${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
+function SectionLabel({ children }) {
+  return <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[#6F7461] mb-2 px-0.5"><span className="w-1 h-3.5 rounded-full bg-[#C9A227]" />{children}</div>;
+}
+
 function Dot({ tone }) {
-  const cls = { red: "bg-red-500", amber: "bg-[#C6A15B]", blue: "bg-[#237A52]", emerald: "bg-[#237A52]" }[tone] || "bg-[#68756D]";
+  const cls = { red: "bg-[#D9534F]", amber: "bg-[#C9A227]", blue: "bg-[#1F6B45]", emerald: "bg-[#1F6B45]" }[tone] || "bg-[#6F7461]";
   return <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cls}`} />;
 }
 
-// Real percentage only -- never shown when there's genuinely nothing
-// honest to compare against (yesterday being 0 isn't "+infinity %").
+// Real percentage only -- never shown when there's genuinely nothing honest to compare against.
 function ChangeBadge({ pct }) {
   const up = pct >= 0;
   const Icon = up ? TrendingUp : TrendingDown;
   return (
-    <span className={`shrink-0 inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${up ? "bg-white/15 text-white" : "bg-red-100 text-red-700"}`}>
-      <Icon size={12} /> {up ? "+" : ""}{pct}% <span className="font-medium opacity-80 hidden sm:inline">vs yesterday</span>
+    <span className={`shrink-0 inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-full ${up ? "bg-[#E8C65A] text-[#3B2F06]" : "bg-red-100 text-red-700"}`}>
+      <Icon size={13} /> {up ? "+" : ""}{pct}% <span className="font-medium opacity-80 hidden min-[380px]:inline">vs yesterday</span>
     </span>
   );
 }
 
-function QuickTile({ to, icon: Icon, title, subtitle, primary }) {
+function Shortcut({ to, icon: Icon, title, color, badge }) {
   return (
-    <Link
-      to={to}
-      className={`flex flex-col gap-2 rounded-xl p-4 min-h-[88px] border transition-colors min-w-0 ${
-        primary ? "bg-[#237A52] border-[#237A52] text-white hover:bg-[#1B5138]" : "bg-white border-[#DDE3DD] text-[#26352D] hover:border-[#237A52]"
-      }`}
-    >
-      <Icon size={22} className={primary ? "text-[#C6A15B]" : "text-[#237A52]"} />
-      <div className="min-w-0">
-        <div className="font-semibold truncate">{title}</div>
-        <div className={`text-xs truncate ${primary ? "text-white/75" : "text-[#68756D]"}`}>{subtitle}</div>
-      </div>
+    <Link to={to} className="flex flex-col items-center gap-1.5 min-w-0 active:scale-95 transition-transform">
+      <span className="relative w-14 h-14 rounded-2xl flex items-center justify-center bg-white border border-[#E3DBB8] shadow-sm" style={{ color }}>
+        <span className="absolute inset-0 rounded-2xl" style={{ background: `${color}14` }} />
+        <Icon size={24} className="relative" />
+        {badge > 0 && <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-[#D9534F] text-white text-[10.5px] font-bold flex items-center justify-center">{badge > 9 ? "9+" : badge}</span>}
+      </span>
+      <span className="text-[11.5px] font-semibold text-[#23382B] truncate max-w-full">{title}</span>
     </Link>
   );
 }
 
-function StandRow({ to, icon: Icon, label, value, sub, subTone }) {
+function StandTile({ to, icon: Icon, label, value, sub, warn, color }) {
   return (
-    <Link to={to} className="flex items-center gap-3 px-4 py-3 min-h-[56px] hover:bg-[#F7F6F0] active:bg-[#F7F6F0]">
-      <div className="w-9 h-9 rounded-lg bg-[#237A52]/10 text-[#237A52] flex items-center justify-center shrink-0"><Icon size={17} /></div>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium text-[#26352D]">{label}</div>
-        {sub && <div className={`text-xs ${subTone === "warn" ? "text-[#7a5f1f] font-semibold" : "text-[#68756D]"}`}>{sub}</div>}
+    <Link to={to} className="rounded-2xl bg-white border border-[#E3DBB8] p-3 min-w-0 hover:border-[#C9A227] active:bg-[#FAF7EA] transition-colors" style={{ borderTop: `3px solid ${color}` }}>
+      <div className="flex items-center justify-between">
+        <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${color}1F`, color }}><Icon size={16} /></span>
+        <ChevronRight size={15} className="text-[#B9B28A]" />
       </div>
-      <div className="text-sm font-bold text-[#26352D] shrink-0">{value}</div>
+      <div className="text-[11px] font-bold uppercase tracking-wide text-[#6F7461] mt-2">{label}</div>
+      <div className="text-[16px] font-extrabold text-[#23382B] leading-tight break-words">{value}</div>
+      {sub && <div className={`text-[11px] mt-0.5 flex items-center gap-1 ${warn ? "text-[#7a5f1f] font-semibold" : "text-[#6F7461]"}`}>{warn && <AlertTriangle size={11} />}{sub}</div>}
     </Link>
   );
 }
 
-// Plain CSS bar strip -- 7 values, tallest bar scaled to the row's own
-// max (not a fixed scale), so a slow week and a busy week both render
-// legibly instead of one flattening the other out.
+// Plain CSS bars for the 7 days; today is gold, the best day gets a small crown line. Scaled to the week's own max.
 function WeekTrend({ values }) {
-  const max = Math.max(...values, 1); // avoid divide-by-zero on an all-zero week
+  const max = Math.max(...values, 1);
+  const best = values.indexOf(Math.max(...values));
   const labels = [6, 5, 4, 3, 2, 1, 0].map((n) => {
     const d = new Date(); d.setDate(d.getDate() - n);
     return d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 2);
   });
   return (
-    <div className="flex items-end justify-between gap-2 h-20">
+    <div className="flex items-end justify-between gap-2 h-[84px] mt-1">
       {values.map((v, i) => {
         const isToday = i === values.length - 1;
-        const heightPct = Math.max((v / max) * 100, v > 0 ? 6 : 2); // a real but tiny value still shows a sliver
+        const heightPct = Math.max((v / max) * 100, v > 0 ? 8 : 3);
         return (
           <div key={i} className="flex-1 flex flex-col items-center justify-end h-full min-w-0">
             <div className="w-full flex items-end justify-center h-full">
               <div
-                className={`w-full max-w-[28px] rounded-t ${isToday ? "bg-[#237A52]" : "bg-[#DDE3DD]"}`}
-                style={{ height: `${heightPct}%` }}
+                className={`w-full max-w-[26px] rounded-t-md ${isToday ? "bg-[#E8C65A]" : v > 0 ? "bg-white/45" : "bg-white/15"}`}
+                style={{ height: `${heightPct}%`, outline: v > 0 && i === best && !isToday ? "1.5px solid #E8C65A" : "none" }}
                 title={fmt(v)}
               />
             </div>
-            <div className={`text-[10px] mt-1 font-semibold ${isToday ? "text-[#237A52]" : "text-[#68756D]"}`}>{labels[i]}</div>
+            <div className={`text-[10px] mt-1 font-semibold ${isToday ? "text-[#E8C65A]" : "text-white/60"}`}>{labels[i]}</div>
           </div>
         );
       })}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import "./Members.css";
+import { useAuth } from "../../Context/AuthContext";
 
 import {
   runRiskEngine,
@@ -58,6 +59,28 @@ async function fetchAll(table, columns = "*") {
 
 const memberKey = (v) => String(v || "").trim().toUpperCase();
 
+/* ---- welcome message (sent by hand until an SMS provider is connected) ---- */
+const APP_URL = "https://umova.vercel.app";
+const SACCO_NAME = "Umova SACCO";
+const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "Member";
+
+// 0712 345 678 / +254712345678 / 712345678  ->  254712345678 (what WhatsApp and SMS links need)
+const intlPhone = (p) => {
+  const d = String(p || "").replace(/\D/g, "");
+  if (!d) return "";
+  if (d.startsWith("254")) return d;
+  if (d.startsWith("0")) return "254" + d.slice(1);
+  if (d.length === 9) return "254" + d;
+  return d;
+};
+
+const welcomeText = (name, memberNo) =>
+  `Hello ${firstName(name)}, welcome to ${SACCO_NAME}! Your membership is ready.\n\n` +
+  `Your member number is ${memberNo}.\n\n` +
+  `To set your password: open the ${SACCO_NAME} app (or ${APP_URL}), tap "First Time Setup", ` +
+  `enter your member number, your National ID number, then choose a password.\n\n` +
+  `Never share your password with anyone.`;
+
 const REASONS = {
   FORBIDDEN: "You are not allowed to do this.",
   NAME_REQUIRED: "Name is required.",
@@ -66,7 +89,41 @@ const REASONS = {
   DUPLICATE_NATIONAL_ID: "A member with this National ID already exists.",
   DUPLICATE_EMAIL: "Another member already uses this email address.",
   ALREADY_PROCESSED: "This application was already approved or rejected.",
+  DUPLICATE_PENDING: "There is already a pending application with this National ID or email. Approve or reject that one first.",
+  SELF_APPROVAL: "Another administrator must approve an entry you added yourself.",
   NOT_FOUND: "Application not found.",
+  // member editing (admin_update_member)
+  FORBIDDEN_FIELD: "Only an administrator can change that field.",
+  FIELD_NOT_ALLOWED: "That field cannot be edited here.",
+  INVALID_REQUEST: "Invalid request.",
+  INVALID_MEMBER_NO: "Member number may only contain letters, numbers and dashes (e.g. UI-0123), 3 to 20 characters.",
+  DUPLICATE_MEMBER_NO: "Another member already has that member number.",
+  DUPLICATE_STAFF_NO: "That number belongs to a staff user. Choose a different member number.",
+  INVALID_EMAIL: "Enter a valid email address.",
+  EMAIL_LOCKED: "This member has already activated their account, so their email cannot be changed here (it is their login). Contact the system administrator.",
+  INVALID_STATUS: "Status must be active, inactive or suspended.",
+  TOO_LONG: "One of the values is too long.",
+};
+
+/* ---- member editing helpers ---- */
+const EDIT_FIELDS = ["member_no", "name", "national_id", "email", "phone", "branch", "occupation", "status"];
+const STATUS_OPTIONS = ["active", "inactive", "suspended"];
+const EDIT_ROLES = ["staff", "manager"]; // admins/superadmins are covered by isAdmin; the server enforces this too
+
+const normField = (k, v) => {
+  const t = String(v ?? "").trim();
+  if (k === "member_no") return t.toUpperCase();
+  if (k === "email" || k === "status") return t.toLowerCase();
+  return t;
+};
+
+const editErrorText = (res) => {
+  if (!res) return "Could not save. Please try again.";
+  if (res.reason === "FK_NOT_CASCADING")
+    return `Another table (${res.table || "unknown"}) points at this member number and is not set to follow a change. Nothing was changed. Ask your developer to apply the ON UPDATE CASCADE fix.`;
+  if (res.reason === "UPDATE_FAILED")
+    return `The change was rejected${res.table ? ` while updating ${res.table}` : ""}, so nothing was changed. ${res.detail || ""}`.trim();
+  return REASONS[res.reason] || "Could not save. Please try again.";
 };
 
 /* ======================================================
@@ -74,6 +131,9 @@ const REASONS = {
 ====================================================== */
 
 export default function Members() {
+
+  const { role, isAdmin } = useAuth();
+  const canEdit = !!isAdmin || EDIT_ROLES.includes(String(role || "").toLowerCase());
 
   const [members, setMembers] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -105,11 +165,38 @@ export default function Members() {
   const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState("");
 
+  /* ================= WELCOME MESSAGE ================= */
+
+  const [welcome, setWelcome] = useState(null); // { name, member_no, phone, email, text }
+  const [copied, setCopied] = useState(false);
+
+  const openWelcome = ({ name, member_no, phone, email }) => {
+    setCopied(false);
+    setWelcome({ name, member_no, phone, email, text: welcomeText(name, member_no) });
+  };
+
+  const copyWelcome = async () => {
+    try {
+      await navigator.clipboard.writeText(welcome.text);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+      alert("Could not copy. Select the text and copy it by hand.");
+    }
+  };
+
   /* ================= FEEDBACK / DOUBLE-CLICK GUARDS ================= */
 
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState(null);
+
+  /* ================= EDIT MEMBER ================= */
+
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
 
   /* ======================================================
      LOAD MEMBERS + LEDGER
@@ -685,6 +772,10 @@ export default function Members() {
           : `${app.name} approved. Member number: ${data.member_no}. They activate with this number and their National ID.`
       );
 
+      if (!data.existing) {
+        openWelcome({ name: app.name, member_no: data.member_no, phone: app.phone, email: app.email });
+      }
+
       await loadApplications();
       await load();
 
@@ -785,12 +876,131 @@ export default function Members() {
     });
 
     setShowAddMember(false);
+
+    if (data.pending) {
+      // Added by staff: it waits for approval like any application. The member number is given on approval.
+      setNotice("Saved as a pending application. Approve it under Pending Applications to create the membership.");
+      await loadApplications();
+      setShowApplications(true);
+      return;
+    }
+
+    // (older database function that creates the member straight away)
+    openWelcome({ name: addForm.name, member_no: data.member_no, phone: addForm.phone, email: addForm.email });
     setNotice(`Member added. Member number: ${data.member_no}.`);
 
     await load();
   };
 
   /* ======================================================
+/* ======================================================
+     EDIT MEMBER
+     The record is identified by its immutable uuid `id`, never by
+     member_no. Everything goes through admin_update_member(), which
+     re-checks the caller's role, validates, follows a member-number
+     change through every table that stores it, and writes the audit
+     trail. Only fields that actually changed are sent.
+  ====================================================== */
+
+  const openEdit = () => {
+    if (!selected?.id) return;
+    setEditForm({
+      member_no: selected.member_no || "",
+      name: selected.name || "",
+      national_id: selected.national_id || "",
+      email: selected.email || "",
+      phone: selected.phone || "",
+      branch: selected.branch || "",
+      occupation: selected.occupation || "",
+      status: String(selected.status || "active").toLowerCase(),
+      reason: "",
+    });
+    setEditError("");
+    setEditing(true);
+  };
+
+  const closeEdit = () => {
+    if (editSaving) return;
+    setEditing(false);
+    setEditError("");
+  };
+
+  const setEditField = (k, v) => setEditForm((f) => ({ ...f, [k]: v }));
+
+  const submitEdit = async (e) => {
+    e.preventDefault();
+
+    if (editSaving || !selected) return;
+    setEditError("");
+
+    if (!selected.id) {
+      setEditError("This record has no database id and cannot be edited.");
+      return;
+    }
+
+    const changes = {};
+    EDIT_FIELDS.forEach((k) => {
+      if (normField(k, editForm[k]) !== normField(k, selected[k])) changes[k] = editForm[k];
+    });
+
+    if (!Object.keys(changes).length) {
+      setEditError("Nothing was changed.");
+      return;
+    }
+
+    if (!normField("name", editForm.name)) {
+      setEditError(REASONS.NAME_REQUIRED);
+      return;
+    }
+
+    if (changes.member_no) {
+      if (String(editForm.reason || "").trim().length < 3) {
+        setEditError("Give a reason for changing the member number. It is kept in the audit log.");
+        return;
+      }
+      const sure = window.confirm(
+        `Change member number ${selected.member_no} to ${normField("member_no", changes.member_no)}?\n\n` +
+        "All of this member's savings, shares, loans and statements move to the new number, " +
+        "and they must use the new number to log in."
+      );
+      if (!sure) return;
+    }
+
+    setEditSaving(true);
+
+    const { data, error } = await supabase.rpc("admin_update_member", {
+      p_id: selected.id,
+      p_changes: changes,
+      p_reason: changes.member_no ? String(editForm.reason).trim() : null,
+    });
+
+    setEditSaving(false);
+
+    if (error) {
+      setEditError(error.message);
+      return;
+    }
+
+    if (!data?.ok) {
+      setEditError(editErrorText(data));
+      return;
+    }
+
+    const moved = Object.entries(data.updated_tables || {})
+      .map(([t, n]) => `${t}: ${n}`)
+      .join(", ");
+
+    setNotice(
+      data.member_no_changed
+        ? `Member number changed to ${data.member_no}.${moved ? ` Records moved: ${moved}.` : ""}`
+        : `${selected.name} updated.`
+    );
+
+    setEditing(false);
+    setSelected(null);
+    await load();
+  };
+
 /* ======================================================
      FILTER
   ====================================================== */
@@ -1142,6 +1352,24 @@ export default function Members() {
             {/* DETAILS */}
             <div className="popup-body">
 
+              {canEdit && selected.id && !selected.ledgerOnly && (
+                <div className="edit-actions edit-actions-top">
+                  <button type="button" className="action-btn" onClick={openEdit}>
+                    ✏️ Edit member
+                  </button>
+                  {!(selected.auth_user_id || selected.auth_id) && (
+                    <button
+                      type="button"
+                      className="action-btn"
+                      style={{ marginLeft: 8 }}
+                      onClick={() => openWelcome({ name: selected.name, member_no: selected.member_no, phone: selected.phone, email: selected.email })}
+                    >
+                      📨 Send welcome message
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="detail-grid">
 
                 <div className="detail-card">
@@ -1290,6 +1518,14 @@ export default function Members() {
                   }
                 </p>
 
+                <p>
+                  🔐
+                  {" "}
+                  {selected.auth_user_id || selected.auth_id
+                    ? "Account activated"
+                    : "Not activated yet (has not set a password)"}
+                </p>
+
               </div>
 
             </div>
@@ -1299,6 +1535,169 @@ export default function Members() {
         </div>
 
       )}
+
+      {/* ======================================================
+         EDIT MEMBER MODAL
+      ====================================================== */}
+
+      {editing && selected && (() => {
+        const memberNoChanged =
+          normField("member_no", editForm.member_no) !== normField("member_no", selected.member_no);
+        const activated = !!(selected.auth_user_id || selected.auth_id);
+        const currentStatus = String(selected.status || "").toLowerCase();
+        const statusOptions =
+          currentStatus && !STATUS_OPTIONS.includes(currentStatus)
+            ? [currentStatus, ...STATUS_OPTIONS]
+            : STATUS_OPTIONS;
+
+        return (
+          <div className="popup-overlay">
+            <div className="member-popup add-member-popup edit-member-popup">
+
+              <button className="close-btn" onClick={closeEdit} aria-label="Close">✕</button>
+
+              <div className="popup-header">
+                <div>
+                  <h2>Edit Member</h2>
+                  <p>{selected.member_no} · {selected.name}</p>
+                </div>
+              </div>
+
+              <div className="popup-body">
+                <form className="add-member-form" onSubmit={submitEdit}>
+
+                  <label>
+                    Member Number {isAdmin ? "*" : "(administrator only)"}
+                    <input
+                      type="text"
+                      value={editForm.member_no}
+                      disabled={!isAdmin || editSaving}
+                      maxLength={20}
+                      onChange={(e) =>
+                        setEditField("member_no", e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""))
+                      }
+                    />
+                  </label>
+
+                  {memberNoChanged && (
+                    <>
+                      <div className="warn-box" role="alert">
+                        Changing the member number moves all of this member&apos;s savings, shares, loans and
+                        statements to the new number. They must use the new number to log in.
+                      </div>
+                      <label>
+                        Reason for the change *
+                        <input
+                          type="text"
+                          value={editForm.reason}
+                          disabled={editSaving}
+                          placeholder="e.g. Renumbered after branch merge"
+                          onChange={(e) => setEditField("reason", e.target.value)}
+                        />
+                      </label>
+                    </>
+                  )}
+
+                  <label>
+                    Full Name *
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      disabled={editSaving}
+                      onChange={(e) => setEditField("name", e.target.value)}
+                    />
+                  </label>
+
+                  <label>
+                    National ID {isAdmin ? "" : "(administrator only)"}
+                    <input
+                      type="text"
+                      value={editForm.national_id}
+                      disabled={!isAdmin || editSaving}
+                      inputMode="numeric"
+                      maxLength={8}
+                      onChange={(e) => setEditField("national_id", e.target.value.replace(/\D/g, ""))}
+                    />
+                  </label>
+
+                  <label>
+                    Email {isAdmin ? "" : "(administrator only)"}
+                    <input
+                      type="email"
+                      value={editForm.email}
+                      disabled={!isAdmin || activated || editSaving}
+                      onChange={(e) => setEditField("email", e.target.value)}
+                    />
+                    {activated && (
+                      <small className="field-hint">
+                        Locked: this member has activated their account and signs in with this email.
+                      </small>
+                    )}
+                  </label>
+
+                  <div className="form-row">
+                    <label>
+                      Phone
+                      <input
+                        type="text"
+                        value={editForm.phone}
+                        disabled={editSaving}
+                        onChange={(e) => setEditField("phone", e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Branch
+                      <input
+                        type="text"
+                        value={editForm.branch}
+                        disabled={editSaving}
+                        onChange={(e) => setEditField("branch", e.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="form-row">
+                    <label>
+                      Occupation
+                      <input
+                        type="text"
+                        value={editForm.occupation}
+                        disabled={editSaving}
+                        onChange={(e) => setEditField("occupation", e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Status {isAdmin ? "" : "(admin only)"}
+                      <select
+                        value={editForm.status}
+                        disabled={!isAdmin || editSaving}
+                        onChange={(e) => setEditField("status", e.target.value)}
+                      >
+                        {statusOptions.map((o) => (
+                          <option key={o} value={o}>{o}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  {editError && <p className="form-error" role="alert">{editError}</p>}
+
+                  <div className="edit-actions">
+                    <button type="button" className="cancel-btn" onClick={closeEdit} disabled={editSaving}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="save-btn" disabled={editSaving}>
+                      {editSaving ? "Saving..." : "Save changes"}
+                    </button>
+                  </div>
+
+                </form>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ======================================================
          PENDING APPLICATIONS PANEL
@@ -1405,6 +1804,7 @@ export default function Members() {
 
             <div className="popup-header">
               <h2>Add New Member</h2>
+              <p>Saved as a pending application. It becomes a member once approved.</p>
             </div>
 
             <div className="popup-body">
@@ -1490,6 +1890,74 @@ export default function Members() {
         </div>
 
       )}
+
+
+      {/* ======================================================
+         WELCOME MESSAGE (copy / WhatsApp / SMS / email)
+      ====================================================== */}
+
+      {welcome && (() => {
+        const phone = intlPhone(welcome.phone);
+        const text = welcome.text;
+        const btn = { textDecoration: "none", display: "inline-block", textAlign: "center" };
+        return (
+          <div className="popup-overlay">
+            <div className="member-popup add-member-popup">
+
+              <button className="close-btn" onClick={() => setWelcome(null)} aria-label="Close">✕</button>
+
+              <div className="popup-header">
+                <div>
+                  <h2>Send welcome message</h2>
+                  <p>{welcome.name} · {welcome.member_no}</p>
+                </div>
+              </div>
+
+              <div className="popup-body">
+                <p style={{ fontSize: 13, margin: "0 0 8px" }}>
+                  Send this to the member so they can set their password. You can edit the text first.
+                </p>
+
+                <textarea
+                  value={welcome.text}
+                  rows={9}
+                  onChange={(e) => { setCopied(false); setWelcome({ ...welcome, text: e.target.value }); }}
+                  style={{ width: "100%", boxSizing: "border-box", padding: 10, borderRadius: 12, border: "1px solid #cbd5d0", font: "inherit", fontSize: 14 }}
+                />
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                  <button type="button" className="save-btn" onClick={copyWelcome}>
+                    {copied ? "Copied ✓" : "Copy message"}
+                  </button>
+
+                  {phone && (
+                    <a className="action-btn" style={btn} target="_blank" rel="noreferrer"
+                       href={`https://wa.me/${phone}?text=${encodeURIComponent(text)}`}>
+                      WhatsApp
+                    </a>
+                  )}
+                  {phone && (
+                    <a className="action-btn" style={btn} href={`sms:+${phone}?body=${encodeURIComponent(text)}`}>
+                      SMS
+                    </a>
+                  )}
+                  {welcome.email && (
+                    <a className="action-btn" style={btn}
+                       href={`mailto:${welcome.email}?subject=${encodeURIComponent(`Welcome to ${SACCO_NAME}`)}&body=${encodeURIComponent(text)}`}>
+                      Email
+                    </a>
+                  )}
+                </div>
+
+                {!phone && !welcome.email && (
+                  <p className="form-error" role="alert">This member has no phone or email on record. Copy the message and send it another way.</p>
+                )}
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

@@ -442,3 +442,12 @@ entrypoint = "./functions/interest-engine/index.ts"
 
 [functions.device-auth-verify]
 verify_jwt = false
+
+# Safaricom calls these with no Supabase login. Without verify_jwt = false Supabase answers 401 and the till never hears the result.
+[functions.mpesa-callback]
+enabled = true
+verify_jwt = false
+
+[functions.c2b-hook]
+enabled = true
+verify_jwt = false

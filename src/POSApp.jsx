@@ -1,0 +1,221 @@
+// src/pos-erp/POSApp.jsx
+//
+// "My Business" routing. Every pre-existing route below is unchanged.
+// NEW: one full-screen workspace per module (retail, money, people,
+// comms, rentals, salon, more) -- the landing page each sidebar/bottom-
+// bar entry opens (see navigation/navConfig.js). Ordinary React Router
+// routes, so browser back behaves normally.
+
+import React from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { POSAuthProvider } from "./context/POSAuthContext";
+import POSAuthGate from "./auth/POSAuthGate";
+import { usePosErpAuth } from "./auth/usePosErpAuth";
+import { isDemoTenant, seedDemoDataIfEmpty } from "./auth/demoAccount";
+import { posSupabase } from "./services/posSupabaseClient";
+import AppLock from "../security/AppLock";
+import POSLayout from "./POSLayout";
+import POSDashboard from "./pages/POSDashboard";
+import EtimsQueuePage from "./pages/EtimsQueuePage";
+import POSPage from "./pages/POSPage";
+import ProductsPage from "./pages/ProductsPage";
+import CustomersPage from "./pages/CustomersPage";
+import PayablesPage from "./pages/PayablesPage";
+import ExpensesPage from "./pages/ExpensesPage";
+import AssetsPage from "./pages/AssetsPage";
+import MpesaPage from "./pages/MpesaPage";
+import CashPage from "./pages/CashPage";
+import UnitsPage from "./pages/UnitsPage";
+import RecurringChargesPage from "./pages/RecurringChargesPage";
+import LoansPage from "./pages/LoansPage";
+import MetersPage from "./pages/MetersPage";
+import InvoicesPage from './pages/InvoicesPage';
+import MaintenancePage from './pages/MaintenancePage';
+import ServicesPage from "./pages/ServicesPage";
+import AppointmentsPage from "./pages/AppointmentsPage";
+import GoodsReceivingPage from "./pages/GoodsReceivingPage";
+import SuppliersPage from "./pages/SuppliersPage";
+import CommunicationPage from "./pages/CommunicationPage";
+import CustomerCommunicationPage from "./pages/CustomerCommunicationPage";
+import SettingsPage from "./pages/SettingsPage";
+import AuditPage from "./pages/AuditPage";
+import StaffPage from "./pages/StaffPage";
+import SaleCorrectionsPage from "./pages/SaleCorrectionsPage";
+import { RequirePermission } from "./navigation/PermissionsContext";
+import { ROUTE_PERMISSIONS } from "./navigation/navConfig";
+import FinancialReportsPage from "./pages/FinancialReportsPage";
+import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
+import ReportsPage from "./pages/ReportsPage";
+import InventoryPage from "./pages/InventoryPage";
+import RetailWorkspace from "./pages/workspaces/RetailWorkspace";
+import NetworkWorkspace from "./pages/workspaces/NetworkWorkspace";
+import FindStockPage from "./pages/FindStockPage";
+import NetworkOrdersPage from "./pages/NetworkOrdersPage";
+import MySuppliersPage from "./pages/MySuppliersPage";
+import MyOffersPage from "./pages/MyOffersPage";
+import MoneyWorkspace from "./pages/workspaces/MoneyWorkspace";
+import PeopleWorkspace from "./pages/workspaces/PeopleWorkspace";
+import MessagesWorkspace from "./pages/workspaces/MessagesWorkspace";
+import RentalsWorkspace from "./pages/workspaces/RentalsWorkspace";
+import SalonWorkspace from "./pages/workspaces/SalonWorkspace";
+import MoreWorkspace from "./pages/workspaces/MoreWorkspace";
+import FoliosPage from "./pages/FoliosPage";
+import RoomsWorkspace from "./pages/workspaces/RoomsWorkspace";
+import RoomsPage from "./pages/RoomsPage";
+import StaysPage from "./pages/StaysPage";
+import ProductionWorkspace from "./pages/workspaces/ProductionWorkspace";
+import ProductionPage from "./pages/ProductionPage";
+import RecipesPage from "./pages/RecipesPage";
+import PackagesPage from "./pages/PackagesPage";
+import EfficiencyPage from "./pages/EfficiencyPage";
+import ReconciliationPage from "./pages/ReconciliationPage";
+import HrPage from "./pages/HrPage";
+import PayrollPage from "./pages/PayrollPage";
+import ControlReportPage from "./pages/ControlReportPage";
+import ReportCentrePage from "./pages/ReportCentrePage";
+import BudgetPage from "./pages/BudgetPage";
+
+const SKIP_AUTH = process.env.REACT_APP_POS_SKIP_AUTH === "true";
+
+function DevBypassBanner() {
+  return (
+    <div style={{
+      background: "#7f1d1d", color: "#fff", fontWeight: 700, fontSize: 12,
+      textAlign: "center", padding: "6px 12px", letterSpacing: 0.3,
+    }}>
+      ⚠ POS AUTH BYPASSED (REACT_APP_POS_SKIP_AUTH=true) — DEV ONLY, REMOVE BEFORE SHIP
+    </div>
+  );
+}
+
+// Fills the DEMO business with sample data on its first login (no-op for
+// every other tenant, and for DEMO once it has products). See auth/demoAccount.js.
+function DemoSeeder() {
+  const { tenant, staffId } = usePosErpAuth();
+  const [seeding, setSeeding] = React.useState(false);
+  const started = React.useRef(false);
+  React.useEffect(() => {
+    if (started.current || !isDemoTenant(tenant) || !staffId) return;
+    started.current = true;
+    setSeeding(true);
+    seedDemoDataIfEmpty({ tenant, staffId }).then((r) => {
+      setSeeding(false);
+      if (r.seeded) window.location.reload(); // pages loaded before the data existed — refetch
+    });
+  }, [tenant, staffId]);
+  if (!seeding) return null;
+  return (
+    <div style={{ background: "#78350f", color: "#fff", fontSize: 12, fontWeight: 700, textAlign: "center", padding: "6px 12px" }}>
+      Setting up your demo shop with sample stock, customers and sales…
+    </div>
+  );
+}
+
+// Phone-only fingerprint lock for My Business. Sits INSIDE POSAuthGate, so the tenant, staff record and role
+// (owner / manager / cashier) are already resolved and unchanged: fingerprint only unlocks the app, it never
+// grants extra permissions. Uses the POS Supabase client (separate session) and its own "business" setting.
+// On web it renders children untouched.
+function PosLock({ children }) {
+  const { logout } = usePosErpAuth();
+  return (
+    <AppLock service="business" client={posSupabase} onSignOut={logout}>
+      {children}
+    </AppLock>
+  );
+}
+
+const PosRoutes = () => (
+  <>
+    <DemoSeeder />
+    <PosRoutesInner />
+  </>
+);
+
+const PosRoutesInner = () => (
+  <Routes>
+    <Route element={<POSLayout />}>
+      {/* Login lands on Home; the till is its own page. */}
+      <Route index element={<Navigate to="dashboard" replace />} />
+      <Route path="sell" element={<RequirePermission perm={ROUTE_PERMISSIONS["sell"]}><POSPage /></RequirePermission>} />
+      <Route path="dashboard" element={<POSDashboard />} />
+
+      {/* Workspaces -- one full-screen landing page per module */}
+      <Route path="retail" element={<RequirePermission perm={ROUTE_PERMISSIONS["retail"]}><RetailWorkspace /></RequirePermission>} />
+      <Route path="network" element={<RequirePermission perm={ROUTE_PERMISSIONS["network"]}><NetworkWorkspace /></RequirePermission>} />
+      <Route path="network/find" element={<RequirePermission perm={ROUTE_PERMISSIONS["network/find"]}><FindStockPage /></RequirePermission>} />
+      <Route path="network/orders" element={<RequirePermission perm={ROUTE_PERMISSIONS["network/orders"]}><NetworkOrdersPage /></RequirePermission>} />
+      <Route path="network/suppliers" element={<RequirePermission perm={ROUTE_PERMISSIONS["network/suppliers"]}><MySuppliersPage /></RequirePermission>} />
+      <Route path="network/offers" element={<RequirePermission perm={ROUTE_PERMISSIONS["network/offers"]}><MyOffersPage /></RequirePermission>} />
+      <Route path="money" element={<RequirePermission perm={ROUTE_PERMISSIONS["money"]}><MoneyWorkspace /></RequirePermission>} />
+      <Route path="people" element={<RequirePermission perm={ROUTE_PERMISSIONS["people"]}><PeopleWorkspace /></RequirePermission>} />
+      <Route path="comms" element={<RequirePermission perm={ROUTE_PERMISSIONS["comms"]}><MessagesWorkspace /></RequirePermission>} />
+      <Route path="rentals" element={<RequirePermission perm={ROUTE_PERMISSIONS["rentals"]}><RentalsWorkspace /></RequirePermission>} />
+      <Route path="salon" element={<RequirePermission perm={ROUTE_PERMISSIONS["salon"]}><SalonWorkspace /></RequirePermission>} />
+      <Route path="rooms" element={<RequirePermission perm={ROUTE_PERMISSIONS["rooms"]}><RoomsWorkspace /></RequirePermission>} />
+      <Route path="production" element={<RequirePermission perm={ROUTE_PERMISSIONS["production"]}><ProductionWorkspace /></RequirePermission>} />
+      <Route path="more" element={<MoreWorkspace />} />
+
+      <Route path="products" element={<RequirePermission perm={ROUTE_PERMISSIONS["products"]}><ProductsPage /></RequirePermission>} />
+      <Route path="customers" element={<RequirePermission perm={ROUTE_PERMISSIONS["customers"]}><CustomersPage /></RequirePermission>} />
+      <Route path="folios" element={<RequirePermission perm={ROUTE_PERMISSIONS["folios"]}><FoliosPage /></RequirePermission>} />
+      <Route path="room-list" element={<RequirePermission perm={ROUTE_PERMISSIONS["room-list"]}><RoomsPage /></RequirePermission>} />
+      <Route path="stays" element={<RequirePermission perm={ROUTE_PERMISSIONS["stays"]}><StaysPage /></RequirePermission>} />
+      <Route path="production-runs" element={<RequirePermission perm={ROUTE_PERMISSIONS["production-runs"]}><ProductionPage /></RequirePermission>} />
+      <Route path="recipes" element={<RequirePermission perm={ROUTE_PERMISSIONS["recipes"]}><RecipesPage /></RequirePermission>} />
+      <Route path="inventory" element={<RequirePermission perm={ROUTE_PERMISSIONS["inventory"]}><InventoryPage /></RequirePermission>} />
+      <Route path="purchase-orders" element={<RequirePermission perm={ROUTE_PERMISSIONS["purchase-orders"]}><PurchaseOrdersPage /></RequirePermission>} />
+      <Route path="goods-receiving" element={<RequirePermission perm={ROUTE_PERMISSIONS["goods-receiving"]}><GoodsReceivingPage /></RequirePermission>} />
+      <Route path="suppliers" element={<RequirePermission perm={ROUTE_PERMISSIONS["suppliers"]}><SuppliersPage /></RequirePermission>} />
+      <Route path="payables" element={<RequirePermission perm={ROUTE_PERMISSIONS["payables"]}><PayablesPage /></RequirePermission>} />
+      <Route path="expenses" element={<RequirePermission perm={ROUTE_PERMISSIONS["expenses"]}><ExpensesPage /></RequirePermission>} />
+      <Route path="equipment" element={<RequirePermission perm={ROUTE_PERMISSIONS["equipment"]}><AssetsPage /></RequirePermission>} />
+      <Route path="loans" element={<RequirePermission perm={ROUTE_PERMISSIONS["loans"]}><LoansPage /></RequirePermission>} />
+      <Route path="mpesa" element={<RequirePermission perm={ROUTE_PERMISSIONS["mpesa"]}><MpesaPage /></RequirePermission>} />
+      <Route path="cash" element={<RequirePermission perm={ROUTE_PERMISSIONS["cash"]}><CashPage /></RequirePermission>} />
+      <Route path="units" element={<RequirePermission perm={ROUTE_PERMISSIONS["units"]}><UnitsPage /></RequirePermission>} />
+      <Route path="charges" element={<RequirePermission perm={ROUTE_PERMISSIONS["charges"]}><RecurringChargesPage /></RequirePermission>} />
+      <Route path="meters" element={<RequirePermission perm={ROUTE_PERMISSIONS["meters"]}><MetersPage /></RequirePermission>} />
+      <Route path="invoices" element={<RequirePermission perm={ROUTE_PERMISSIONS["invoices"]}><InvoicesPage /></RequirePermission>} />
+      <Route path="maintenance" element={<RequirePermission perm={ROUTE_PERMISSIONS["maintenance"]}><MaintenancePage /></RequirePermission>} />
+      <Route path="services" element={<RequirePermission perm={ROUTE_PERMISSIONS["services"]}><ServicesPage /></RequirePermission>} />
+      <Route path="activities" element={<RequirePermission perm={ROUTE_PERMISSIONS["activities"]}><ServicesPage /></RequirePermission>} />
+      <Route path="packages" element={<RequirePermission perm={ROUTE_PERMISSIONS["packages"]}><PackagesPage /></RequirePermission>} />
+      <Route path="efficiency" element={<RequirePermission perm={ROUTE_PERMISSIONS["efficiency"]}><EfficiencyPage /></RequirePermission>} />
+      <Route path="appointments" element={<RequirePermission perm={ROUTE_PERMISSIONS["appointments"]}><AppointmentsPage /></RequirePermission>} />
+      <Route path="communication" element={<RequirePermission perm={ROUTE_PERMISSIONS["communication"]}><CommunicationPage /></RequirePermission>} />
+      <Route path="messages" element={<RequirePermission perm={ROUTE_PERMISSIONS["messages"]}><CustomerCommunicationPage /></RequirePermission>} />
+      <Route path="etims" element={<RequirePermission perm={ROUTE_PERMISSIONS["etims"]}><EtimsQueuePage /></RequirePermission>} />
+      <Route path="settings" element={<RequirePermission perm={ROUTE_PERMISSIONS["settings"]}><SettingsPage /></RequirePermission>} />
+      <Route path="reversals" element={<RequirePermission perm={ROUTE_PERMISSIONS["reversals"]}><SaleCorrectionsPage /></RequirePermission>} />
+      <Route path="staff" element={<RequirePermission perm={ROUTE_PERMISSIONS["staff"]}><StaffPage /></RequirePermission>} />
+      <Route path="reconcile" element={<RequirePermission perm={ROUTE_PERMISSIONS["reconcile"]}><ReconciliationPage /></RequirePermission>} />
+      <Route path="hr" element={<RequirePermission perm={ROUTE_PERMISSIONS["hr"]}><HrPage /></RequirePermission>} />
+      <Route path="payroll" element={<RequirePermission perm={ROUTE_PERMISSIONS["payroll"]}><PayrollPage /></RequirePermission>} />
+      <Route path="control" element={<RequirePermission perm={ROUTE_PERMISSIONS["control"]}><ControlReportPage /></RequirePermission>} />
+      <Route path="audit" element={<RequirePermission perm={ROUTE_PERMISSIONS["audit"]}><AuditPage /></RequirePermission>} />
+      <Route path="financials" element={<RequirePermission perm={ROUTE_PERMISSIONS["financials"]}><FinancialReportsPage /></RequirePermission>} />
+      <Route path="report-centre" element={<RequirePermission perm={ROUTE_PERMISSIONS["report-centre"]}><ReportCentrePage /></RequirePermission>} />
+      <Route path="budgets" element={<RequirePermission perm={ROUTE_PERMISSIONS["budgets"]}><BudgetPage /></RequirePermission>} />
+      <Route path="reports" element={<RequirePermission perm={ROUTE_PERMISSIONS["reports"]}><ReportsPage /></RequirePermission>} />
+    </Route>
+  </Routes>
+);
+
+export default function POSApp() {
+  return (
+    <POSAuthProvider>
+      {SKIP_AUTH ? (
+        <>
+          <DevBypassBanner />
+          <PosRoutes />
+        </>
+      ) : (
+        <POSAuthGate>
+          <PosLock>
+            <PosRoutes />
+          </PosLock>
+        </POSAuthGate>
+      )}
+    </POSAuthProvider>
+  );
+}

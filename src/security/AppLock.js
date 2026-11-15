@@ -23,11 +23,14 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { isNativeApp } from "./nativeBiometric";
-import { isEnabled } from "./deviceTrust";
+import { isEnabled, isEnabledForSession } from "./deviceTrust";
 import LockScreen from "./LockScreen";
 import EnableBiometricPrompt from "./EnableBiometricPrompt";
 
 const LockCtx = createContext({ locked: false, lockNow: () => {}, refreshTrust: async () => {} });
+// True inside an AppLock. A second AppLock mounted under it (e.g. one in App.js and one inside a layout)
+// does nothing, so the member never gets two lock screens or two "turn on fingerprint" prompts.
+const InsideAppLock = createContext(false);
 export const useAppLock = () => useContext(LockCtx);
 
 const LOCK_AFTER_MS = 60 * 1000;      // background time before the app locks again
@@ -35,6 +38,9 @@ const FRESH_SIGN_IN_MS = 60 * 1000;   // "just signed in with a password"
 
 // Lives as long as the app process does; resets when Android kills the app = a true cold start.
 const unlockedThisRun = new Set();
+
+// Supabase services: enabled for THIS signed-in account. Adapter services (Chama): the adapter checks its own user.
+const trustOn = (service, client, adapter) => (adapter ? isEnabled(service) : isEnabledForSession(service, client));
 
 async function signedInWithin(client, adapter, ms) {
   try {
@@ -48,6 +54,7 @@ async function signedInWithin(client, adapter, ms) {
 }
 
 export default function AppLock({ service, client, adapter, onSignOut, children }) {
+  const nested = useContext(InsideAppLock);
   const native = isNativeApp();
   const [ready, setReady] = useState(!native);
   const [enabled, setEnabled] = useState(false);
@@ -62,7 +69,7 @@ export default function AppLock({ service, client, adapter, onSignOut, children 
     if (!native) return;
     let alive = true;
     (async () => {
-      const e = await isEnabled(service);
+      const e = await trustOn(service, client, adapterRef.current);
       let startLocked = false;
       if (e && !unlockedThisRun.has(service)) {
         startLocked = !(await signedInWithin(client, adapterRef.current, FRESH_SIGN_IN_MS));
@@ -78,10 +85,10 @@ export default function AppLock({ service, client, adapter, onSignOut, children 
   }, [native, service, client]);
 
   const refreshTrust = useCallback(async () => {
-    const e = await isEnabled(service);
+    const e = await trustOn(service, client, adapterRef.current);
     enabledRef.current = e;
     setEnabled(e);
-  }, [service]);
+  }, [service, client]);
 
   // Re-lock after the app has been in the background for a while.
   useEffect(() => {
@@ -112,7 +119,7 @@ export default function AppLock({ service, client, adapter, onSignOut, children 
     setLocked(false);
   }, [service, refreshTrust]);
 
-  if (!native) return children;
+  if (!native || nested) return children;
   if (!ready) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center">
@@ -122,10 +129,12 @@ export default function AppLock({ service, client, adapter, onSignOut, children 
   }
 
   return (
+    <InsideAppLock.Provider value={true}>
     <LockCtx.Provider value={{ locked, lockNow, refreshTrust }}>
       <div style={{ display: locked ? "none" : "contents" }} aria-hidden={locked}>{children}</div>
       {locked && <LockScreen service={service} client={client} adapter={adapter} onUnlocked={handleUnlocked} onSignOut={onSignOut} />}
       {!locked && !enabled && <EnableBiometricPrompt service={service} client={client} adapter={adapter} onEnabled={refreshTrust} />}
     </LockCtx.Provider>
+    </InsideAppLock.Provider>
   );
 }

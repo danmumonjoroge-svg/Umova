@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { User, Bell, ShieldCheck, Info, LogOut, ChevronRight } from "lucide-react";
+import { User, Bell, ShieldCheck, Info, LogOut, Power, ChevronRight } from "lucide-react";
+import { canExitApp, exitApp } from "../utils/exitApp";
 import { PageHeader, Card } from "./ui";
 import { NotificationList } from "./NotificationCenter";
 import PasskeySettings from "../components/Auth/PasskeySettings";
@@ -31,6 +32,11 @@ export function MoreWorkspace() {
         <button className="uma-row" style={{ width: "100%", background: "none", border: 0, minHeight: 52, color: "#A23B2B" }} onClick={logout}>
           <span style={{ display: "flex", gap: 12, alignItems: "center" }}><LogOut size={20} />Log out</span>
         </button>
+        {canExitApp() && (
+          <button className="uma-row" style={{ width: "100%", background: "none", border: 0, minHeight: 52 }} onClick={exitApp}>
+            <span style={{ display: "flex", gap: 12, alignItems: "center" }}><Power size={20} color="#237A52" />Exit app</span>
+          </button>
+        )}
       </section>
     </>
   );

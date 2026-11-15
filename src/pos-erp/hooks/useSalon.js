@@ -4,7 +4,7 @@
 // creating the underlying lb_products row a service is).
 
 import { useState, useEffect, useCallback } from 'react';
-import { serviceDetailsService, appointmentService } from '../services/salonService';
+import { serviceDetailsService, appointmentService, providerService } from '../services/salonService';
 import { productService } from '../services/productService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 
@@ -64,6 +64,19 @@ export function useServices() {
   return { services, loading, error, fetch, create };
 }
 
+/** Phase 54 -- optional providers (HR employees) for bookings and service lines. Empty when none are set up. */
+export function useProviders(enabled = true) {
+  const { tenant } = usePosErpAuth();
+  const [providers, setProviders] = useState([]);
+  useEffect(() => {
+    if (!enabled || !tenant?.business_id) return undefined;
+    let alive = true;
+    providerService.list(tenant.business_id).then((r) => { if (alive) setProviders(r); }).catch(() => { /* optional: hide the picker */ });
+    return () => { alive = false; };
+  }, [enabled, tenant?.business_id]);
+  return { providers };
+}
+
 export function useAppointments(filters = {}) {
   const { staffId, tenant } = usePosErpAuth();
   const [appointments, setAppointments] = useState([]);
@@ -92,20 +105,17 @@ export function useAppointments(filters = {}) {
     return result;
   }, [staffId, tenant]);
 
+  const reschedule = useCallback(async (id, when) => {
+    const result = await appointmentService.reschedule(id, when);
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...result } : a));
+    return result;
+  }, []);
+
   const setStatus = useCallback(async (id, status) => {
     const result = await appointmentService.setStatus(id, status);
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...result } : a));
     return result;
   }, []);
 
-  const completeAndSell = useCallback(async (appointment, { shiftId, unitPrice, paymentMethod }) => {
-    const { appointment: updated } = await appointmentService.completeAndSell({
-      appointment: { ...appointment, tenant_id: tenant?.id, business_id: tenant?.business_id },
-      shiftId, unitPrice, paymentMethod, createdBy: staffId,
-    });
-    setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, ...updated } : a));
-    return updated;
-  }, [staffId, tenant]);
-
-  return { appointments, loading, error, fetch, create, setStatus, completeAndSell };
+  return { appointments, loading, error, fetch, create, setStatus, reschedule };
 }

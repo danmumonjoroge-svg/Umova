@@ -638,6 +638,12 @@
   .quick-btn { flex: 1; padding: 10px 8px; font-size: 12.5px; text-align: center; }
 }
 
+/* Four quick-login buttons (Financial, Chama, POS, School) on very narrow phones: tighter, still one row. */
+@media (max-width: 380px) {
+  .quick-access { gap: 4px; }
+  .quick-btn { padding: 10px 4px; font-size: 11.5px; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    ACCESSIBILITY
 ═══════════════════════════════════════════════════════════════════════════ */

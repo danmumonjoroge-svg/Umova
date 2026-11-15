@@ -307,6 +307,20 @@ export default function AdminLogin() {
             }}
           />
 
+          {/* Separate services: members and Chama users have their own logins. */}
+          <div className="mt-6 text-center text-xs text-slate-500">
+            SACCO member?{" "}
+            <button type="button" onClick={() => navigate("/login")}
+              className="text-green-700 font-semibold hover:underline">
+              Member login
+            </button>
+            {" · "}Chama?{" "}
+            <button type="button" onClick={() => navigate("/chama/login")}
+              className="text-green-700 font-semibold hover:underline">
+              Chama login
+            </button>
+          </div>
+
         </div>
 
       </div>

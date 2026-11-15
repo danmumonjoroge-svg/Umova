@@ -10,6 +10,10 @@ import "./MemberStatements.css";
 // Account ids used by the statement (same ids the PDF uses).
 const ACC = { SAVINGS: 1018, SHARES: 1012, LOANS: 1011, LOAN_INT: 1020, SAV_INT: 1006 };
 
+// 1020 = Loan Interest Income (income to the organisation, credit-balance).
+// When it is credited against one of these, the member is being CHARGED interest.
+const LOAN_SIDE = new Set([ACC.LOANS, 1101, 1102, 1103]);
+
 const PAGE = 1000;   // Supabase caps a response at 1000 rows → always page.
 const CHUNK = 150;   // journal numbers per .in() request (keeps URL short).
 
@@ -35,10 +39,22 @@ function classify(t) {
   const cr = Number(t.credit_account_id) || 0;
   const amt = Number(t.amount) || 0;
   let label = "Other", memberDr = 0, memberCr = 0;
-  if (dr === ACC.SAVINGS || cr === ACC.SAVINGS) { label = "Savings"; if (dr === ACC.SAVINGS) memberDr = amt; else memberCr = amt; }
+  // Loan interest income (1020) is checked FIRST so an accrual such as
+  // Dr 1011 Loans / Cr 1020 appears as a "Loan interest" row instead of being
+  // swallowed by the loan row.
+  if (dr === ACC.LOAN_INT || cr === ACC.LOAN_INT) {
+    label = "Loan interest";
+    if (cr === ACC.LOAN_INT) {
+      // Income earned: charged to the member if booked against the loan/receivable,
+      // otherwise it was paid in (cash/bank/etc.).
+      if (LOAN_SIDE.has(dr)) memberDr = amt; else memberCr = amt;
+    } else {
+      memberCr = amt; // income reversed / waived: reduces what the member owes
+    }
+  }
+  else if (dr === ACC.SAVINGS || cr === ACC.SAVINGS) { label = "Savings"; if (dr === ACC.SAVINGS) memberDr = amt; else memberCr = amt; }
   else if (dr === ACC.SHARES || cr === ACC.SHARES) { label = "Shares"; if (dr === ACC.SHARES) memberDr = amt; else memberCr = amt; }
   else if (dr === ACC.LOANS || cr === ACC.LOANS) { label = "Loan"; if (dr === ACC.LOANS) memberDr = amt; else memberCr = amt; }
-  else if (dr === ACC.LOAN_INT || cr === ACC.LOAN_INT) { label = "Loan interest"; if (dr === ACC.LOAN_INT) memberDr = amt; else memberCr = amt; }
   else if (cr === ACC.SAV_INT || dr === ACC.SAV_INT) { label = "Savings interest"; memberCr = cr === ACC.SAV_INT ? amt : 0; memberDr = dr === ACC.SAV_INT ? amt : 0; }
   return { label, memberDr, memberCr };
 }
@@ -151,8 +167,10 @@ export default function AdminMemberStatement() {
     if (dr === ACC.SHARES) a.shares -= amt;
     if (dr === ACC.LOANS) a.loans += amt;
     if (cr === ACC.LOANS) a.loans -= amt;
-    if (dr === ACC.LOAN_INT) { a.loans += amt; a.loan_interest += amt; }
-    if (cr === ACC.LOAN_INT) { a.loans -= amt; a.loan_interest -= amt; }
+    // 1020 is income: a credit = interest charged to / paid by the member.
+    // It must NOT touch the loan balance; the loan side of the entry (1011) does that.
+    if (cr === ACC.LOAN_INT) a.loan_interest += amt;
+    if (dr === ACC.LOAN_INT) a.loan_interest -= amt;
     if (cr === ACC.SAV_INT) { a.savings += amt; a.savings_interest += amt; }
     if (dr === ACC.SAV_INT) { a.savings -= amt; a.savings_interest -= amt; }
     return a;
@@ -169,9 +187,14 @@ export default function AdminMemberStatement() {
   const types = useMemo(() => ["all", ...new Set(ledger.map((t) => t.label))], [ledger]);
 
   const downloadPDF = async () => {
-    await generateStatementPDF(member, ledger, {
-      summary, loan: selectedLoan || null, generated_at: new Date().toISOString(),
-    });
+    try {
+      await generateStatementPDF(member, ledger, {
+        summary, loan: selectedLoan || null, generated_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error("[ADMIN STATEMENT DOWNLOAD]", e);
+      setResult({ ok: false, text: `Could not prepare the statement: ${e?.message || e}` });
+    }
   };
 
   return (
@@ -225,7 +248,7 @@ export default function AdminMemberStatement() {
                 <KpiCard label="Savings" value={kes(summary.savings)} />
                 <KpiCard label="Shares" value={kes(summary.shares)} />
                 <KpiCard label="Loan balance" value={kes(summary.loans)} />
-                <KpiCard label="Loan interest due" value={kes(summary.loan_interest)} />
+                <KpiCard label="Loan interest charged" value={kes(summary.loan_interest)} />
                 <KpiCard label="Savings interest" value={kes(summary.savings_interest)} />
               </div>
             </SectionCard>

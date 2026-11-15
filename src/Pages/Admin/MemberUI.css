@@ -1,0 +1,177 @@
+/* Shared member-page styles: forest green + gold on ivory (same tokens as the home screen). Scoped to .mu */
+.mu{--forest:#123C2A;--emerald:#237A52;--gold:#C6A15B;--gold-soft:#F3EAD2;--ivory:#F7F6F0;--line:#E4E2D6;--text:#26352D;--muted:#68756D;--bad:#A23B2B;
+  color:var(--text);display:flex;flex-direction:column;gap:14px;max-width:1040px;margin:0 auto}
+.mu h1,.mu h2,.mu p{margin:0}
+.mu a{text-decoration:none;color:inherit}
+.mu-span{grid-column:1/-1}
+.mu-grid{display:grid;gap:14px;grid-template-columns:1fr}
+.mu-center{align-items:center;justify-content:center;padding:72px 0;gap:14px}
+.mu-note{font-size:12px;color:var(--muted);line-height:1.4}
+.mu-empty{padding:22px 8px;text-align:center;color:var(--muted);font-size:14px}
+.mu-spin{width:36px;height:36px;border-radius:50%;border:4px solid var(--gold-soft);border-top-color:var(--emerald);animation:mu-spin .8s linear infinite}
+@keyframes mu-spin{to{transform:rotate(360deg)}}
+
+/* hero */
+.mu-hero{position:relative;overflow:hidden;border-radius:24px;padding:18px;color:#fff;
+  background:radial-gradient(circle at 92% -10%,rgba(198,161,91,.45),transparent 55%),linear-gradient(150deg,#0F3324 0%,#1A5139 58%,#237A52 100%);
+  box-shadow:0 10px 28px rgba(18,60,42,.28)}
+.mu-hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
+.mu-eyebrow{font-size:12px;color:#CFE3D8}
+.mu-title{font-size:20px;font-weight:800;letter-spacing:-.3px}
+.mu-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;
+  background:rgba(198,161,91,.2);border:1px solid rgba(198,161,91,.55);color:#F1DDAE;white-space:nowrap}
+.mu-hero-main{display:flex;flex-direction:column;margin-bottom:14px}
+.mu-hero-label{font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#E6CF98}
+.mu-hero-amt{margin-top:4px;font-size:clamp(26px,8.5vw,32px);line-height:1.1;font-weight:800;letter-spacing:-.6px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.mu-hero-note{margin-top:6px;font-size:12px;color:#CFE3D8;line-height:1.4}
+.mu-hero-subs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.mu-glass{padding:11px 12px;border-radius:16px;background:rgba(255,255,255,.09);border:1px solid rgba(198,161,91,.35)}
+.mu-glass-label{display:block;font-size:11px;color:#CFE3D8;font-weight:600}
+.mu-glass-amt{display:block;margin-top:3px;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+
+/* cards */
+.mu-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:14px;min-width:0;box-shadow:0 1px 0 rgba(18,60,42,.03)}
+.mu-card-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.mu-card-titles{flex:1;min-width:0}
+.mu-card h2{font-size:15px;font-weight:800;color:var(--forest)}
+.mu-card-sub{font-size:12px;color:var(--muted);margin-top:1px}
+.mu-ico{flex:none;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:var(--gold-soft);color:#7A5A16}
+
+/* sub-cards */
+.mu-subgrid.cols-2>:last-child:nth-child(odd){grid-column:1/-1}
+.mu-subgrid{display:grid;gap:10px;grid-template-columns:repeat(var(--cols,2),minmax(0,1fr))}
+.mu-sub{display:flex;flex-direction:column;gap:3px;text-align:left;padding:11px 12px;border-radius:14px;background:var(--ivory);
+  border:1px solid var(--line);border-left:3px solid var(--gold);font:inherit;color:inherit;min-width:0}
+button.mu-sub,a.mu-sub{cursor:pointer}
+button.mu-sub:active,a.mu-sub:active{background:#EFEDE2}
+.mu-sub-label{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--muted)}
+.mu-sub-value{font-size:15px;font-weight:800;color:var(--forest);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.mu-sub-note{font-size:11.5px;color:#8A6A1F;font-weight:600}
+.mu-sub-value.good,.mu-sub-note.good{color:var(--emerald)}
+.mu-sub-value.bad,.mu-sub-note.bad{color:var(--bad)}
+
+/* profile fields */
+.mu-field{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:14px;background:var(--ivory);border:1px solid var(--line);border-left:3px solid var(--gold);min-width:0}
+.mu-field-label{font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
+.mu-field-value{font-size:14px;font-weight:700;color:var(--forest);overflow-wrap:anywhere}
+.mu-field-value.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600}
+.mu-field-value i{font-weight:500;color:#A8B2AB}
+.mu-stack{display:flex;flex-direction:column;gap:10px}
+
+/* buttons, pills, inputs */
+.mu-actions{display:flex;flex-wrap:wrap;gap:10px}
+.mu-btn{white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:14px;border:1px solid transparent;font:inherit;font-size:14px;font-weight:700;cursor:pointer;color:#fff}
+.mu-btn:disabled{opacity:.5;cursor:default}
+.mu-btn--primary{background:var(--emerald)}
+.mu-btn--dark{background:var(--forest)}
+.mu-btn--gold{background:var(--gold);color:var(--forest)}
+.mu-btn--ghost{background:#fff;border-color:var(--line);color:var(--forest)}
+.mu-btn--soft{background:var(--gold-soft);color:#6E4F10}
+.mu-btn--block{flex:1;padding:0 12px}
+.mu-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;letter-spacing:.3px;padding:3px 10px;border-radius:99px}
+.mu-pill--gold{background:var(--gold-soft);color:#7A5A16}
+.mu-pill--good{background:#E3F1E8;color:var(--emerald)}
+.mu-pill--bad{background:#F6DDD8;color:var(--bad)}
+.mu-search{display:flex;align-items:center;gap:8px;flex:1;min-width:0;padding:0 12px;min-height:44px;border-radius:14px;background:var(--ivory);border:1px solid var(--line);color:var(--muted)}
+.mu-search:focus-within{outline:2px solid rgba(198,161,91,.55);border-color:var(--gold)}
+.mu-search input{flex:1;min-width:0;border:0;background:none;outline:none;font:inherit;font-size:14px;color:var(--text)}
+.mu-tools{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.mu-tools .mu-search{flex:1 1 100%}
+.mu-tools-btns{flex:1 1 100%}
+.mu-tools-btns .mu-btn{flex:1}
+.mu-tools-btns{display:flex;gap:8px}
+.mu-label{display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.mu-input{width:100%;min-width:0;box-sizing:border-box;min-height:44px;padding:0 12px;border-radius:14px;border:1px solid var(--line);background:var(--ivory);font:inherit;font-size:14px;font-weight:600;color:var(--text)}
+.mu-input:focus{outline:2px solid rgba(198,161,91,.55);border-color:var(--gold)}
+.mu-formgrid{display:grid;gap:12px;grid-template-columns:1fr}
+.mu-drop{display:flex;flex-direction:column;align-items:center;gap:4px;padding:16px;border:2px dashed var(--line);border-radius:16px;background:var(--ivory);color:var(--muted);text-align:center;cursor:pointer;font-size:13px}
+.mu-drop b{color:var(--emerald)}
+.mu-drop input{display:none}
+.mu-progress{height:10px;border-radius:99px;background:#EFEDE2;overflow:hidden}
+.mu-progress-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--emerald),var(--gold));transition:width .5s}
+
+/* segmented account picker (statement page) */
+.mu-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.mu-seg-item{display:flex;flex-direction:column;gap:2px;text-align:left;padding:10px;border-radius:16px;border:1px solid var(--line);background:#fff;font:inherit;color:inherit;cursor:pointer;min-width:0}
+.mu-seg-item.on{border-color:var(--gold);background:var(--gold-soft);box-shadow:inset 0 3px 0 var(--gold)}
+.mu-seg-label{font-size:12px;font-weight:700;color:var(--muted)}
+.mu-seg-amt{font-size:12.5px;font-weight:800;color:var(--forest);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.mu-seg-amt.bad{color:var(--bad)}
+.mu-seg-note{font-size:11px;color:var(--muted)}
+.mu-filters{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.mu-filters>*{min-width:0}
+.mu-filters .full{grid-column:1/-1}
+
+/* transaction list */
+.mu-list{display:flex;flex-direction:column;gap:12px;margin-top:8px}
+.mu-month-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 2px 6px;font-size:12px;color:var(--muted)}
+.mu-month-head b{font-size:13px;color:var(--forest)}
+.mu-month-head i{font-style:normal;font-weight:700;margin-left:8px;font-variant-numeric:tabular-nums}
+.mu-month-head i.in{color:var(--emerald)} .mu-month-head i.out{color:var(--bad)}
+.mu-month ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.mu-tx{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:14px;background:var(--ivory);border:1px solid var(--line)}
+.mu-tx-ico{flex:none;width:32px;height:32px;border-radius:10px;display:grid;place-items:center}
+.mu-tx-ico.in{background:#E3F1E8;color:var(--emerald)} .mu-tx-ico.out{background:#F6DDD8;color:var(--bad)}
+.mu-tx-body{flex:1;min-width:0;display:flex;flex-direction:column}
+.mu-tx-desc{font-size:13.5px;font-weight:700;color:var(--forest);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mu-tx-meta{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mu-tx-amts{flex:none;display:flex;flex-direction:column;align-items:flex-end;max-width:46%}
+.mu-tx-amt{font-size:13.5px;font-weight:800;font-variant-numeric:tabular-nums}
+.mu-tx-amt.in{color:var(--emerald)} .mu-tx-amt.out{color:var(--bad)}
+.mu-tx-bal{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* notices */
+.mu-notice{display:flex;gap:12px;align-items:flex-start;padding:16px;border-radius:18px;border:1px solid var(--line);background:#fff}
+.mu-notice b{display:block;color:var(--forest)}
+.mu-notice p{margin-top:4px;font-size:13px;color:var(--muted)}
+.mu-notice--bad{border-color:#E7C4BC;background:#FBF0ED;color:var(--bad)}
+.mu-notice--bad b{color:var(--bad)}
+.mu-notice--warn{border-color:#E8D9B0;background:#FBF6E8;color:#8A6A1F}
+.mu-notice .mu-btn{margin-top:10px}
+
+@media (min-width:760px){
+  .mu-tools .mu-search{flex:1 1 240px}
+  .mu-tools-btns{flex:0 0 auto}
+  .mu-tools-btns .mu-btn{flex:0 0 auto}
+  .mu-hero{padding:22px}
+  .mu-hero-amt{font-size:38px}
+  .mu-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mu-formgrid{grid-template-columns:1fr 1fr}
+  .mu-filters{grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) auto;align-items:end}
+  .mu-filters .full{grid-column:auto}
+  .mu-seg-amt{font-size:15px}
+}
+
+/* profile hero */
+.mu-profile-top{display:flex;align-items:center;gap:14px}
+.mu-avatar{flex:none;width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid rgba(198,161,91,.7);background:#1A5139}
+.mu-avatar--initials{display:grid;place-items:center;font-size:24px;font-weight:800;color:#F1DDAE}
+.mu-profile-id{min-width:0}
+.mu-profile-pills{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.mu-progress--on-dark{margin-top:8px;background:rgba(255,255,255,.18)}
+.mu-spinning{animation:mu-spin .8s linear infinite}
+
+/* Loans page: `loan.css` gives .loan-container a full-page background; inside the member shell it should be transparent. */
+.loan-container.ln{min-height:0;background:none}
+
+/* ---- phone fit: nothing inside a member page may be wider than the screen ---- */
+.mu{width:100%;min-width:0;box-sizing:border-box;overflow-x:clip}
+.mu>*{min-width:0;max-width:100%}
+.mu-month,.mu-list,.mu-month ul,.mu-tx{min-width:0;max-width:100%}
+.mu-sub-label,.mu-glass-label{overflow-wrap:anywhere}
+.mu-glass{min-width:0}
+.mu-filters input[type=date]{min-width:0;max-width:100%;-webkit-appearance:none;appearance:none}
+.mu table{max-width:100%}
+
+/* ---- tabs (replaces the three balance tiles on the statement page) ---- */
+.mu-tabs{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:4px;padding:4px;background:#fff;border:1px solid var(--line);border-radius:16px}
+.mu-tab{min-height:44px;padding:0 6px;border:0;border-radius:12px;background:transparent;font:inherit;font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mu-tab.on{background:var(--forest);color:#fff}
+
+/* ---- collapsible detail card ---- */
+.mu-collapse>summary{list-style:none;cursor:pointer;margin-bottom:0}
+.mu-collapse>summary::-webkit-details-marker{display:none}
+.mu-collapse-chev{flex:none;color:var(--muted);transition:transform .2s}
+.mu-collapse[open] .mu-collapse-chev{transform:rotate(180deg)}
+.mu-collapse[open]>summary{margin-bottom:12px}
+.mu-collapse-body{display:flex;flex-direction:column;gap:12px}

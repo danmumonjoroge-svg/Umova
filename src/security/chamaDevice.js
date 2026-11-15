@@ -93,6 +93,13 @@ export async function enableChamaFingerprint({ client, phone, password, label })
 
 // ---- check this phone's device with the server ----------------------------
 // Shared by signInWithChamaFingerprint (no session) and unlockChamaFingerprint (app lock).
+// A failed sign-in carries a short reference (never the secret) so the screen can show it and the log has it too.
+const fail = (status, detail) => {
+  const d = detail ? String(detail).replace(/\s+/g, " ").trim().slice(0, 140) : undefined;
+  try { console.warn("[chamaFingerprint]", status, d || ""); } catch { /* logging must never break sign-in */ }
+  return d ? { ok: false, status, detail: d } : { ok: false, status };
+};
+
 async function verifyDevice({ client, reason }) {
   if (!(await isEnabled(SERVICE))) return { ok: false, status: "not_enabled" };
 
@@ -102,11 +109,12 @@ async function verifyDevice({ client, reason }) {
       await clearLocal();
       return { ok: false, status: BioStatus.INVALIDATED };
     }
-    return { ok: false, status: got.status };            // cancelled / failed / locked out: nothing is wiped
+    // unrecognised phone error: keep its text as a short reference so the screen can show WHY
+    return got.status === BioStatus.UNKNOWN ? fail(got.status, `phone: ${got.detail || "unrecognised error"}`) : { ok: false, status: got.status };
   }
 
   const { data, error } = await client.rpc("chama_device_login", { p_device_id: got.deviceId, p_secret: got.secret });
-  if (error) return { ok: false, status: isNetworkError(error) ? "offline" : "server_error" };
+  if (error) return fail(isNetworkError(error) ? "offline" : "server_error", `chama_device_login: ${error.code || ""} ${error.message || error.name || "error"}`);
   if (data?.ok && data.user?.user_id) return { ok: true, user: data.user };
 
   switch (data?.reason) {
@@ -119,7 +127,7 @@ async function verifyDevice({ client, reason }) {
     case "ACCOUNT_INACTIVE":
       return { ok: false, status: "account_inactive" };
     default:
-      return { ok: false, status: "server_error" };
+      return fail("server_error", `server said: ${data?.reason || "no reason given"}`);
   }
 }
 

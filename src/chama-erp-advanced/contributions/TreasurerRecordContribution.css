@@ -1,0 +1,8 @@
+.trc-page { max-width: 760px; }
+.trc-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: #fff; }
+.trc-search input { flex: 1; border: 0 !important; padding: 9px 0 !important; outline: none; min-width: 0; }
+.trc-balances { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.trc-balances span { display: flex; flex-direction: column; font-size: 0.72rem; color: var(--ink-soft); padding: 8px 10px; background: var(--brand-tint); border-radius: 8px; min-width: 0; }
+.trc-balances b { font-size: 0.85rem; color: var(--forest); font-weight: 700; overflow-wrap: anywhere; }
+.trc-receipt-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.trc-page .cm-form select[size] { padding: 4px; }

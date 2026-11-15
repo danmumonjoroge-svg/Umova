@@ -32,7 +32,21 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// Browsers send an OPTIONS "preflight" before calling a function from the app. Without an OK answer to it (and these headers on every
+// reply) the call is blocked with "CORS policy ... does not have HTTP ok status" and nothing ever reaches the code below.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+const withCors = (res: Response) => { Object.entries(CORS).forEach(([k, v]) => res.headers.set(k, v)); return res; };
+
 serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers: CORS });
+  return withCors(await handle(req));
+});
+
+async function handle(req: Request): Promise<Response> {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   try {
@@ -53,6 +67,18 @@ serve(async (req) => {
     const callerClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
+    // Only someone allowed to change business settings may touch Daraja credentials or turn M-Pesa on/off.
+    // Being able to SEE the business (checked next) is not enough: a cashier can. pos_require() (phase28) raises
+    // 42501 for a POS staff session without settings.manage and passes owner/non-POS sessions. If the helper is not
+    // deployed yet the database trigger added by phase39 on lb_mpesa_config is the backstop.
+    const { error: permError } = await callerClient.rpc("pos_require", { p_perms: ["settings.manage"] });
+    if (permError) {
+      if (permError.code === "42501") {
+        return new Response(JSON.stringify({ error: "Only the owner or a manager can change M-Pesa settings." }), { status: 403 });
+      }
+      console.warn("[mpesa-save-config] permission helper unavailable, relying on database trigger:", permError.message);
+    }
+
     const { data: ownBusiness, error: ownError } = await callerClient
       .from("lb_businesses").select("id").eq("id", businessId).maybeSingle();
     if (ownError || !ownBusiness) {
@@ -126,4 +152,4 @@ serve(async (req) => {
     console.error("[mpesa-save-config]", err);
     return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500 });
   }
-});
+}

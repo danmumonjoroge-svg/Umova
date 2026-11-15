@@ -643,3 +643,75 @@
   .members-page .reject-btn { background: transparent; border-color: #5b2a26; color: #ff8a80; }
   .members-page .form-error { background: #2a1513; border-color: #5b2a26; color: #ffb4ab; }
 }
+
+/* ------------------------------------------------------------ EDIT MEMBER */
+
+.members-page .edit-actions { display: flex; gap: 10px; }
+.members-page .edit-actions-top { justify-content: flex-end; margin: -6px 0 16px; }
+.members-page .edit-actions .save-btn { flex: 1; margin-top: 0; }
+
+.members-page .cancel-btn {
+  height: 50px;
+  padding: 0 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--green-900);
+  font: 800 .95rem/1 inherit;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.members-page .cancel-btn:hover:not(:disabled) { background: var(--gold-100); border-color: var(--gold-500); }
+.members-page .cancel-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.members-page .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.members-page .add-member-form select {
+  height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--cream);
+  color: var(--ink);
+  font: 600 .95rem/1 inherit;
+  text-transform: capitalize;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.members-page .add-member-form select:focus { border-color: var(--gold-500); box-shadow: 0 0 0 4px rgba(201, 162, 39, .2); }
+.members-page .add-member-form input:disabled,
+.members-page .add-member-form select:disabled { opacity: .6; cursor: not-allowed; background: #f0ecda; }
+
+.members-page .field-hint {
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-transform: none;
+}
+
+.members-page .warn-box {
+  padding: 12px 14px;
+  border: 1px solid var(--gold-500);
+  border-left: 4px solid var(--gold-600);
+  border-radius: 12px;
+  background: var(--gold-100);
+  color: var(--gold-700);
+  font-size: .85rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.members-page .edit-member-popup { max-width: 540px; }
+
+@media (max-width: 640px) {
+  .members-page .form-row { grid-template-columns: 1fr; }
+}
+@media (prefers-color-scheme: dark) {
+  .members-page .cancel-btn { background: transparent; color: var(--gold-200); }
+  .members-page .add-member-form select { background: #101b15; color: var(--ink); }
+  .members-page .add-member-form input:disabled,
+  .members-page .add-member-form select:disabled { background: #1a2a21; }
+  .members-page .warn-box { color: var(--gold-200); }
+}

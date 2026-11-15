@@ -26,6 +26,14 @@ serve(handler(async ({ req, rp, db, json, fail }) => {
   // 1. Whose passkey is this? Resolved from the credential, never from anything typed.
   const { data: cred } = await db.from("webauthn_credentials").select("*").eq("credential_id", assertionResponse.id).maybeSingle();
   if (!cred) return fail("Unknown passkey.", 400);
+
+  // Usernameless challenges intentionally allow either supported account type.
+  // All other challenges must match the credential account type.
+  const isUsernamelessChallenge = ch.kind === "supabase" && ch.user_id === null;
+  if (!isUsernamelessChallenge && ch.kind !== cred.kind) {
+    return fail("Challenge does not match this account type.", 400);
+  }
+
   if (cred.rp_id && cred.rp_id !== rp.rpId) return fail("This passkey belongs to a different site.", 400);
   if (ch.user_id && ch.user_id !== cred.user_id) return fail("Challenge does not match this passkey.", 400);
 

@@ -13,7 +13,7 @@ import { singleFlight } from '../utils/singleFlight';
 
 const FREQUENCIES = ['MONTHLY', 'WEEKLY', 'QUARTERLY', 'ANNUALLY', 'ONE_OFF'];
 const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK', 'VOUCHER', 'OTHER'];
-const EMPTY_FORM = { customer_id: '', unit_id: '', charge_name: 'Rent', amount: '', frequency: 'MONTHLY', due_day: '5' };
+const EMPTY_FORM = { customer_id: '', unit_id: '', charge_name: 'Rent', amount: '', frequency: 'MONTHLY', due_day: '5', taxable: true };
 const EMPTY_PAYMENT = { amount: '', payment_method: 'CASH', reference_no: '' };
 
 function fmt(n) {
@@ -59,6 +59,7 @@ export default function RecurringChargesPage() {
         charge_name: form.charge_name,
         amount: parseFloat(form.amount),
         frequency: form.frequency,
+        taxable: !!form.taxable,
         due_day: form.frequency === 'ONE_OFF' ? null : parseInt(form.due_day, 10) || null,
       });
       setShowForm(false);
@@ -222,6 +223,10 @@ export default function RecurringChargesPage() {
             <select value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2">
               {FREQUENCIES.map(f => <option key={f} value={f}>{f.replace('_', ' ')}</option>)}
             </select>
+            <label className="flex items-start gap-2 text-sm text-slate-600">
+              <input type="checkbox" className="mt-1 accent-emerald-700" checked={!!form.taxable} onChange={e => setForm({ ...form, taxable: e.target.checked })} />
+              <span>Charge tax on this item<br /><span className="text-xs text-slate-400">Uses the tax rate in Settings. Untick for items that carry no tax (for example, residential rent).</span></span>
+            </label>
             {form.frequency !== 'ONE_OFF' && (
               <input type="number" min="1" max="31" placeholder="Due day of month (e.g. 5)" value={form.due_day} onChange={e => setForm({ ...form, due_day: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2" />
             )}

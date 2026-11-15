@@ -1,7 +1,12 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useChama } from "../ChamaContext";
 import { Phone, Lock, LogIn, Loader2, AlertCircle, Fingerprint } from "lucide-react";
 import { chamaPasskeys } from "./chamaPasskeys";
+import { supabase } from "../../supabaseClient";
+import { isNativeApp } from "../../security/nativeBiometric";
+import { signInWithChamaFingerprint } from "../../security/chamaDevice";
+import FingerprintLogin from "../../security/FingerprintLogin";
 import DemoLogin from "./DemoLogin";
 import umovaEmblem from "../../assets/brand/umova-emblem-small.png";
 import "./LoginPhone.css";
@@ -15,7 +20,8 @@ import "./LoginPhone.css";
 // -----------------------------------------------------------------------------
 
 export default function LoginPhone({ onRegisterClick, onNewChamaClick }) {
-  const { loginWithPhone, loginWithPasskey, authBusy, authError } = useChama();
+  const { loginWithPhone, loginWithPasskey, loginWithDevice, authBusy, authError } = useChama();
+  const navigate = useNavigate();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
 
@@ -23,6 +29,16 @@ export default function LoginPhone({ onRegisterClick, onNewChamaClick }) {
     e.preventDefault();
     if (!phone.trim() || !password) return;
     loginWithPhone(phone, password);
+  };
+
+  // Phone app: the fingerprint + server check (chamaDevice.js) return the verified Chama user, and ChamaContext
+  // continues exactly like a password login (memberships, licence, role). If that fails, ChamaContext sets
+  // authError, which is shown above the form; the password form below always still works.
+  const chamaFingerprintSignIn = async () => {
+    const r = await signInWithChamaFingerprint({ client: supabase });
+    if (!r.ok) return r;
+    await loginWithDevice(r.user);
+    return { ok: true };
   };
 
   return (
@@ -76,11 +92,16 @@ export default function LoginPhone({ onRegisterClick, onNewChamaClick }) {
           </button>
         </form>
 
-        {chamaPasskeys.supported() && (
+        {/* Web only. Inside the phone app the web passkey button would open Android's own passkey chooser;
+            the app uses the native fingerprint button below instead. */}
+        {!isNativeApp() && chamaPasskeys.supported() && (
           <button type="button" className="lgp-passkey" onClick={loginWithPasskey} disabled={authBusy}>
             <Fingerprint size={16} /> Log in with fingerprint
           </button>
         )}
+
+        {/* Phone app only, and only after fingerprint was turned on for Chama on this phone; renders nothing otherwise. */}
+        <FingerprintLogin service="chama" client={supabase} signIn={chamaFingerprintSignIn} />
 
         <div className="lgp-links">
           {onRegisterClick && (
@@ -93,6 +114,9 @@ export default function LoginPhone({ onRegisterClick, onNewChamaClick }) {
               Forming a new chama? Register it here
             </button>
           )}
+          <button type="button" className="lgp-register-link" onClick={() => navigate("/login")}>
+            SACCO member? Sign in to Umova Finance
+          </button>
         </div>
 
         <DemoLogin />

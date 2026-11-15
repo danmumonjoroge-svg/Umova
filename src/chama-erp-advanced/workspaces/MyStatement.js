@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
-import { Printer, Share2, Download, AlertCircle } from "lucide-react";
+import { Printer, Share2, Download, AlertCircle, Wallet, HandCoins, ListChecks } from "lucide-react";
 import useCachedQuery from "../shell/useCachedQuery";
 import { formatKES, formatDate } from "../shell/format";
 import { toCSV } from "../welfare/welfareFormat";
-import { Spinner, StaleNote, Notice, SectionTitle, EmptyState } from "../shell/ui";
+import { Spinner, StaleNote, Notice, EmptyState, Panel, Stat, StatGrid } from "../shell/ui";
 
 // -----------------------------------------------------------------------------
 // MyStatement — built only from chama_ledger_entries (the single append-only
@@ -126,43 +126,46 @@ export default function MyStatement({ memberId: memberIdProp, params = {} }) {
 
       {!isSelf && <Notice icon={AlertCircle}>You are viewing {who}'s statement as a Chama official.</Notice>}
 
-      <div className="cm-accs">
-        {view.summary.map((s) => (
-          <div className="cm-acc" key={s.key}>
-            <div className="cm-acc-head"><span>{s.label}</span><strong>{formatKES(s.closing)}</strong></div>
-            <div className="cm-acc-row">
-              <div><span>Opening</span><b>{formatKES(s.opening)}</b></div>
-              <div><span>Paid in</span><b>{formatKES(s.inn)}</b></div>
-              <div><span>Paid out</span><b>{formatKES(s.out)}</b></div>
+      <Panel icon={Wallet} title="My accounts" subtitle={periodLabel} tone="green">
+        <div className="cm-accs">
+          {view.summary.map((s) => (
+            <div className="cm-acc" key={s.key}>
+              <div className="cm-acc-head"><span>{s.label}</span><strong>{formatKES(s.closing)}</strong></div>
+              <div className="cm-acc-row">
+                <div><span>Opening</span><b>{formatKES(s.opening)}</b></div>
+                <div><span>Paid in</span><b>{formatKES(s.inn)}</b></div>
+                <div><span>Paid out</span><b>{formatKES(s.out)}</b></div>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {mismatch.length > 0 && (
-        <Notice tone="warn" icon={AlertCircle}>
-          {mismatch.map((s) => `${s.label}: records add up to ${formatKES(s.ledgerTotal)} but the balance on file is ${formatKES(s.onFile)}`).join(". ")}. Ask your treasurer to look into the difference — this statement shows the records as they are.
-        </Notice>
-      )}
-
-      <SectionTitle>Loan</SectionTitle>
-      <div className="cm-kv">
-        <div><span>Loan paid out to you</span><strong>{formatKES(view.paidOut)}</strong></div>
-        <div><span>Repaid in this period</span><strong>{formatKES(view.repaid)}</strong></div>
-        <div><span>Still owed today</span><strong>{view.owed > 0 ? formatKES(view.owed) : "Nothing"}</strong></div>
-      </div>
-
-      <SectionTitle>What happened</SectionTitle>
-      {view.rows.length === 0 ? <EmptyState>No entries in this period.</EmptyState> : (
-        <ul className="cm-txns">
-          {view.rows.map((e) => (
-            <li key={e.id}>
-              <div><strong>{ACCOUNT_LABEL[e.account_type] || e.account_type}</strong><small>{formatDate(e.created_at)}{e.description ? ` · ${e.description}` : ""}</small></div>
-              <span className={e.direction === "credit" ? "in" : "out"}>{e.direction === "credit" ? "+" : "−"}{formatKES(e.amount)}</span>
-            </li>
           ))}
-        </ul>
-      )}
+        </div>
+        {mismatch.length > 0 && (
+          <Notice tone="warn" icon={AlertCircle}>
+            {mismatch.map((s) => `${s.label}: records add up to ${formatKES(s.ledgerTotal)} but the balance on file is ${formatKES(s.onFile)}`).join(". ")}. Ask your treasurer to look into the difference — this statement shows the records as they are.
+          </Notice>
+        )}
+      </Panel>
+
+      <Panel icon={HandCoins} title="Loan" subtitle={view.owed > 0 ? `${formatKES(view.owed)} still owed` : "Nothing owed"} defaultOpen={view.owed > 0 || view.paidOut > 0 || view.repaid > 0}>
+        <StatGrid cols={3}>
+          <Stat label="Paid out to you" value={formatKES(view.paidOut)} />
+          <Stat label="Repaid this period" value={formatKES(view.repaid)} />
+          <Stat label="Still owed today" value={view.owed > 0 ? formatKES(view.owed) : "Nothing"} tone={view.owed > 0 ? "gold" : ""} />
+        </StatGrid>
+      </Panel>
+
+      <Panel icon={ListChecks} title="What happened" badge={view.rows.length || ""} subtitle={account === "all" ? "All accounts" : ACCOUNT_LABEL[account]} tone="green">
+        {view.rows.length === 0 ? <EmptyState>No entries in this period.</EmptyState> : (
+          <ul className="cm-txns">
+            {view.rows.map((e) => (
+              <li key={e.id}>
+                <div><strong>{ACCOUNT_LABEL[e.account_type] || e.account_type}</strong><small>{formatDate(e.created_at)}{e.description ? ` · ${e.description}` : ""}</small></div>
+                <span className={e.direction === "credit" ? "in" : "out"}>{e.direction === "credit" ? "+" : "−"}{formatKES(e.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
 
       <div className="cm-actions-row cm-no-print">
         <button className="cm-btn" onClick={() => window.print()}><Printer size={15} /> Print / save as PDF</button>

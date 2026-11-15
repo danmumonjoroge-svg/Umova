@@ -372,6 +372,17 @@ export default function AuthPage() {
           />
         )}
 
+        {/* Separate service: Chama has its own accounts and its own login. */}
+        {mode === "login" && (
+          <div className="mt-6 text-center text-xs text-slate-500">
+            Chama member?{" "}
+            <button type="button" onClick={() => navigate("/chama/login")}
+              className="text-green-700 font-semibold hover:underline">
+              Sign in to Chama
+            </button>
+          </div>
+        )}
+
         {/* ── FIRST TIME SETUP FORM ── */}
         {mode === "setup" && (
           <form onSubmit={handleSetup} className="space-y-4" noValidate>

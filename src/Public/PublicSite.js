@@ -1,7 +1,7 @@
 // src/Public/PublicSite.js
 //
 // Umova homepage. This is the platform-level overview: it introduces
-// Umova as one brand with three products (Financial, Chama, POS) and
+// Umova as one brand with four products (Financial, Chama, POS, Elimu school management) and
 // sends visitors into whichever one they want. It does NOT contain the
 // membership application, stats, or member stories anymore — those are
 // specific to the financial product and now live in
@@ -72,6 +72,16 @@ export default function PublicSite() {
       loginRoute: "/pos",
       navLabel: "POS",
     },
+    {
+      key: "school",
+      tag: "School management",
+      title: "Umova Elimu",
+      description: "Students, attendance, exams, fees and parent updates for schools.",
+      image: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b",
+      route: "/school",
+      loginRoute: "/school",
+      navLabel: "School",
+    },
   ];
 
   // ================= SCROLL SPY FOR NAV STYLE =================
@@ -91,7 +101,7 @@ export default function PublicSite() {
 
       {/* ================= NAV =================
           No hamburger here on purpose: most visitors are business owners
-          opening this on a phone to log in, often daily. Putting all three
+          opening this on a phone to log in, often daily. Putting all four
           logins directly in the sticky header — visible with zero taps,
           at every screen width — beats a menu they'd otherwise have to
           open every time. */}
@@ -123,7 +133,7 @@ export default function PublicSite() {
           <span className="hero-eyebrow">Rooted in how Kenya already saves</span>
           <h1>The way we already save, organize, and trade — now digital.</h1>
           <p>
-            Umova brings your sacco, your chama, and your shop together in one trusted
+            Umova brings your sacco, your chama, your shop, and your school together in one trusted
             home, built around the systems communities have always relied on.
           </p>
 
@@ -151,8 +161,8 @@ export default function PublicSite() {
             </div>
             <div className="mission-feature">
               <span className="mission-feature-icon" aria-hidden="true">⟳</span>
-              <h6>One login, three homes</h6>
-              <p>Move between Financial, Chama, and POS without losing your place.</p>
+              <h6>One login, four homes</h6>
+              <p>Move between Financial, Chama, POS, and School without losing your place.</p>
             </div>
             <div className="mission-feature">
               <span className="mission-feature-icon" aria-hidden="true">◆</span>
@@ -171,7 +181,7 @@ export default function PublicSite() {
       >
         <div className="section-head">
           <span className="section-eyebrow">Whichever door you walk through</span>
-          <h2 className="section-title">One family, three homes</h2>
+          <h2 className="section-title">One family, four homes</h2>
           <p className="section-sub">
             Pick the one that fits what you're doing today.
           </p>

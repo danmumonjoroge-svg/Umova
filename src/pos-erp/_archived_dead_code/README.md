@@ -43,3 +43,4 @@ the full reasoning.
 
 ## root/POSDashboard.jsx.dead
 An older copy of the Home screen that sat next to POSApp.jsx. Nothing imported it (POSApp.jsx imports `./pages/POSDashboard`), and it had drifted out of date. Archived during the "My Business" redesign so there is only one Home screen to edit.
+- components/MpesaPromptModal.jsx.dead -- replaced by the inline status line in components/MpesaPayPanel.jsx (phase 39 M-Pesa till rework).

@@ -1,0 +1,3 @@
+// Stub of the host Supabase client for the UI smoke test: every query resolves to empty data.
+const chain = () => { const p = new Proxy(function () {}, { get: (_, k) => (k === 'then' ? (res) => res({ data: [], error: null, count: 0 }) : p), apply: () => p }); return p; };
+export const posSupabase = { from: () => chain(), rpc: async (fn) => ({ data: fn === 'elimu_my_access' ? { ok: true, is_owner: true, actions: [], roles: [] } : null, error: null }), functions: { invoke: async () => ({ data: { ok: false, code: 'NOT_CONFIGURED' }, error: null }) }, storage: { from: () => ({ createSignedUrl: async () => ({ data: null }), upload: async () => ({ error: null }) }) } };

@@ -7,17 +7,30 @@
 // no session yet to derive it from) — it's local navigation between
 // the login and registration forms, held here.
 
-import React, { useState } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { usePOSAuth } from "../context/POSAuthContext";
 import POSLogin from "./POSLogin";
 import POSTenantSignup from "./POSTenantSignup";
 import POSForcePasswordChange from "./POSForcePasswordChange";
 import POSAccountStatus from "./POSAccountStatus";
+import { useLoginBackExit } from "./useLoginBackExit";
 
 export default function POSAuthGate({ children }) {
   const { authStage, staff, logoutNotice } = usePOSAuth();
   const [preAuthScreen, setPreAuthScreen] = useState("login"); // "login" | "signup"
+
+  // Back on the sign-in screen leaves the app (see useLoginBackExit.js). On the sign-up form, Back first returns to login.
+  const backFromSignup = useCallback(() => {
+    if (preAuthScreen === "signup") { setPreAuthScreen("login"); return true; }
+    return false;
+  }, [preAuthScreen]);
+  // True once someone was signed in during this visit. Only then is "logged_out" a real sign-out (history is tidied
+  // so Back can leave the app). Arriving from the public site while signed out must keep its history, or POS bounces
+  // straight back to the public site.
+  const wasSignedIn = useRef(false);
+  if (authStage === "authenticated") wasSignedIn.current = true;
+  useLoginBackExit(authStage === "logged_out", backFromSignup, wasSignedIn.current);
 
   switch (authStage) {
     case "checking":

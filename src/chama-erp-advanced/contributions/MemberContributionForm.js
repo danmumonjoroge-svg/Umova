@@ -6,7 +6,8 @@ import useOnlineStatus from "../shell/useOnlineStatus";
 import {
   useContributionOutbox, enqueueContribution, newClientRequestId, isNetworkError,
 } from "../shell/contributionOutbox";
-import { Send, Clock, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react";
+import { Send, Clock, CheckCircle, XCircle, Loader2, AlertCircle, History } from "lucide-react";
+import { Panel } from "../shell/ui";
 import "./MemberContributionForm.css";
 
 // -----------------------------------------------------------------------------
@@ -82,7 +83,7 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
   const submit = async (e) => {
     e.preventDefault();
     setError(null);
-    if (!form.bank_account_id) return setError("Select which chama account you paid into.");
+    if (form.payment_method !== "CASH" && !form.bank_account_id) return setError("Select which chama account you paid into.");
     if (!form.amount || Number(form.amount) <= 0) return setError("Enter a valid amount.");
     if (form.payment_method !== "CASH" && !form.transaction_ref.trim()) return setError("Enter the transaction reference.");
     // A loan repayment must say WHICH loan (sql/006 refuses to post one without it).
@@ -93,7 +94,7 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
     const row = {
       chama_id: chamaId,
       member_id: member.id,
-      bank_account_id: form.bank_account_id,
+      bank_account_id: form.payment_method === "CASH" ? null : form.bank_account_id || null,   // cash is booked to "Cash in hand" by the database
       amount: Number(form.amount),
       contribution_type: form.contribution_type,
       contributed_on: form.contributed_on,
@@ -141,6 +142,7 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
         </div>
       </div>
 
+      <Panel icon={Send} title="Send a contribution" tone="green" collapsible={false}>
       <form className="mcf-form" onSubmit={submit}>
         {error && <div className="mcf-error"><AlertCircle size={14} /> {error}</div>}
         {!online && (
@@ -148,13 +150,15 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
         )}
 
         <div className="mcf-grid">
-          <label>
-            Chama account you paid into
-            <select value={form.bank_account_id} onChange={(e) => setForm((f) => ({ ...f, bank_account_id: e.target.value }))} required>
-              <option value="">Select account</option>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.account_name}{a.account_number ? ` (${a.account_number})` : ""}</option>)}
-            </select>
-          </label>
+          {form.payment_method !== "CASH" && (
+            <label>
+              Chama account you paid into
+              <select value={form.bank_account_id} onChange={(e) => setForm((f) => ({ ...f, bank_account_id: e.target.value }))} required>
+                <option value="">Select account</option>
+                {accounts.filter((a) => a.account_type !== "cash").map((a) => <option key={a.id} value={a.id}>{a.account_name}{a.account_number ? ` (${a.account_number})` : ""}</option>)}
+              </select>
+            </label>
+          )}
 
           <label>
             Amount (KES)
@@ -207,10 +211,10 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
           {submitting ? <Loader2 size={16} className="spin" /> : <Send size={16} />} {submitting ? "Submitting..." : "Submit contribution"}
         </button>
       </form>
+      </Panel>
 
       {outbox.items.length > 0 && (
-        <>
-          <h3 className="mcf-history-title">Waiting to send</h3>
+        <Panel icon={Clock} title="Waiting to send" badge={outbox.items.length} tone="warn" collapsible={false}>
           <div className="mcf-history">
             {outbox.items.map((it) => (
               <div className="mcf-row" key={it.clientRequestId}>
@@ -233,10 +237,10 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
           {online && outbox.hasWaiting && !outbox.syncing && (
             <p className="mcf-empty"><button type="button" onClick={outbox.sync} style={{ background: "none", border: 0, textDecoration: "underline", cursor: "pointer" }}>Try sending now</button></p>
           )}
-        </>
+        </Panel>
       )}
 
-      <h3 className="mcf-history-title">Your recent submissions</h3>
+      <Panel icon={History} title="Your recent submissions" badge={history.length || ""} defaultOpen={history.length > 0}>
       {loading ? (
         <div className="mcf-loading"><Loader2 size={18} className="spin" /></div>
       ) : history.length === 0 ? (
@@ -250,7 +254,7 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
               <div className="mcf-row" key={h.id}>
                 <div>
                   <strong>{formatKES(h.amount)}</strong>
-                  <span className="mcf-row-sub">{h.contribution_type.replace("_", " ")} · {h.contributed_on}</span>
+                  <span className="mcf-row-sub">{h.contribution_type.replace("_", " ")} · {h.contributed_on}{h.recorded_by_treasurer ? " · recorded by treasurer" : ""}</span>
                 </div>
                 <span className={`mcf-badge ${meta.tone}`}><Icon size={12} /> {meta.label}</span>
               </div>
@@ -258,6 +262,7 @@ export default function MemberContributionForm({ chamaId: chamaIdProp, initialTy
           })}
         </div>
       )}
+      </Panel>
 
       {toast && <div className="mcf-toast">{toast}</div>}
     </div>

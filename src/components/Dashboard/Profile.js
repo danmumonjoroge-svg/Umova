@@ -3,10 +3,10 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
-import { 
-  User, ShieldCheck, Mail, Phone, FileText, 
-  Users, Camera, CheckCircle, Save, X, RefreshCw 
-} from "lucide-react";
+import { ShieldCheck, Mail, Users, Camera, Save, X, RefreshCw, Pencil, Fingerprint } from "lucide-react";
+import FingerprintToggle from "../../security/FingerprintToggle";
+import { isNativeApp } from "../../security/nativeBiometric";
+import { Card, Field, Pill, PageLoading, SubGrid } from "./MemberUI";
 
 export default function Profile({ memberNo: propMemberNo }) {
   // Pull core user authentication metadata straight from the Dashboard routing shell
@@ -164,195 +164,127 @@ export default function Profile({ memberNo: propMemberNo }) {
     return Math.round((filled / tracks.length) * 100);
   }, [form]);
 
-  if (!profile) {
-    return (
-      <div className="flex flex-col items-center justify-center p-24 space-y-4">
-        <div className="w-10 h-10 border-4 border-green-800 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-400 font-bold text-[11px] tracking-widest uppercase animate-pulse">Loading your profile...</p>
-      </div>
-    );
-  }
+  if (!profile) return <PageLoading text="Loading your profile…" />;
+
+  const initials = String(profile.name || "M").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const photo = photoPreview || form.photo_url;
+  const kycVerified = profile.kyc_status === "VERIFIED";
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto p-1 main-content-fade">
-      
-      {/* MASTER USER IDENTITY CARD HEADER */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row items-center gap-5 z-10 text-center sm:text-left w-full sm:w-auto">
-          <div className="relative group">
-            <img
-              src={photoPreview || form.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=15803d&color=fff`}
-              className="w-20 h-20 rounded-full object-cover border-2 border-slate-100 shadow-md bg-slate-50 transition duration-200"
-              alt="User Identification Avatar"
-            />
-            <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-150 pointer-events-none">
-              <Camera size={18} className="text-white" />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <h2 className="text-xl font-black text-slate-800 tracking-tight">{profile.name}</h2>
-            <p className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">{memberNo}</p>
-            
-            <div className="pt-1.5 flex flex-wrap justify-center sm:justify-start gap-2">
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border tracking-wider uppercase ${
-                profile.kyc_status === "VERIFIED" 
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
-                  : "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
-              }`}>
-                KYC: {profile.kyc_status || "PENDING"}
-              </span>
-              <span className="bg-slate-50 text-slate-500 text-[10px] font-bold border border-slate-200 px-2.5 py-0.5 rounded-full">
-                Member Node Node Client
-              </span>
+    <div className="mu">
+      {/* IDENTITY HERO */}
+      <section className="mu-hero" aria-label="Your profile">
+        <div className="mu-profile-top">
+          {photo
+            ? <img src={photo} alt="" className="mu-avatar" />
+            : <span className="mu-avatar mu-avatar--initials" aria-hidden="true">{initials}</span>}
+          <div className="mu-profile-id">
+            <h1 className="mu-title">{profile.name}</h1>
+            <p className="mu-eyebrow">{memberNo}</p>
+            <div className="mu-profile-pills">
+              <Pill tone={kycVerified ? "good" : "gold"}>KYC: {profile.kyc_status || "PENDING"}</Pill>
             </div>
           </div>
         </div>
 
-        <button
-          onClick={() => { setEditMode(!editMode); setPhotoPreview(""); }}
-          className={`px-5 py-2.5 rounded-xl font-bold text-xs tracking-tight transition flex items-center gap-2 z-10 w-full sm:w-auto justify-center ${
-            editMode 
-              ? "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200" 
-              : "bg-green-900 text-white hover:bg-green-950 shadow-sm"
-          }`}
-        >
-          {editMode ? <X size={14} /> : <User size={14} />}
-          {editMode ? "Cancel" : "Edit Profile"}
-        </button>
-
-        <div className="absolute -right-12 -bottom-12 text-slate-500/5 pointer-events-none transform scale-150 rotate-45 font-black text-9xl select-none">KYC</div>
-      </div>
-
-      {/* COMPLIANCE COMPLETION REGISTRY COMPASS */}
-      <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <CheckCircle size={14} className="text-green-700" /> Account Completion Metrics
-          </p>
-          <span className="text-sm font-black font-mono text-green-900 bg-green-50 px-2.5 py-0.5 border border-green-100 rounded-lg">{kycCompletionPercentage}%</span>
-        </div>
-        <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden border border-slate-200/40">
-          <div
-            className="bg-gradient-to-r from-green-700 to-emerald-500 h-full rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${kycCompletionPercentage}%` }}
-          />
-        </div>
-      </div>
-
-      {/* CORE DISPLAY HOVER SYSTEM AND DATA SPLIT VIEWPORTS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        
-        {/* READ-ONLY REGISTRY RECORDS FIELDSET MAP */}
-        <div className={`${editMode ? "lg:col-span-1" : "lg:col-span-3"} space-y-5 transition-all duration-300`}>
-          
-          <ProfileGroupSection title="NATIONAL IDENTITY RECORDS" icon={<ShieldCheck className="text-slate-400" size={16} />}>
-            <ProfileRowField label="KRA COMPLIANCE PIN" value={profile.KRA || profile.kra} />
-            <ProfileRowField label="NATIONAL IDENTIFICATION NO" value={profile.national_id} />
-          </ProfileGroupSection>
-
-          <ProfileGroupSection title="CONTACT COMMUNICATOR CHANNELS" icon={<Mail className="text-slate-400" size={16} />}>
-            <ProfileRowField label="VERIFIED EMAIL ADDRESS" value={profile.Email || profile.email} isMono />
-            <ProfileRowField label="TELEPHONE SYSTEM REF" value={profile.telephone || profile.phone} />
-          </ProfileGroupSection>
-
-          <ProfileGroupSection title="BENEFICIARY TRUSTEE PROFILES" icon={<Users className="text-slate-400" size={16} />}>
-            <ProfileRowField label="REGISTERED NEXT OF KIN" value={profile["Next-of-kin"] || profile.next_of_kin} />
-            <ProfileRowField label="PORTFOLIO NOMINEE ASSIGNED" value={profile.Nominee || profile.nominee} />
-          </ProfileGroupSection>
-
+        <div className="mu-glass" style={{ marginTop: 14 }}>
+          <span className="mu-glass-label">Profile completeness</span>
+          <span className="mu-glass-amt">{kycCompletionPercentage}%</span>
+          <div className="mu-progress mu-progress--on-dark"><div className="mu-progress-fill" style={{ width: `${kycCompletionPercentage}%` }} /></div>
         </div>
 
-        {/* INTERACTIVE COMPLIANCE MUTATION PANEL */}
-        {editMode && (
-          <form onSubmit={handleSaveProfile} className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5 main-content-fade">
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-black text-slate-800 tracking-tight uppercase">Edit your details</h3>
-              <p className="text-xs text-slate-400 font-medium mt-0.5">Updated data undergoes strict verification against structural regulatory systems.</p>
+        <div className="mu-actions" style={{ marginTop: 14 }}>
+          <button
+            type="button"
+            className={`mu-btn ${editMode ? "mu-btn--ghost" : "mu-btn--gold"} mu-btn--block`}
+            onClick={() => { setEditMode(!editMode); setPhotoPreview(""); }}
+          >
+            {editMode ? <X size={16} /> : <Pencil size={16} />}
+            {editMode ? "Cancel" : "Edit profile"}
+          </button>
+        </div>
+      </section>
+
+      {!editMode && (
+        <div className="mu-grid">
+          <Card icon={ShieldCheck} title="Identity">
+            <div className="mu-stack">
+              <Field label="KRA PIN" value={profile.KRA || profile.kra} />
+              <Field label="National ID number" value={profile.national_id} />
             </div>
+          </Card>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <ProfileInputBlock label="Email Address" value={form.email} onChange={(v) => setForm({ ...form, email: v })} type="email" />
-              <ProfileInputBlock label="Telephone Reference" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} type="tel" />
-              <ProfileInputBlock label="KRA PIN Verification" value={form.kra} onChange={(v) => setForm({ ...form, kra: v })} />
-              <ProfileInputBlock label="National ID Number" value={form.national_id} onChange={(v) => setForm({ ...form, national_id: v })} />
-              <ProfileInputBlock label="Next of Kin Identity" value={form.next_of_kin} onChange={(v) => setForm({ ...form, next_of_kin: v })} />
-              <ProfileInputBlock label="Nominee Equity Beneficiary" value={form.nominee} onChange={(v) => setForm({ ...form, nominee: v })} />
+          <Card icon={Mail} title="Contact">
+            <div className="mu-stack">
+              <Field label="Email address" value={profile.Email || profile.email} mono />
+              <Field label="Telephone" value={profile.telephone || profile.phone} />
             </div>
+          </Card>
 
-            {/* AVATAR DOCUMENT FILE CAPTURED STRIP */}
-            <div className="space-y-2 pt-1">
-              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Change profile photo</label>
-              <div className="flex items-center justify-center w-full">
-                <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-200 border-dashed rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100/70 transition duration-150 px-4">
-                  <div className="flex flex-col items-center justify-center pt-2 pb-2 text-center">
-                    <Camera size={20} className="text-slate-400 mb-1" />
-                    <p className="text-xs text-slate-500 font-medium"><span className="font-bold text-green-800">Click to select file</span> or drag image asset</p>
-                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">JPEG, PNG up to 2MB capacity limits</p>
-                  </div>
-                  <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
-                </label>
-              </div>
-              {photoFile && (
-                <p className="text-[11px] text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-xl inline-block mt-1">
-                  ✓ Selected File Stream Asset: <span className="font-mono text-slate-600">{photoFile.name}</span>
-                </p>
-              )}
+          <Card icon={Users} title="Next of kin & nominee" span>
+            <SubGrid cols={2}>
+              <Field label="Next of kin" value={profile["Next-of-kin"] || profile.next_of_kin} />
+              <Field label="Nominee" value={profile.Nominee || profile.nominee} />
+            </SubGrid>
+          </Card>
+
+          {/* Fingerprint sign-in for THIS phone. Renders nothing on the web, so the card is only shown in the app. */}
+          {isNativeApp() && (
+            <Card icon={Fingerprint} title="Security" hint="Sign in on this phone with your fingerprint" span>
+              <FingerprintToggle service="finance" client={supabase} />
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* EDIT FORM (same fields and the same save handler as before) */}
+      {editMode && (
+        <form onSubmit={handleSaveProfile} className="mu-stack">
+          <Card icon={Mail} title="Contact">
+            <div className="mu-formgrid">
+              <FormField label="Email address" value={form.email} onChange={(v) => setForm({ ...form, email: v })} type="email" />
+              <FormField label="Telephone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} type="tel" />
             </div>
+          </Card>
 
-            {/* SUBMISSION CONTROL SWITCHES */}
-            <div className="pt-3 border-t border-slate-100 flex items-center gap-3">
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 bg-green-950 hover:bg-green-900 disabled:opacity-60 text-white font-bold text-xs tracking-tight py-3 rounded-xl shadow-sm transition flex items-center justify-center gap-2"
-              >
-                {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                {saving ? "Saving..." : "Save changes"}
-              </button>
+          <Card icon={ShieldCheck} title="Identity">
+            <div className="mu-formgrid">
+              <FormField label="KRA PIN" value={form.kra} onChange={(v) => setForm({ ...form, kra: v })} />
+              <FormField label="National ID number" value={form.national_id} onChange={(v) => setForm({ ...form, national_id: v })} />
             </div>
-          </form>
-        )}
+          </Card>
 
-      </div>
+          <Card icon={Users} title="Next of kin & nominee">
+            <div className="mu-formgrid">
+              <FormField label="Next of kin" value={form.next_of_kin} onChange={(v) => setForm({ ...form, next_of_kin: v })} />
+              <FormField label="Nominee" value={form.nominee} onChange={(v) => setForm({ ...form, nominee: v })} />
+            </div>
+          </Card>
 
-      {/* Sign-in security — lets the member enrol this device for
-          fingerprint login. Without this section nothing in the app ever
-          called registerPasskey(), so no account could have a passkey. */}
+          <Card icon={Camera} title="Profile photo">
+            <label className="mu-drop">
+              <Camera size={20} />
+              <span><b>Choose a photo</b> from your phone</span>
+              <small>JPEG or PNG, up to 2 MB</small>
+              <input type="file" accept="image/*" onChange={handlePhotoChange} />
+            </label>
+            {photoFile && <p className="mu-note" style={{ marginTop: 8 }}>Selected: <b>{photoFile.name}</b></p>}
+          </Card>
+
+          <p className="mu-note">Saving sends your details to the SACCO office to be verified again.</p>
+          <button type="submit" disabled={saving} className="mu-btn mu-btn--primary">
+            {saving ? <RefreshCw size={16} className="mu-spinning" /> : <Save size={16} />}
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+        </form>
+      )}
     </div>
   );
 }
 
-// ==========================================
-// PURE PRESENTATIONAL UI SUBSYSTEMS
-// ==========================================
-const ProfileGroupSection = ({ title, icon, children }) => (
-  <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3.5">
-    <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
-      {icon}
-      <h3 className="text-[11px] font-black text-slate-400 tracking-widest uppercase">{title}</h3>
-    </div>
-    <div className="space-y-3">{children}</div>
-  </div>
-);
-
-const ProfileRowField = ({ label, value, isMono = false }) => (
-  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs border-b border-slate-50 pb-2.5 last:border-0 last:pb-0">
-    <span className="text-slate-400 font-bold tracking-tight">{label}</span>
-    <span className={`font-semibold text-slate-700 ${isMono ? "font-mono text-slate-500" : ""}`}>
-      {value || <span className="text-slate-300 font-normal italic">Data Record Deficit</span>}
-    </span>
-  </div>
-);
-
-const ProfileInputBlock = ({ label, value, onChange, type = "text" }) => (
-  <div className="space-y-1.5">
-    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block">{label}</label>
-    <input
-      type={type}
-      className="w-full bg-white border border-slate-200 text-slate-700 font-semibold text-xs px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-800 focus:border-transparent transition"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  </div>
+const FormField = ({ label, value, onChange, type = "text" }) => (
+  <label>
+    <span className="mu-label">{label}</span>
+    <input type={type} className="mu-input" value={value} onChange={(e) => onChange(e.target.value)} />
+  </label>
 );

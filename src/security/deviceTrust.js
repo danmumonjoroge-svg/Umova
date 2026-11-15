@@ -67,6 +67,22 @@ async function currentUserId(client) {
   return data?.session?.user?.id ?? null;
 }
 
+/** Fingerprint is on for this phone AND it belongs to the account signed in right now. (local flag + local session; no prompt) */
+export async function isEnabledForSession(service, client) {
+  const raw = await prefGet(trustKey(service));
+  if (!raw) return false;
+  try {
+    const t = JSON.parse(raw);
+    if (!t.enabled) return false;
+    // A flag saved before user IDs were recorded has no userId: treat it as enabled, like isEnabled().
+    if (!t.userId) return true;
+    const uid = await currentUserId(client);
+    return !!uid && uid === t.userId;
+  } catch {
+    return false;
+  }
+}
+
 // The Keystore key is gone for good (fingerprints changed / all removed / entry deleted): wipe local trust.
 const keyIsGone = (status) => status === BioStatus.INVALIDATED || status === BioStatus.NOT_ENROLLED;
 
@@ -153,6 +169,13 @@ export async function unlock({ service, client, reason = "Unlock Umova" }) {
 }
 
 // ---- sign in with fingerprint (NO session yet) -----------------------------
+// Every failed sign-in carries a short reference (never the secret) so the screen can say WHY, and the log has it too.
+const fail = (status, detail) => {
+  const d = detail ? String(detail).replace(/\s+/g, " ").slice(0, 140) : undefined;
+  try { console.warn("[signInWithDevice]", status, d || ""); } catch { /* logging must never break sign-in */ }
+  return d ? { ok: false, status, detail: d } : { ok: false, status };
+};
+
 /** Read the JSON body the edge function sent with an error status (supabase-js hides it in error.context). */
 async function readFunctionBody(error) {
   try {
@@ -175,16 +198,17 @@ async function readFunctionBody(error) {
  *            "server_error"     -> anything else; offer the password
  */
 export async function signInWithDevice({ service, client, reason = "Sign in to Umova" }) {
-  if (service === SERVICES.CHAMA) return { ok: false, status: "server_error" };
-  if (!(await isEnabled(service))) return { ok: false, status: "not_enabled" };
+  if (service === SERVICES.CHAMA) return fail("server_error", "chama signs in through chamaDevice");
+  if (!(await isEnabled(service))) return fail("not_enabled", "fingerprint flag is off on this phone");
 
   const got = await vaultProtectedGet(service, { reason });
   if (!got.ok) {
     if (keyIsGone(got.status)) {
       await clearLocal(service);                     // no session, so the server row stays; it's reset on re-enable
-      return { ok: false, status: BioStatus.INVALIDATED };
+      return fail(BioStatus.INVALIDATED, "saved key no longer valid");
     }
-    return { ok: false, status: got.status };
+    // cancelled / failed / locked out never wipe anything; for an unrecognised phone error keep its text for the reference
+    return got.status === BioStatus.UNKNOWN ? fail(got.status, `phone: ${got.detail || "unrecognised error"}`) : { ok: false, status: got.status };
   }
 
   let res;
@@ -194,12 +218,12 @@ export async function signInWithDevice({ service, client, reason = "Sign in to U
     });
     if (error) {
       res = await readFunctionBody(error);
-      if (!res) return { ok: false, status: isNetworkError(error) ? "offline" : "server_error" };
+      if (!res) return fail(isNetworkError(error) ? "offline" : "server_error", `request: ${error.name || "error"} ${error.context?.status ?? ""} ${error.message || ""}`);
     } else {
       res = data;
     }
   } catch (e) {
-    return { ok: false, status: isNetworkError(e) ? "offline" : "server_error" };
+    return fail(isNetworkError(e) ? "offline" : "server_error", `request threw: ${e?.message || e}`);
   }
 
   if (!res?.ok) {
@@ -212,14 +236,14 @@ export async function signInWithDevice({ service, client, reason = "Sign in to U
       case "ACCOUNT_INACTIVE":
         return { ok: false, status: "account_inactive" };
       default:
-        return { ok: false, status: "server_error" };
+        return fail("server_error", `server said: ${res?.reason || "no reason given"}`);
     }
   }
-  if (res.kind !== "supabase" || !res.token_hash) return { ok: false, status: "server_error" };
+  if (res.kind !== "supabase" || !res.token_hash) return fail("server_error", "server reply was incomplete");
 
   // Exchange the single-use token for a real Supabase session (same call the passkey flow makes).
   const { error: otpErr } = await client.auth.verifyOtp({ token_hash: res.token_hash, type: "magiclink" });
-  if (otpErr) return { ok: false, status: isNetworkError(otpErr) ? "offline" : "server_error" };
+  if (otpErr) return fail(isNetworkError(otpErr) ? "offline" : "server_error", `sign-in step: ${otpErr.message || otpErr.name || "failed"}`);
   return { ok: true };
 }
 

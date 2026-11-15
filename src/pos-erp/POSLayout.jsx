@@ -21,10 +21,11 @@
 // business type. Capabilities (navigation/CapabilitiesContext.jsx) now
 // decide which of Retail/Rentals/Salon appear; routes are never removed.
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { usePosErpAuth } from "./auth/usePosErpAuth";
 import { useNotifications } from "./hooks/useNotifications";
+import { useLoanAutoPost } from "./hooks/useLoanAutoPost";
 import { settingsService } from "./services/settingsService";
 import POSTopbar from "./POSTopbar";
 import BottomNav from "./components/BottomNav";
@@ -34,13 +35,20 @@ import { resolveLocation, visibleModules } from "./navigation/navConfig";
 import { LogOut, Store, X } from "lucide-react";
 import OfflinePageGate from "./offline/OfflinePageGate";
 import { readCachedValue } from "./offline/offlineCache";
+import "./theme/posSkin.css";
+import { installResponsiveTables } from "./utils/responsiveTables";
 
 function Shell() {
   const { staffName, role, tenant, logout, offlineSession } = usePosErpAuth();
   const location = useLocation();
   const { count: notificationCount } = useNotifications();
   const { enabled } = useCapabilities();
-  const { canAny } = usePermissions();
+  const { canAny, can } = usePermissions();
+  // Auto-pay loan instalments that have fallen due are posted when the app opens (dated on their due date).
+  useLoanAutoPost({ businessId: tenant?.business_id, allowed: can("expenses.record") });
+  const mainRef = useRef(null);
+  // Wide tables become readable cards on phones (labels each cell; the look is in theme/posSkin.css).
+  useEffect(() => installResponsiveTables(mainRef.current), []);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState(null);
 
@@ -72,8 +80,8 @@ function Shell() {
         aria-current={active ? "page" : undefined}
         className={`flex items-center gap-3 px-5 min-h-[44px] text-sm transition border-l-4 ${
           active
-            ? "bg-[#237A52] text-white font-semibold border-[#C6A15B]"
-            : "text-white/75 hover:bg-[#1B5138] hover:text-white border-transparent"
+            ? "bg-[#1F6B45] text-white font-semibold border-[#C9A227]"
+            : "text-white/75 hover:bg-[#17553A] hover:text-white border-transparent"
         }`}
       >
         <Icon size={18} />
@@ -86,13 +94,13 @@ function Shell() {
     // 100dvh (with h-screen as the fallback for browsers without dvh)
     // so the phone browser's collapsing URL bar can't push the bottom
     // bar off-screen.
-    <div className="h-screen overflow-hidden bg-[#F7F6F0] text-[#26352D] flex print:h-auto print:overflow-visible" style={{ height: "100dvh" }}>
+    <div className="pos-skin h-screen overflow-hidden bg-[#FAF7EA] text-[#23382B] flex print:h-auto print:overflow-visible" style={{ height: "100dvh" }}>
       {drawerOpen && (
         <div onClick={() => setDrawerOpen(false)} className="fixed inset-0 bg-black/40 z-40 md:hidden" aria-hidden="true" />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#123C2A] text-white flex flex-col shrink-0 print:hidden
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#0F3B2A] text-white flex flex-col shrink-0 print:hidden
           transform transition-transform duration-200 ease-out
           ${drawerOpen ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0 md:static md:z-auto md:w-60`}
@@ -101,7 +109,7 @@ function Shell() {
           {logoUrl ? (
             <img src={logoUrl} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0 bg-white" />
           ) : (
-            <div className="w-9 h-9 rounded-lg bg-[#237A52] flex items-center justify-center shrink-0"><Store size={18} className="text-[#C6A15B]" /></div>
+            <div className="w-9 h-9 rounded-lg bg-[#1F6B45] flex items-center justify-center shrink-0"><Store size={18} className="text-[#C9A227]" /></div>
           )}
           <div className="min-w-0 flex-1">
             <div className="font-bold text-sm truncate">{tenant?.business_name || "My Business"}</div>
@@ -121,7 +129,7 @@ function Shell() {
           <div className="text-[11px] text-white/60 capitalize mb-3">{role || "—"}</div>
           <button
             onClick={logout}
-            className="w-full flex items-center justify-center gap-2 text-xs font-semibold bg-[#1B5138] hover:bg-[#237A52] text-white/85 hover:text-white min-h-[40px] rounded-lg transition"
+            className="w-full flex items-center justify-center gap-2 text-xs font-semibold bg-[#17553A] hover:bg-[#1F6B45] text-white/85 hover:text-white min-h-[40px] rounded-lg transition"
           >
             <LogOut size={14} /> Sign out
           </button>
@@ -140,12 +148,12 @@ function Shell() {
         {/* Bottom padding on phones keeps the last of every page clear of
             the fixed bottom bar (plus the device's safe-area inset). */}
         {offlineSession && (
-          <div className="print:hidden bg-[#C6A15B]/15 text-[#7a5f1f] text-xs font-semibold px-4 py-1.5 text-center border-b border-[#C6A15B]/30">
+          <div className="print:hidden bg-[#C9A227]/15 text-[#7a5f1f] text-xs font-semibold px-4 py-1.5 text-center border-b border-[#C9A227]/30">
             Working offline as {staffName || "staff"}. Your sign-in is checked again when the internet returns.
           </div>
         )}
-        <main className="flex-1 min-w-0 overflow-y-auto pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:pb-0 print:overflow-visible print:pb-0">
-          <OfflinePageGate><Outlet /></OfflinePageGate>
+        <main ref={mainRef} className="pos-main flex-1 min-w-0 overflow-y-auto pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:pb-0 print:overflow-visible print:pb-0">
+          <OfflinePageGate key={location.pathname}><Outlet /></OfflinePageGate>
         </main>
       </div>
 

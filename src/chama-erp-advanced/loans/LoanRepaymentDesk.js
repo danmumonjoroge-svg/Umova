@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
 import { HandCoins, Loader2, ShieldAlert, X, CheckCircle, History } from "lucide-react";
+import { Panel } from "../shell/ui";
 import "./LoanRepaymentDesk.css";
 
 // -----------------------------------------------------------------------------
@@ -27,7 +28,8 @@ export default function LoanRepaymentDesk({ chamaId: chamaIdProp }) {
   const [loading, setLoading] = useState(true);
 
   const [modal, setModal] = useState(null); // loan being paid against
-  const [form, setForm] = useState({ amount: "", method: "MPESA", reference: "" });
+  const [form, setForm] = useState({ amount: "", method: "MPESA", reference: "", account: "" });
+  const [accounts, setAccounts] = useState([]);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -45,15 +47,18 @@ export default function LoanRepaymentDesk({ chamaId: chamaIdProp }) {
       .eq("status", "active")
       .order("disbursement_date", { ascending: true });
     setLoans(data || []);
+    const acc = await supabase.from("chama_bank_accounts").select("id,account_name,account_number,account_type").eq("chama_id", chamaId).eq("is_active", true);
+    setAccounts((acc.data || []).filter((a) => a.account_type !== "cash"));
     setLoading(false);
   }, [chamaId]);
 
   useEffect(() => { load(); }, [load]);
 
-  const openModal = (loan) => { setModal(loan); setForm({ amount: "", method: "MPESA", reference: "" }); };
+  const openModal = (loan) => { setModal(loan); setForm({ amount: "", method: "MPESA", reference: "", account: "" }); };
 
   const submitRepayment = async () => {
     if (!form.amount || Number(form.amount) <= 0) return;
+    if (form.method !== "CASH" && !form.account) { setToast({ type: "error", text: "Choose the Chama account the money went into." }); return; }
     setBusy(true);
     const { error } = await supabase.rpc("apply_loan_repayment", {
       p_loan_id: modal.id,
@@ -61,6 +66,7 @@ export default function LoanRepaymentDesk({ chamaId: chamaIdProp }) {
       p_method: form.method,
       p_reference: form.reference || null,
       p_recorder: member.id,
+      p_account_id: form.method === "CASH" ? null : form.account,
     });
     setBusy(false);
     if (error) { setToast({ type: "error", text: error.message }); return; }
@@ -97,6 +103,7 @@ export default function LoanRepaymentDesk({ chamaId: chamaIdProp }) {
       ) : loans.length === 0 ? (
         <div className="lrp-empty"><CheckCircle size={22} /><p>No active loans right now.</p></div>
       ) : (
+        <Panel icon={HandCoins} title="Loans being repaid" badge={loans.length} tone="green" collapsible={false}>
         <div className="lrp-grid">
           {loans.map((loan) => (
             <div className="lrp-card" key={loan.id}>
@@ -115,6 +122,7 @@ export default function LoanRepaymentDesk({ chamaId: chamaIdProp }) {
             </div>
           ))}
         </div>
+        </Panel>
       )}
 
       {modal && (
@@ -135,6 +143,15 @@ export default function LoanRepaymentDesk({ chamaId: chamaIdProp }) {
                 <option value="CASH">Cash</option>
               </select>
             </label>
+            {form.method !== "CASH" && (
+              <label>
+                Chama account it went into
+                <select value={form.account} onChange={(e) => setForm((f) => ({ ...f, account: e.target.value }))}>
+                  <option value="">Select account</option>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.account_name}{a.account_number ? ` (${a.account_number})` : ""}</option>)}
+                </select>
+              </label>
+            )}
             <label>Reference (optional)<input value={form.reference} onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))} placeholder="M-Pesa code, receipt no." /></label>
 
             <div className="lrp-modal-actions">

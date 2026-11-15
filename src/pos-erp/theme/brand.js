@@ -1,37 +1,33 @@
 // src/pos-erp/theme/brand.js
 //
 // "My Business" colour system -- Forest Green + Emerald + Savanna Gold.
+// Golden-green theme: deep forest for identity, warm cream working area,
+// gold used on every card edge/active state so the app reads gold + green.
 //
-// Tailwind classes throughout the app use arbitrary values built from
-// these hex codes (e.g. bg-[#123C2A]) so no tailwind.config.js change is
-// needed. Tailwind's JIT only sees COMPLETE class strings written out in
-// source, so the strings below are literal on purpose -- never build one
-// by concatenating a hex at runtime.
+// Tailwind's JIT only sees COMPLETE class strings written out in source,
+// so the strings below are literal on purpose.
 //
-// Rules of use (from the redesign brief):
-//   - Green is for identity + actions (sidebar, buttons, active states).
-//   - The working area stays light (Warm Ivory page, White cards).
-//   - Gold is an accent (active-nav indicator, small highlights) -- never
-//     a large fill.
-//   - No gradients, glass, glow, or heavy shadows.
+// For list pages use components/CardKit.jsx (small cards, fits the screen).
 
 export const BRAND = {
-  forestDeep: '#123C2A',
-  forest: '#1B5138',
-  emerald: '#237A52',
-  gold: '#C6A15B',
-  ivory: '#F7F6F0',
+  forestDeep: '#0F3B2A',
+  forest: '#17553A',
+  emerald: '#1F6B45',
+  leaf: '#2E7D52',
+  gold: '#C9A227',
+  goldDeep: '#8A6A12',
+  goldSoft: '#FBF3D5',
+  ivory: '#FAF7EA',
   white: '#FFFFFF',
-  text: '#26352D',
-  textMuted: '#68756D',
-  border: '#DDE3DD',
+  text: '#23382B',
+  textMuted: '#6F7461',
+  border: '#E3DBB8',
 };
 
-// Shared literal class strings (kept here so pages stay consistent).
 export const CLS = {
-  page: 'bg-[#F7F6F0] text-[#26352D]',
-  card: 'bg-white border border-[#DDE3DD] rounded-xl',
-  btnPrimary: 'bg-[#237A52] hover:bg-[#1B5138] text-white font-semibold rounded-xl transition-colors',
-  btnGhost: 'bg-white border border-[#DDE3DD] text-[#26352D] hover:bg-[#F7F6F0] font-semibold rounded-xl transition-colors',
-  muted: 'text-[#68756D]',
+  page: 'bg-[#FAF7EA] text-[#23382B]',
+  card: 'bg-white border border-[#E3DBB8] rounded-xl',
+  btnPrimary: 'bg-[#1F6B45] hover:bg-[#17553A] text-white font-semibold rounded-xl border-b-2 border-[#C9A227] transition-colors',
+  btnGhost: 'bg-white border border-[#E3DBB8] text-[#23382B] hover:bg-[#FAF7EA] font-semibold rounded-xl transition-colors',
+  muted: 'text-[#6F7461]',
 };

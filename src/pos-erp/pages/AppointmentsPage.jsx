@@ -1,19 +1,20 @@
 // src/pos-erp/pages/AppointmentsPage.jsx
 //
-// Phase 6 — appointments (brief §49). "Complete" runs the appointment's
-// service through the existing sale engine (appointmentService.
-// completeAndSell → saleService.create(), same code the till uses) —
-// requires an open cashier shift, same as the till itself.
+// Phase 6 — appointments (brief §49). Phase 54: the customer may pick who serves them (optional). "Complete" does
+// not take money here: it opens the Sell page with this booking loaded (customer, service, provider), and payment
+// happens there like every other sale. When that sale is saved the database marks the booking COMPLETED and writes
+// the provider's commission to payroll.
 
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CalendarClock, Loader2, Plus, X } from 'lucide-react';
-import { useAppointments, useServices } from '../hooks/useSalon';
+import { useAppointments, useServices, useProviders } from '../hooks/useSalon';
 import { useCustomers } from '../hooks/useCustomers';
-import { useCashierShifts } from '../hooks/useCashierShifts';
 import { singleFlight } from '../utils/singleFlight';
+import ContactActions from '../components/ContactActions';
+import Sheet from '../components/workspace/Sheet';
 
-const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'CREDIT'];
-const EMPTY_FORM = { customer_id: '', product_id: '', appointment_date: new Date().toISOString().slice(0, 10), appointment_time: '10:00', notes: '' };
+const EMPTY_FORM = { customer_id: '', product_id: '', appointment_date: new Date().toISOString().slice(0, 10), appointment_time: '10:00', employee_id: '', notes: '' };
 
 const STATUS_COLORS = {
   SCHEDULED: 'bg-slate-100 text-slate-600', CONFIRMED: 'bg-amber-50 text-amber-700',
@@ -25,22 +26,23 @@ function fmt(n) {
 }
 
 export default function AppointmentsPage() {
-  const { appointments, loading, error, create, setStatus, completeAndSell } = useAppointments();
+  const { appointments, loading, error, create, setStatus, reschedule } = useAppointments();
+  const navigate = useNavigate();
+  const { providers } = useProviders();
+  const [moving, setMoving] = useState(null); // appointment being rescheduled
+  const [moveWhen, setMoveWhen] = useState({ date: '', time: '' });
+  const [moveError, setMoveError] = useState('');
+  const apptPurpose = (a) => a.status === 'CANCELLED' ? 'APPOINTMENT_CANCELLED' : (a.reschedule_count > 0 ? 'APPOINTMENT_RESCHEDULED' : (a.status === 'SCHEDULED' ? 'APPOINTMENT_CONFIRMATION' : 'APPOINTMENT_REMINDER'));
   const { services } = useServices();
   const { customers } = useCustomers();
-  const { activeShift } = useCashierShifts();
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const [completing, setCompleting] = useState(null);
-  const [completeMethod, setCompleteMethod] = useState('CASH');
-  const [completeError, setCompleteError] = useState('');
-  const [completeBusy, setCompleteBusy] = useState(false);
-
   const selectedService = services.find(s => s.id === form.product_id);
+  const chosenProvider = providers.find(p => p.id === form.employee_id) || null;
 
   const submit = singleFlight('AppointmentsPage.submit', async (e) => {
     e.preventDefault();
@@ -51,7 +53,9 @@ export default function AppointmentsPage() {
       await create({
         customer_id: form.customer_id,
         product_id: form.product_id,
-        staff_id: selectedService?.service_details?.default_staff_id || null,
+        staff_id: chosenProvider?.staff_id || (!form.employee_id ? selectedService?.service_details?.default_staff_id : null) || null,
+        employee_id: form.employee_id || null, // optional: blank = "any available staff"
+        provider_name: chosenProvider?.name || null,
         appointment_date: form.appointment_date,
         appointment_time: form.appointment_time,
         duration_minutes: selectedService?.service_details?.duration_minutes || null,
@@ -66,30 +70,8 @@ export default function AppointmentsPage() {
     }
   });
 
-  const openComplete = (appt) => {
-    setCompleting(appt);
-    setCompleteMethod('CASH');
-    setCompleteError('');
-  };
-
-  const submitComplete = async (e) => {
-    e.preventDefault();
-    setCompleteError('');
-    if (!activeShift) { setCompleteError('Open a cashier shift first (same as the till).'); return; }
-    setCompleteBusy(true);
-    try {
-      await completeAndSell(completing, {
-        shiftId: activeShift.id,
-        unitPrice: Number(completing.service?.selling_price) || 0,
-        paymentMethod: completeMethod,
-      });
-      setCompleting(null);
-    } catch (err) {
-      setCompleteError(err.message);
-    } finally {
-      setCompleteBusy(false);
-    }
-  };
+  // One place takes payment: the Sell page. It loads this booking (?appointment=) with its customer, service and provider.
+  const completeInSell = (appt) => navigate(`/pos/sell?appointment=${appt.id}`);
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -98,7 +80,7 @@ export default function AppointmentsPage() {
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <CalendarClock size={22} className="text-amber-600" /> Appointments
           </h1>
-          <p className="text-slate-500 text-sm">Book, track, and complete service bookings.</p>
+          <p className="text-slate-500 text-sm">Book, track, and complete service bookings. Payment is taken on the Sell page.</p>
         </div>
         <button
           onClick={() => setShowForm(true)}
@@ -109,12 +91,6 @@ export default function AppointmentsPage() {
       </div>
 
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">{error}</div>}
-      {!activeShift && (
-        <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3">
-          No cashier shift is open — appointments can still be booked, but completing one into a sale needs an open shift.
-        </div>
-      )}
-
       <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
@@ -132,17 +108,21 @@ export default function AppointmentsPage() {
                 <td className="px-5 py-3 whitespace-nowrap text-slate-600">{a.appointment_date} {a.appointment_time?.slice(0, 5)}</td>
                 <td className="px-5 py-3 text-slate-700">{a.customer?.name}</td>
                 <td className="px-5 py-3 text-slate-700">{a.service?.name} <span className="text-slate-400">({fmt(a.service?.selling_price)})</span></td>
-                <td className="px-5 py-3 text-slate-500">{a.staff?.name || '—'}</td>
+                <td className="px-5 py-3 text-slate-500">{a.provider_name || a.staff?.name || 'Any'}</td>
                 <td className="px-5 py-3 text-center">
                   <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${STATUS_COLORS[a.status] || 'bg-slate-100'}`}>{a.status.replace('_', ' ')}</span>
                 </td>
                 <td className="px-5 py-3 text-right whitespace-nowrap">
+                  <span className="inline-flex align-middle mr-3"><ContactActions size="sm" recipient={{ kind: 'CUSTOMER', id: a.customer?.id || a.customer_id, name: a.customer?.name, phone: a.customer?.phone, email: a.customer?.email }} purpose={apptPurpose(a)} reference={{ type: 'APPOINTMENT', id: a.id, label: a.service?.name }} /></span>
+                  {['SCHEDULED', 'CONFIRMED'].includes(a.status) && (
+                    <button onClick={() => { setMoving(a); setMoveWhen({ date: a.appointment_date, time: (a.appointment_time || '').slice(0, 5) }); setMoveError(''); }} className="text-slate-500 text-xs hover:underline mr-3">Reschedule</button>
+                  )}
                   {a.status === 'SCHEDULED' && (
                     <button onClick={() => setStatus(a.id, 'CONFIRMED')} className="text-slate-500 text-xs hover:underline mr-3">Confirm</button>
                   )}
                   {['SCHEDULED', 'CONFIRMED'].includes(a.status) && (
                     <>
-                      <button onClick={() => openComplete(a)} className="text-emerald-700 text-xs font-semibold hover:underline mr-3">Complete &amp; Sell</button>
+                      <button onClick={() => completeInSell(a)} className="text-emerald-700 text-xs font-semibold hover:underline mr-3">Complete &amp; Sell</button>
                       <button onClick={() => setStatus(a.id, 'CANCELLED')} className="text-red-500 text-xs hover:underline mr-3">Cancel</button>
                       <button onClick={() => setStatus(a.id, 'NO_SHOW')} className="text-slate-400 text-xs hover:underline">No-show</button>
                     </>
@@ -153,6 +133,22 @@ export default function AppointmentsPage() {
           </tbody>
         </table>
       </div>
+
+      {moving && (
+        <Sheet title="Reschedule appointment" onClose={() => setMoving(null)}>
+          <div className="space-y-3">
+            <p className="text-sm text-[#4A5240]">{moving.customer?.name} · {moving.service?.name}. Currently {moving.appointment_date} {moving.appointment_time?.slice(0, 5)}. The original time stays on record.</p>
+            {moveError && <div className="bg-[#FBE4E0] text-[#8F2E24] text-sm rounded-lg px-3 py-2">{moveError}</div>}
+            <div className="flex gap-2">
+              <input type="date" value={moveWhen.date} onChange={e => setMoveWhen({ ...moveWhen, date: e.target.value })} className="flex-1 border border-[#E3DBB8] rounded-xl px-3 min-h-[48px]" />
+              <input type="time" value={moveWhen.time} onChange={e => setMoveWhen({ ...moveWhen, time: e.target.value })} className="w-32 border border-[#E3DBB8] rounded-xl px-3 min-h-[48px]" />
+            </div>
+            <button onClick={async () => { try { await reschedule(moving.id, moveWhen); setMoving(null); } catch (err) { setMoveError(err.message); } }}
+              className="w-full min-h-[48px] rounded-xl bg-[#1F6B45] text-white font-semibold border-b-2 border-[#C9A227]">Save new time</button>
+            <p className="text-xs text-[#8A8A70]">Afterwards use the message buttons on that row to tell the customer.</p>
+          </div>
+        </Sheet>
+      )}
 
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -170,6 +166,15 @@ export default function AppointmentsPage() {
               <option value="">Select service *</option>
               {services.map(s => <option key={s.id} value={s.id}>{s.name} — {fmt(s.selling_price)}</option>)}
             </select>
+            {providers.length > 0 && (
+              <label className="block text-xs text-slate-500">
+                Who should serve them? (optional)
+                <select value={form.employee_id} onChange={e => setForm({ ...form, employee_id: e.target.value })} className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800">
+                  <option value="">Any available staff</option>
+                  {providers.map(p => <option key={p.id} value={p.id}>{p.name}{p.job_title ? ` — ${p.job_title}` : ''}</option>)}
+                </select>
+              </label>
+            )}
             <div className="flex gap-2">
               <input required type="date" value={form.appointment_date} onChange={e => setForm({ ...form, appointment_date: e.target.value })} className="flex-1 border border-slate-200 rounded-xl px-3 py-2" />
               <input required type="time" value={form.appointment_time} onChange={e => setForm({ ...form, appointment_time: e.target.value })} className="flex-1 border border-slate-200 rounded-xl px-3 py-2" />
@@ -182,24 +187,6 @@ export default function AppointmentsPage() {
         </div>
       )}
 
-      {completing && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitComplete} className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-lg text-slate-800">Complete &amp; Sell</h3>
-            <p className="text-sm text-slate-500">
-              {completing.customer?.name} — {completing.service?.name}, <span className="font-bold text-amber-700">{fmt(completing.service?.selling_price)}</span>
-            </p>
-            {completeError && <div className="bg-red-50 text-red-700 text-sm rounded px-3 py-2">{completeError}</div>}
-            <select value={completeMethod} onChange={e => setCompleteMethod(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2">
-              {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m.replace('_', ' ')}</option>)}
-            </select>
-            <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setCompleting(null)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-xl">Cancel</button>
-              <button type="submit" disabled={completeBusy} className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white py-2 rounded-xl font-semibold disabled:opacity-60">{completeBusy ? 'Selling…' : 'Sell'}</button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }

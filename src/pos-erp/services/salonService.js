@@ -4,9 +4,12 @@
 // schema/phase6_salon.sql for why a service is a lb_products row
 // (track_inventory=false) with a lb_service_details extension, not a
 // new catalog.
+//
+// Phase 54: an appointment is NOT paid on this page any more. "Complete" opens the Sell page with the booking
+// (see POSPage ?appointment=), so there is one place that takes money. The sale item carries the booking and the
+// optional provider; the database then marks the booking COMPLETED and writes the commission (phase54 SQL).
 
 import { posSupabase as supabase } from './posSupabaseClient';
-import { saleService } from './saleService';
 
 export const serviceDetailsService = {
   // Services ARE lb_products rows (track_inventory=false) — this reads
@@ -62,7 +65,7 @@ export const appointmentService = {
   async getAll({ businessId, from, to } = {}) {
     let q = supabase
       .from('lb_appointments')
-      .select('*, customer:lb_customers(id, name, phone), service:lb_products(id, name, selling_price), staff:pos_staff(id, name)')
+      .select('*, customer:lb_customers(id, name, phone, email), service:lb_products(id, name, selling_price), staff:pos_staff(id, name)')
       .order('appointment_date', { ascending: true })
       .order('appointment_time', { ascending: true });
     if (businessId) q = q.eq('business_id', businessId);
@@ -85,14 +88,24 @@ export const appointmentService = {
         customer_id: appt.customer_id,
         product_id: appt.product_id,
         staff_id: appt.staff_id || null,
+        employee_id: appt.employee_id || null,       // phase54: optional provider (an HR employee)
+        provider_name: appt.employee_id ? (appt.provider_name || null) : null,
         appointment_date: appt.appointment_date,
         appointment_time: appt.appointment_time,
         duration_minutes: appt.duration_minutes || null,
         notes: appt.notes || null,
         created_by: appt.created_by ?? null,
       })
-      .select('*, customer:lb_customers(id, name, phone), service:lb_products(id, name, selling_price), staff:pos_staff(id, name)')
+      .select('*, customer:lb_customers(id, name, phone, email), service:lb_products(id, name, selling_price), staff:pos_staff(id, name)')
       .single();
+    if (error) throw error;
+    return data;
+  },
+
+  /** Phase 50 — move an appointment. The database trigger keeps the ORIGINAL date/time and the previous one. */
+  async reschedule(id, { date, time }) {
+    if (!date || !time) throw new Error('Choose a date and a time.');
+    const { data, error } = await supabase.from('lb_appointments').update({ appointment_date: date, appointment_time: time }).eq('id', id).select('*, customer:lb_customers(id, name, phone, email), service:lb_products(id, name, selling_price), staff:pos_staff(id, name)').single();
     if (error) throw error;
     return data;
   },
@@ -108,45 +121,28 @@ export const appointmentService = {
     return data;
   },
 
-  /**
-   * Completes an appointment by selling its linked service through the
-   * EXISTING sales engine (saleService.create() — same code the till
-   * uses), then stamps this appointment COMPLETED with the resulting
-   * sale_id. Deliberately not a new DB function: this is exactly what
-   * saleService.create() already does correctly for a
-   * track_inventory=false product (skips stock movement, still creates
-   * payment + receipt) — wrapping it in a second SECURITY DEFINER
-   * function would just be the same insert done twice.
-   *
-   * Requires an open cashier shift, same as the till itself — completing
-   * a service sale outside a shift would create a sale nothing can ever
-   * reconcile against in Cash/close-shift.
-   */
-  async completeAndSell({ appointment, shiftId, unitPrice, paymentMethod, createdBy }) {
-    if (!shiftId) throw new Error('appointmentService.completeAndSell: an open cashier shift is required (same as the till).');
-    const sale = await saleService.create({
-      tenant_id: appointment.tenant_id,
-      business_id: appointment.business_id,
-      shift_id: shiftId,
-      customer_id: appointment.customer_id,
-      cashier_id: createdBy,
-      items: [{
-        product_id: appointment.product_id,
-        quantity: 1,
-        unit_price: unitPrice,
-        cost_price: 0, // services have no cost of goods
-        selling_mode: 'PER_UNIT',
-      }],
-      payments: [{ payment_method: paymentMethod, amount: unitPrice, change_amount: 0 }],
-    });
-
+  async getById(id) {
     const { data, error } = await supabase
       .from('lb_appointments')
-      .update({ status: 'COMPLETED', sale_id: sale.id, updated_at: new Date().toISOString() })
-      .eq('id', appointment.id)
-      .select()
+      .select('*, customer:lb_customers(id, name, phone, email), service:lb_products(id, name, selling_price), staff:pos_staff(id, name)')
+      .eq('id', id)
       .single();
     if (error) throw error;
-    return { appointment: data, sale };
+    return data;
+  },
+};
+
+// Phase 54 -- who can be given a booking or a service line. These are HR employees (the people payroll pays);
+// the function returns names and job titles only.
+export const providerService = {
+  async list(businessId) {
+    if (!businessId) return [];
+    const { data, error } = await supabase.rpc('salon_list_providers', { p_business: businessId });
+    if (error) {
+      // Not deployed yet (phase54 not run) or no HR access: the provider choice is optional, so the screens just hide it.
+      if (error.code === 'PGRST202' || error.code === '42883') return [];
+      throw error;
+    }
+    return data || [];
   },
 };

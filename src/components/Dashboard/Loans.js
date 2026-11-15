@@ -4,6 +4,9 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import logo from "../../asset/logo/umovalogo.png";
 import "./loan.css";
+import { savePdf } from "../../utils/saveFile";
+import { Landmark, PiggyBank, ReceiptText, TrendingUp } from "lucide-react";
+import { PageHero, Card, Collapse, SubCard, SubGrid, Pill, ProgressBar, kes } from "./MemberUI";
 
 // ── Sub-Ledger Account Codes ─────────────────────────────────────────────────
 const LOAN_ACCOUNT     = 1011;
@@ -565,7 +568,7 @@ export default function Loan() {
         );
       }
 
-      doc.save(`Umova_Loan_Agreement_${memberNo}_${Date.now().toString().slice(-6)}.pdf`);
+      savePdf(doc, `Umova_Loan_Agreement_${memberNo}_${Date.now().toString().slice(-6)}.pdf`).catch((e) => alert(e?.message || "Could not prepare the agreement."));
     } catch (err) {
       console.error("PDF generation error:", err);
       alert("PDF generation failed: " + err.message);
@@ -617,7 +620,7 @@ export default function Loan() {
       alternateRowStyles: { fillColor: [248, 250, 252] },
     });
 
-    doc.save(`Umova_Statement_${memberNo}.pdf`);
+    savePdf(doc, `Umova_Statement_${memberNo}.pdf`).catch((e) => alert(e?.message || "Could not prepare the statement."));
   };
 
   // ── Submit Loan Application ───────────────────────────────────────────────
@@ -726,114 +729,88 @@ export default function Loan() {
   const prod = finance.currentProduct;
   const reqAmt = Number(form.amount || 0);
 
+  const inArrears = finance.daysInArrears > 0;
+  const maxCap = Math.round(finance.savings * finance.multiplier);
+
   return (
-    <div className="loan-container main-content-fade p-6 max-w-7xl mx-auto space-y-6">
+    // `loan-container` is kept for the modals' scrollbar/focus styles; `ln` neutralises its full-page background here.
+    <div className="loan-container ln mu">
 
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white border border-amber-100 rounded-2xl p-4 shadow-sm gap-2">
-        <div>
-          <span className="text-[10px] font-black tracking-widest text-amber-800 uppercase bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-md">
-            SASRA Real-Time Ledger Node
-          </span>
-          <h1 className="text-xl font-black text-stone-800 tracking-tight uppercase mt-1.5">
-            {dataReady ? (member?.name || memberNo) : "Loading account…"}
-          </h1>
-          {memberNo && <p className="text-[11px] text-stone-400 font-mono mt-0.5">Member No: {memberNo}</p>}
-        </div>
-        <p className="text-xs font-mono font-bold text-stone-400">
-          {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-        </p>
+      {/* HERO: what you owe, with the two figures members ask about next */}
+      <PageHero
+        eyebrow={dataReady ? (member?.name || memberNo) : "Loading account…"}
+        chip={memberNo || null}
+        label="You owe"
+        amount={dataReady ? kes(Math.round(finance.netLoanBalance)) : "…"}
+        note={`Charged ${Math.round(finance.grossCharged).toLocaleString()} · Paid ${Math.round(finance.totalCredits).toLocaleString()}`}
+        subs={[
+          { label: "Interest due", value: kes(finance.outstandingInterest) },
+          { label: "Status", value: inArrears ? `${finance.daysInArrears} days late` : "Up to date" },
+        ]}
+      />
+
+      {/* ACTIONS */}
+      <div className="mu-actions">
+        <button type="button" className="mu-btn mu-btn--primary mu-btn--block" onClick={() => { setShowApply(true); setShowStatement(false); }}>
+          <Landmark size={16} /> Apply for loan
+        </button>
+        <button type="button" className="mu-btn mu-btn--gold mu-btn--block" onClick={() => { setShowStatement(true); setShowApply(false); }}>
+          <ReceiptText size={16} /> View statement
+        </button>
       </div>
+      <p className="mu-note" style={{ marginTop: -6 }}>The loan agreement PDF is available inside the Apply form.</p>
 
-      {/* DASHBOARD CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="mu-grid">
+        <Card icon={PiggyBank} title="Borrowing power" hint="Based on your savings">
+          <SubGrid cols={2}>
+            <SubCard label="Savings balance" value={kes(finance.savings)} />
+            <SubCard label="Multiplier" value={`${finance.multiplier}x`} />
+            <SubCard label="Maximum loan" value={kes(maxCap)} note="Savings × multiplier" />
+          </SubGrid>
+        </Card>
 
-        <div className="bg-white border border-amber-100 rounded-3xl p-5 border-l-4 border-l-green-700 shadow-sm space-y-1">
-          <h4 className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Savings Balance (1018)</h4>
-          <h2 className="text-2xl font-black text-stone-800 font-mono">KES {finance.savings.toLocaleString()}</h2>
-          <p className="text-[10px] text-green-800 font-extrabold uppercase tracking-wider">
-            Multiplier: {finance.multiplier}x &nbsp;·&nbsp; Max Cap: KES {Math.round(finance.savings * finance.multiplier).toLocaleString()}
-          </p>
-        </div>
+        <Collapse icon={TrendingUp} title="Loan details" hint="Balance breakdown and account status" span>
+          <SubGrid cols={2}>
+            <SubCard label="Arrears class" value={finance.arrearsClass} tone={inArrears ? "bad" : "good"} />
+            <SubCard label="Days in arrears" value={finance.daysInArrears} tone={inArrears ? "bad" : undefined} />
+            <SubCard label="Risk rating" value={finance.riskRating} />
+          </SubGrid>
+          <SubGrid cols={2}>
+            <SubCard label="Principal disbursed" value={kes(finance.loanDisbursed)} />
+            <SubCard label="Fees charged" value={kes(finance.feesCharged)} />
+            <SubCard label="Interest charged" value={kes(finance.interestCharged)} />
+            <SubCard label="Principal repaid" value={kes(finance.loanPaid)} tone="good" />
+            <SubCard label="Interest paid" value={kes(finance.interestPaid)} tone="good" />
+            {finance.feesPaid > 0 && <SubCard label="Fees paid" value={kes(finance.feesPaid)} tone="good" />}
+            <SubCard label="Discounts / waivers" value={kes(finance.discounts)} />
+          </SubGrid>
+        </Collapse>
 
-        <div className="bg-white border border-amber-100 rounded-3xl p-5 border-l-4 border-l-amber-500 shadow-sm space-y-1">
-          <h4 className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Net Loan Balance</h4>
-          <h2 className={`text-2xl font-black font-mono ${finance.netLoanBalance > 0 ? "text-amber-700" : "text-stone-800"}`}>
-            KES {Math.round(finance.netLoanBalance).toLocaleString()}
-          </h2>
-          <p className="text-[10px] text-stone-500 font-bold uppercase tracking-wider leading-relaxed">
-            Charged: {Math.round(finance.grossCharged).toLocaleString()} &nbsp;·&nbsp; Settled: {Math.round(finance.totalCredits).toLocaleString()}
-          </p>
-          <p className="text-[9px] text-stone-400 font-medium leading-relaxed">
-            Principal {finance.loanDisbursed.toLocaleString()} + Fees {finance.feesCharged.toLocaleString()} + Interest {finance.interestCharged.toLocaleString()}
-            {" "}− Repaid {finance.loanPaid.toLocaleString()} − Interest paid {finance.interestPaid.toLocaleString()}
-            {finance.feesPaid > 0 ? ` − Fees paid ${finance.feesPaid.toLocaleString()}` : ""}
-            {" "}− Discounts {finance.discounts.toLocaleString()}
-          </p>
-        </div>
-
-        <div className={`bg-white border border-amber-100 rounded-3xl p-5 border-l-4 shadow-sm space-y-1 ${finance.outstandingInterest > 0 ? "border-l-amber-600" : "border-l-emerald-500"}`}>
-          <h4 className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Interest Outstanding (1020)</h4>
-          <h2 className={`text-2xl font-black font-mono ${finance.outstandingInterest > 0 ? "text-amber-700" : "text-stone-800"}`}>
-            KES {finance.outstandingInterest.toLocaleString()}
-          </h2>
-          <p className="text-[10px] text-stone-500 font-bold uppercase tracking-wider">
-            Charged: {finance.interestCharged.toLocaleString()} &nbsp;·&nbsp; Paid: {finance.interestPaid.toLocaleString()}
-          </p>
-        </div>
-
-        <div className={`bg-white border border-amber-100 rounded-3xl p-5 border-l-4 shadow-sm space-y-1 ${finance.daysInArrears > 0 ? "border-l-rose-600 bg-rose-50/30" : "border-l-emerald-600"}`}>
-          <h4 className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Arrears Status</h4>
-          <h2 className={`text-2xl font-black font-mono ${finance.daysInArrears > 0 ? "text-rose-700 animate-pulse" : "text-stone-800"}`}>
-            {finance.arrearsClass}
-          </h2>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-            {finance.daysInArrears} Days &nbsp;·&nbsp; Risk: <span className="text-stone-700">{finance.riskRating}</span>
-          </p>
-        </div>
-      </div>
-
-      {/* TOTAL OWED BANNER */}
-      {finance.totalOutstanding > 0 && (
-        <div className="bg-green-900 text-white rounded-2xl px-5 py-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border border-amber-500/30">
-          <div className="text-[11px] font-bold uppercase tracking-widest text-amber-200">Net Amount Owed (Principal + Fees + Interest − Payments − Discounts)</div>
-          <div className="text-xl font-black font-mono text-white">KES {Math.round(finance.totalOutstanding).toLocaleString()}</div>
-          {finance.hasExistingLoan && (
-            <div className={`text-[10px] font-bold uppercase px-3 py-1 rounded-full ${finance.canRefinance ? "bg-amber-500 text-green-950" : "bg-rose-500 text-white"}`}>
+        {finance.totalOutstanding > 0 && finance.hasExistingLoan && (
+          <Card
+            icon={Landmark}
+            title="Repayment progress"
+            hint={`${finance.repaidPercent.toFixed(1)}% repaid`}
+            right={<Pill tone={finance.canRefinance ? "good" : "bad"}>{finance.canRefinance ? "Refinance eligible" : "Refinance blocked"}</Pill>}
+            span
+          >
+            <ProgressBar percent={finance.repaidPercent} />
+            <p className="mu-note" style={{ marginTop: 8 }}>
               {finance.canRefinance
-                ? `♻ Refinance Eligible — ${finance.repaidPercent.toFixed(1)}% repaid`
-                : `🔒 Refinance Blocked — ${finance.repaidPercent.toFixed(1)}% repaid (need 50%)`}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ACTION BUTTONS */}
-      <div className="flex flex-wrap gap-3 pt-1">
-        <button className="bg-green-800 hover:bg-green-900 font-bold text-xs tracking-tight rounded-xl px-5 py-3 transition text-white shadow-sm cursor-pointer"
-          onClick={() => { setShowApply(true); setShowStatement(false); }}>
-          Apply for Loan
-        </button>
-        <button className="bg-amber-600 hover:bg-amber-700 font-bold text-xs tracking-tight rounded-xl px-5 py-3 transition text-white shadow-sm cursor-pointer"
-          onClick={() => { setShowStatement(true); setShowApply(false); }}>
-          View Statement
-        </button>
-        <button className="bg-white border border-amber-200 text-stone-500 font-bold text-xs tracking-tight rounded-xl px-5 py-3 transition shadow-sm cursor-not-allowed relative group" disabled
-          title="Open the Apply form, fill in loan details, then use the Download button inside">
-          Download Agreement PDF
-          <span className="absolute -top-10 left-0 w-72 bg-green-900 text-white text-[10px] rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition pointer-events-none z-20">
-            Fill the Apply form first, then click ⬇ Download Agreement PDF inside the form
-          </span>
-        </button>
+                ? "You have repaid enough to be eligible to refinance."
+                : "Refinancing opens once 50% of the loan has been repaid."}
+            </p>
+          </Card>
+        )}
       </div>
 
       {/* ── APPLY MODAL ─────────────────────────────────────────────────────── */}
       {showApply && (
-        <div className="fixed inset-0 bg-green-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-3xl bg-white border border-amber-200 rounded-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-green-950/50 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 z-50">
+          <div className="w-full max-w-3xl bg-white border border-amber-200 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[94vh] sm:max-h-[92vh] overflow-y-auto overscroll-contain">
 
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-amber-100 px-6 py-4 rounded-t-3xl z-10">
+            <div className="sticky top-0 bg-white border-b border-amber-100 px-4 sm:px-6 py-4 rounded-t-3xl z-10">
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="text-sm font-black text-stone-800 uppercase tracking-tight">Umova SACCO — Credit Application</h3>
@@ -844,7 +821,7 @@ export default function Loan() {
               </div>
             </div>
 
-            <div className="px-6 py-5 space-y-5">
+            <div className="px-4 sm:px-6 pt-5 pb-8 sm:pb-5 space-y-5">
 
               {/* Refinance Notice */}
               {finance.hasExistingLoan && (
@@ -871,7 +848,7 @@ export default function Loan() {
 
                 <div>
                   <label className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block mb-1">Loan Product</label>
-                  <select className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
+                  <select className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
                     name="loan_type" value={form.loan_type} onChange={handleInputChange}>
                     <option value="">— Select Product —</option>
                     {Object.entries(finance.products).map(([name, p]) => (
@@ -884,7 +861,7 @@ export default function Loan() {
 
                 <div>
                   <label className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block mb-1">Amount (KES)</label>
-                  <input className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
+                  <input className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
                     type="number" name="amount" placeholder="e.g. 50000" value={form.amount} onChange={handleInputChange} />
                   {prod && reqAmt > 0 && (
                     <p className="text-[10px] text-stone-400 mt-0.5">
@@ -895,20 +872,20 @@ export default function Loan() {
 
                 <div>
                   <label className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block mb-1">Duration (Months)</label>
-                  <input className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
+                  <input className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
                     type="number" name="duration" placeholder="e.g. 12" value={form.duration} onChange={handleInputChange} />
                   {prod && <p className="text-[10px] text-stone-400 mt-0.5">Max: {prod.maxDuration} months</p>}
                 </div>
 
                 <div>
                   <label className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block mb-1">Net Monthly Income (KES)</label>
-                  <input className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
+                  <input className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
                     type="number" name="net_income" placeholder="Verified net pay" value={form.net_income} onChange={handleInputChange} />
                 </div>
 
                 <div>
                   <label className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block mb-1">Security / Collateral Type</label>
-                  <select className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
+                  <select className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
                     name="security_type" value={form.security_type} onChange={handleInputChange}>
                     <option value="">— Select —</option>
                     <option value="Deposits">Internal Savings (A/C 1018)</option>
@@ -921,7 +898,7 @@ export default function Loan() {
                 {form.security_type === "Guarantor" ? (
                   <div>
                     <label className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block mb-1">Primary Guarantor</label>
-                    <select className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
+                    <select className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
                       name="guarantor_1_no" value={form.guarantor_1_no} onChange={handleInputChange}>
                       <option value="">— Select Guarantor —</option>
                       {allMembers.filter((m) => m.member_no !== memberNo).map((m) => (
@@ -932,7 +909,7 @@ export default function Loan() {
                 ) : (
                   <div>
                     <label className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block mb-1">Collateral Market Value (KES)</label>
-                    <input className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700 disabled:opacity-40"
+                    <input className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700 disabled:opacity-40"
                       type="number" name="security_value" placeholder="Appraised value"
                       value={form.security_value} onChange={handleInputChange}
                       disabled={form.security_type === "Deposits"} />
@@ -944,7 +921,7 @@ export default function Loan() {
               {form.security_type === "Guarantor" && (
                 <div>
                   <label className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block mb-1">Secondary Guarantor (Optional)</label>
-                  <select className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
+                  <select className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
                     name="guarantor_2_no" value={form.guarantor_2_no} onChange={handleInputChange}>
                     <option value="">— Optional —</option>
                     {allMembers.filter((m) => m.member_no !== memberNo && m.member_no !== form.guarantor_1_no).map((m) => (
@@ -957,7 +934,7 @@ export default function Loan() {
               {/* Purpose */}
               <div>
                 <label className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block mb-1">Loan Purpose</label>
-                <textarea className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
+                <textarea className="w-full bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-green-700"
                   name="purpose" rows="2" placeholder="Describe the intended use of funds..."
                   value={form.purpose} onChange={handleInputChange} />
               </div>
@@ -983,7 +960,7 @@ export default function Loan() {
                       {finance.isEligible ? "✓ APPROVED" : "✗ REJECTED"}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 font-mono text-[11px] text-stone-700">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 font-mono text-[11px] break-words text-stone-700">
                     <div>Principal: <strong>KES {reqAmt.toLocaleString()}</strong></div>
                     <div>Total Interest (reducing bal, {prod.rate}%/yr): <strong>KES {Math.round(finance.totalInterest).toLocaleString()}</strong></div>
                     <div>Insurance ({prod.insRate || 0}%): <strong>KES {Math.round(finance.insuranceFee).toLocaleString()}</strong></div>
@@ -1011,8 +988,8 @@ export default function Loan() {
                     Repayment Schedule — Reducing Balance ({finance.schedule.length} months)
                   </h4>
                   <div className="border border-amber-200 rounded-xl overflow-hidden">
-                    <div className="max-h-52 overflow-y-auto">
-                      <table className="min-w-full text-[10px] font-mono">
+                    <div className="max-h-52 overflow-auto">
+                      <table className="w-full min-w-[520px] text-[10px] font-mono">
                         <thead className="bg-green-800 text-white sticky top-0">
                           <tr>
                             {["Month","Principal","Interest","Insurance","Instalment","Balance"].map(h => (
@@ -1083,11 +1060,11 @@ export default function Loan() {
               </button>
 
               {/* Submit / Cancel */}
-              <div className="flex justify-between items-center pt-1 border-t border-amber-100">
-                <button className="px-5 py-2.5 rounded-xl font-bold text-xs bg-amber-50 text-stone-600 hover:bg-amber-100 transition cursor-pointer"
+              <div className="flex justify-between items-center gap-3 pt-3 border-t border-amber-100">
+                <button className="px-5 py-3 sm:py-2.5 rounded-xl font-bold text-xs bg-amber-50 text-stone-600 hover:bg-amber-100 transition cursor-pointer"
                   disabled={loading} onClick={() => setShowApply(false)}>Cancel</button>
                 <button
-                  className="px-7 py-2.5 rounded-xl font-bold text-xs bg-green-900 text-white hover:bg-green-800 shadow-sm transition disabled:opacity-40 cursor-pointer"
+                  className="flex-1 sm:flex-none px-7 py-3 sm:py-2.5 rounded-xl font-bold text-xs bg-green-900 text-white hover:bg-green-800 shadow-sm transition disabled:opacity-40 cursor-pointer"
                   disabled={loading || !finance.isEligible}
                   onClick={executeLoanApplication}>
                   {loading ? "Submitting…" : "✓ Submit Application"}
@@ -1101,10 +1078,10 @@ export default function Loan() {
 
       {/* ── STATEMENT MODAL ──────────────────────────────────────────────────── */}
       {showStatement && (
-        <div className="fixed inset-0 bg-green-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-5xl bg-white border border-amber-200 rounded-3xl shadow-2xl max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 bg-green-950/50 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 z-50">
+          <div className="w-full max-w-5xl bg-white border border-amber-200 rounded-t-3xl sm:rounded-3xl shadow-2xl h-[94vh] sm:h-auto max-h-[94vh] sm:max-h-[92vh] flex flex-col">
 
-            <div className="sticky top-0 bg-white border-b border-amber-100 px-6 py-4 rounded-t-3xl flex justify-between items-start">
+            <div className="sticky top-0 bg-white border-b border-amber-100 px-4 sm:px-6 py-4 rounded-t-3xl flex flex-wrap justify-between items-start gap-3">
               <div>
                 <h3 className="text-sm font-black text-stone-800 uppercase tracking-tight">Loan & Interest Statement</h3>
                 <p className="text-[11px] text-stone-400 font-medium mt-0.5">Accounts 1011 (Principal) · 1020 (Interest) — {member?.name || memberNo}</p>
@@ -1124,15 +1101,15 @@ export default function Loan() {
                 ["Interest Outstanding",  `KES ${finance.outstandingInterest.toLocaleString()}`, finance.outstandingInterest > 0 ? "text-amber-700" : "text-emerald-700"],
                 ["Net Amount Owed",       `KES ${Math.round(finance.totalOutstanding).toLocaleString()}`, finance.totalOutstanding > 0 ? "text-stone-800" : "text-emerald-700"],
               ].map(([label, val, cls]) => (
-                <div key={label} className="bg-white py-3 px-4">
+                <div key={label} className="bg-white py-3 px-2 sm:px-4 min-w-0">
                   <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">{label}</div>
-                  <div className={`text-lg font-black font-mono ${cls}`}>{val}</div>
+                  <div className={`text-[12.5px] sm:text-lg font-black font-mono break-words ${cls}`}>{val}</div>
                 </div>
               ))}
             </div>
 
-            <div className="overflow-y-auto flex-1">
-              <table className="min-w-full divide-y divide-amber-100 text-xs text-left">
+            <div className="overflow-auto flex-1">
+              <table className="w-full min-w-[640px] divide-y divide-amber-100 text-xs text-left">
                 <thead className="bg-amber-50 sticky top-0">
                   <tr>
                     {["Date", "Receipt No", "Description", "Type", "Amount (KES)"].map((h) => (

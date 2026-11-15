@@ -1,0 +1,167 @@
+/* src/pos-erp/theme/posSkin.css
+ *
+ * ONE place that makes the whole app read gold + green.
+ *
+ * Why: about twenty older pages (M-Pesa, Cash, Spending, Invoices, Meters, Staff, Payroll ...) were written before the
+ * gold/green kit and still use grey, slate, blue and bright red/emerald utility classes. Rather than rewrite twenty pages
+ * (and risk their logic), everything inside the app shell (class "pos-skin", set in POSLayout) is re-coloured here.
+ * Pages already on the kit are unaffected: they use exact hex colours, which this file does not touch.
+ * Also holds the small global polish: focus rings, steady numbers, tap feedback, page fade-in and loading skeletons.
+ */
+
+/* ---------- 1. old palette -> gold + green ---------- */
+.pos-skin .text-slate-900{color:#23382B!important}
+.pos-skin .text-slate-800{color:#23382B!important}
+.pos-skin .text-slate-700{color:#2F4438!important}
+.pos-skin .text-slate-600{color:#4A5A4F!important}
+.pos-skin .text-slate-500{color:#6F7461!important}
+.pos-skin .text-slate-400{color:#8B8766!important}
+.pos-skin .text-slate-300{color:#B9B28A!important}
+.pos-skin .text-gray-700{color:#2F4438!important}
+.pos-skin .text-gray-600{color:#4A5A4F!important}
+.pos-skin .text-gray-500{color:#6F7461!important}
+.pos-skin .text-gray-400{color:#8B8766!important}
+.pos-skin .text-gray-300{color:#B9B28A!important}
+.pos-skin .hover\:text-slate-800:hover{color:#23382B!important}
+.pos-skin .hover\:text-slate-600:hover{color:#4A5A4F!important}
+.pos-skin .text-emerald-600{color:#2E7D52!important}
+.pos-skin .text-emerald-700{color:#1F6B45!important}
+.pos-skin .text-emerald-800{color:#17553A!important}
+.pos-skin .text-emerald-900{color:#0F3B2A!important}
+.pos-skin .hover\:text-emerald-800:hover{color:#17553A!important}
+.pos-skin .text-green-700{color:#1F6B45!important}
+.pos-skin .text-green-800{color:#17553A!important}
+.pos-skin .text-blue-600{color:#1F6B45!important}
+.pos-skin .text-blue-700{color:#1F6B45!important}
+.pos-skin .text-blue-800{color:#17553A!important}
+.pos-skin .text-sky-800{color:#17553A!important}
+.pos-skin .text-red-500{color:#C0453A!important}
+.pos-skin .text-red-600{color:#B23A2E!important}
+.pos-skin .text-red-700{color:#A3352A!important}
+.pos-skin .text-red-800{color:#8F2E24!important}
+.pos-skin .text-red-200{color:#F0C2BB!important}
+.pos-skin .hover\:text-red-600:hover{color:#B23A2E!important}
+.pos-skin .text-amber-500{color:#C9A227!important}
+.pos-skin .text-amber-600{color:#A67C0E!important}
+.pos-skin .text-amber-700{color:#8A6A12!important}
+.pos-skin .text-amber-800{color:#7A5A0E!important}
+.pos-skin .text-amber-900{color:#5E4509!important}
+.pos-skin .text-yellow-600{color:#A67C0E!important}
+.pos-skin .text-yellow-800{color:#7A5A0E!important}
+.pos-skin .bg-slate-50{background-color:#FAF8EC!important}
+.pos-skin .bg-slate-100{background-color:#F3EFD6!important}
+.pos-skin .bg-slate-200{background-color:#EAE4C4!important}
+.pos-skin .bg-slate-900{background-color:#17553A!important}
+.pos-skin .bg-gray-100{background-color:#F3EFD6!important}
+.pos-skin .bg-gray-200{background-color:#EAE4C4!important}
+.pos-skin .hover\:bg-slate-50:hover{background-color:#FCFAF0!important}
+.pos-skin .hover\:bg-slate-200:hover{background-color:#E3DBB8!important}
+.pos-skin .hover\:bg-slate-900:hover{background-color:#0F3B2A!important}
+.pos-skin .hover\:bg-gray-100:hover{background-color:#F3EFD6!important}
+.pos-skin .disabled\:bg-slate-50:disabled{background-color:#FAF8EC!important}
+.pos-skin .bg-emerald-50{background-color:#EEF5E8!important}
+.pos-skin .bg-emerald-700{background-color:#1F6B45!important}
+.pos-skin .bg-emerald-800{background-color:#17553A!important}
+.pos-skin .hover\:bg-emerald-800:hover{background-color:#17553A!important}
+.pos-skin .hover\:bg-emerald-900:hover{background-color:#0F3B2A!important}
+.pos-skin .hover\:bg-emerald-50:hover{background-color:#EEF5E8!important}
+.pos-skin .hover\:bg-emerald-100:hover{background-color:#E3F1E7!important}
+.pos-skin .bg-blue-50{background-color:#EEF5E8!important}
+.pos-skin .bg-blue-600{background-color:#1F6B45!important}
+.pos-skin .bg-red-50{background-color:#FBE4E0!important}
+.pos-skin .bg-red-100{background-color:#F7D4CE!important}
+.pos-skin .bg-red-600{background-color:#B23A2E!important}
+.pos-skin .hover\:bg-red-700:hover{background-color:#8F2E24!important}
+.pos-skin .bg-amber-50{background-color:#FBF3D5!important}
+.pos-skin .bg-amber-100{background-color:#F7E8B0!important}
+.pos-skin .bg-amber-600{background-color:#B8921C!important}
+.pos-skin .hover\:bg-amber-700:hover{background-color:#8A6A12!important}
+.pos-skin .border-slate-100{border-color:#EFE9CD!important}
+.pos-skin .border-slate-200{border-color:#E3DBB8!important}
+.pos-skin .border-slate-300{border-color:#D6C98A!important}
+.pos-skin .border-emerald-200{border-color:#CFE0C3!important}
+.pos-skin .border-emerald-800{border-color:#17553A!important}
+.pos-skin .focus\:border-emerald-700:focus{border-color:#C9A227!important}
+.pos-skin .border-red-200{border-color:#F0C2BB!important}
+.pos-skin .border-red-300{border-color:#E8A79E!important}
+.pos-skin .border-red-400{border-color:#D9857A!important}
+.pos-skin .border-amber-200{border-color:#EBD98A!important}
+.pos-skin .border-yellow-200{border-color:#EBD98A!important}
+.pos-skin .focus\:ring-amber-100:focus{--tw-ring-color:rgba(201,162,39,.25)!important}
+.pos-skin .divide-slate-100>:not([hidden])~:not([hidden]){border-color:#EFE9CD!important}
+
+/* the old solid buttons get the same gold underline as the kit's primary button */
+.pos-skin button.bg-emerald-800, .pos-skin button.bg-emerald-700, .pos-skin button.bg-slate-900, .pos-skin a.bg-emerald-800, .pos-skin a.bg-emerald-700 { border-bottom: 2px solid #C9A227; }
+
+/* ---------- 2. global polish inside the app ---------- */
+.pos-skin { -webkit-tap-highlight-color: transparent; text-rendering: optimizeLegibility; }
+.pos-skin table td, .pos-skin table th { font-variant-numeric: tabular-nums; }
+.pos-skin input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .pos-skin select, .pos-skin textarea { border-color: #E3DBB8; }
+.pos-skin input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus, .pos-skin select:focus, .pos-skin textarea:focus {
+  outline: none; border-color: #C9A227; box-shadow: 0 0 0 3px rgba(201, 162, 39, .25);
+}
+.pos-skin input::placeholder, .pos-skin textarea::placeholder { color: #A9A68A; }
+.pos-skin input[type="checkbox"], .pos-skin input[type="radio"] { accent-color: #1F6B45; }
+.pos-skin button:not(:disabled), .pos-skin a { touch-action: manipulation; }
+.pos-skin button:disabled { cursor: not-allowed; }
+.pos-skin :focus-visible { outline: 2px solid #C9A227; outline-offset: 2px; }
+/* softer, warmer cards: a hairline shadow so white cards lift off the cream page */
+.pos-skin .bg-white.border.rounded-xl, .pos-skin .bg-white.border.rounded-2xl, .pos-skin .bg-white.border.rounded-lg { box-shadow: 0 1px 2px rgba(35, 56, 43, .05); }
+.pos-skin .rounded-xl.bg-white.border-slate-200, .pos-skin .rounded-2xl.bg-white.border-slate-200 { border-top-width: 3px; border-top-color: #C9A227; }
+/* tables: calmer header, hover row */
+.pos-skin thead tr { background-color: #F3EFD6; }
+.pos-skin tbody tr:hover { background-color: #FCFAF0; }
+.pos-skin h1 { letter-spacing: -.01em; }
+
+/* each page fades up a little when you open it */
+@keyframes pos-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.pos-main > * { animation: pos-rise .22s ease-out both; }   /* the page root is main's direct child: no wrapper, so scrolling and bottom space behave exactly as before */
+
+/* loading skeleton (used by CardKit LoadingBlock) */
+@keyframes pos-shimmer { 0% { background-position: -240px 0; } 100% { background-position: 240px 0; } }
+.pos-skeleton { background: linear-gradient(90deg, #F1ECD2 0%, #FAF7EA 50%, #F1ECD2 100%); background-size: 480px 100%; animation: pos-shimmer 1.2s linear infinite; border-radius: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-main > *, .pos-skeleton { animation: none; }
+}
+@media print { .pos-skin * { box-shadow: none !important; } }
+
+/* ---------- 3. wide tables -> cards on phones ----------
+ * utils/responsiveTables.js puts data-cards on every table with 3+ columns and data-label on each cell.
+ * Below 640px each row is a card: first cell is the title, the others are "HEADING ......... value" lines. */
+@media (max-width: 639px) {
+  .pos-skin table[data-cards], .pos-skin table[data-cards] tbody, .pos-skin table[data-cards] tfoot { display: block; width: 100%; min-width: 0 !important; }
+  .pos-skin table[data-cards], .pos-skin table[data-cards] tbody, .pos-skin table[data-cards] tfoot, .pos-skin table[data-cards] tr { box-sizing: border-box; }
+  .pos-skin table[data-cards] thead { display: none; }
+  .pos-skin table[data-cards] tbody, .pos-skin table[data-cards] tfoot { padding: 8px; }
+  .pos-skin table[data-cards] tbody > tr + tr, .pos-skin table[data-cards] tfoot > tr { margin-top: 8px; }
+  .pos-skin table[data-cards] tr {
+    display: block; background: #fff; border: 1px solid #E3DBB8 !important; border-radius: 14px; padding: 4px 12px;
+    box-shadow: 0 1px 2px rgba(35, 56, 43, .05);
+  }
+  .pos-skin table[data-cards] tr:hover { background: #fff; }
+  .pos-skin table[data-cards] td, .pos-skin table[data-cards] th {
+    display: flex !important; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 7px 0 !important; border: 0 !important; text-align: right !important; white-space: normal !important; min-width: 0; width: auto !important;
+    word-break: break-word;
+  }
+  .pos-skin table[data-cards] td[data-label]:not([data-label=""])::before {
+    content: attr(data-label); flex-shrink: 0; max-width: 42%; text-align: left;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #8B8766;
+  }
+  .pos-skin table[data-cards] td + td { border-top: 1px solid #F6F2DC !important; }
+  .pos-skin table[data-cards] td[data-primary] + td { border-top: 0 !important; }
+  /* the title line */
+  .pos-skin table[data-cards] td[data-primary] {
+    justify-content: flex-start; text-align: left !important; font-weight: 800; font-size: 14.5px; color: #23382B;
+    border-bottom: 1px solid #F1ECD2 !important; padding-bottom: 9px !important; margin-bottom: 2px;
+  }
+  .pos-skin table[data-cards] td[data-primary]::before { display: none; }
+  /* buttons / links with no heading sit together at the bottom */
+  .pos-skin table[data-cards] td[data-actions] { justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding-top: 9px !important; }
+  /* "nothing here yet" rows */
+  .pos-skin table[data-cards] td[colspan] { justify-content: center; text-align: center !important; color: #8B8766; padding: 18px 0 !important; }
+  .pos-skin table[data-cards] td[colspan]::before { display: none; }
+  /* the old wrappers that scrolled sideways no longer need to */
+  .pos-skin .overflow-x-auto:has(> table[data-cards]) { overflow-x: visible; border: 0 !important; background: transparent !important; box-shadow: none !important; border-radius: 0 !important; }
+}

@@ -61,7 +61,17 @@ export const NAV = [
       { label: "Risk Engine", to: "stories", icon: Activity, desc: "Portfolio risk" },
     ],
   },
-  { key: "pos", label: "POS", icon: Store, to: "pos", approverOnly: true, desc: "POS businesses and requests" },
+  {
+    key: "pos", label: "POS", icon: Store, blurb: "POS businesses, staff access and the till",
+    children: [
+      { label: "Approvals", to: "pos-admin", icon: ClipboardList, desc: "Pending businesses and requests", approverOnly: true },
+      { label: "POS Businesses", to: "pos-tenants", icon: Building2, desc: "Approve and manage tenants", approverOnly: true },
+      { label: "Access Requests", to: "pos-requests", icon: Users, desc: "Staff registration requests", approverOnly: true },
+      { label: "POS Terminal", to: "pos", icon: Store, desc: "Scan and sell" },
+      { label: "Products", to: "pos/products", icon: Package, desc: "Catalogue and stock" },
+      { label: "Goods Receiving", to: "pos/goods-receiving", icon: ClipboardList, desc: "Receive new stock" },
+    ],
+  },
   { key: "chama", label: "Chama", icon: Landmark, to: "chama", approverOnly: true, desc: "Chama oversight" },
   { key: "settings", label: "Settings", icon: SettingsIcon, to: "settings", desc: "System settings" },
 ];
@@ -74,7 +84,11 @@ export const MORE_MODULE = { key: "more", label: "More", icon: MoreHorizontal };
 export const hubPath = (key) => `/admin/hub/${key}`;
 export const adminPath = (to) => `/admin/${to}`;
 
-export const visibleNav = (isApprover) => NAV.filter((n) => !n.approverOnly || isApprover);
+// Hides approver-only modules AND approver-only children for everyone else.
+export const visibleNav = (isApprover) =>
+  NAV.filter((n) => !n.approverOnly || isApprover).map((n) =>
+    n.children ? { ...n, children: n.children.filter((c) => !c.approverOnly || isApprover) } : n
+  );
 export const moduleByKey = (key) => NAV.find((n) => n.key === key);
 
 // Which module owns this pathname (null = unknown).
@@ -89,4 +103,16 @@ export function moduleForPath(pathname, nav = NAV) {
     }
   }
   return null;
+}
+
+// Best (longest) child match for a pathname inside a module — so
+// /admin/pos/products highlights "Products", not "POS Terminal".
+export function childForPath(module, pathname) {
+  if (!module?.children) return null;
+  let best = null;
+  for (const c of module.children) {
+    const p = adminPath(c.to);
+    if ((pathname === p || pathname.startsWith(p + "/")) && (!best || p.length > adminPath(best.to).length)) best = c;
+  }
+  return best;
 }

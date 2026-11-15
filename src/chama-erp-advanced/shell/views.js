@@ -28,7 +28,11 @@ export const VIEWS = {
   "money/repay":           { title: "Repay a loan",        roles: ROLES.ALL,           C: L(() => import("../contributions/MemberContributionForm")), props: { initialType: "loan_repayment" } },
   "money/statement":       { title: "My statement",        roles: ROLES.ALL,           C: L(() => import("../workspaces/MyStatement")) },
   "money/reconciliation":  { title: "Check contributions", roles: ROLES.TREASURER,     C: L(() => import("../contributions/TreasurerReconciliation")) },
+  "money/record":          { title: "Record for a member", roles: ROLES.TREASURER, C: L(() => import("../contributions/TreasurerRecordContribution")) },
+  "money/group-report":    { title: "Group report",        roles: ROLES.LOAN_STAFF,    C: L(() => import("../reports/GroupReport")) },
   "money/accounts":        { title: "Chama accounts",      roles: ROLES.TREASURER_CHAIR, C: L(() => import("../contributions/ChamaBankAccounts")) },
+  "money/move":            { title: "Move money",          roles: ROLES.TREASURER_CHAIR, C: L(() => import("../funds/FundMovements")) },
+  "money/projects":        { title: "Projects",            roles: ROLES.TREASURER_CHAIR, C: L(() => import("../funds/ChamaProjects")) },
   "money/finances":        { title: "Chama finances",      roles: ROLES.TREASURER_CHAIR, C: L(() => import("../DashboardOverview")) },
   // ---- Loans ----
   "loans/mine":            { title: "My loans",            roles: ROLES.ALL,           C: L(() => import("../workspaces/MyLoans")) },

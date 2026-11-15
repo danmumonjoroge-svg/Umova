@@ -1,9 +1,16 @@
 // ============================================================================
 // FILE: src/components/Auth/SetPassword.js
 // PASSWORD RESET / SET NEW PASSWORD PAGE
-// Handles Supabase recovery links: /set-password?type=recovery
-// Also handles first-time login password setup (redirected here by
-// AuthPage.js's resetPasswordForEmail/signUp calls)
+// Handles Forgot Password links. First-time setup no longer comes here: it is done on
+// the login page by the activate-member function (member no + national ID + new password).
+//
+// Two link styles are supported:
+//   1. /set-password?token_hash=...&type=recovery   (RECOMMENDED, scanner-proof)
+//      The link does nothing until the member presses "Continue". Email scanners (Gmail, corporate
+//      filters) open links automatically; with the old one-click link they used up the one-time
+//      token first, and the member saw "otp_expired" on a link that was minutes old.
+//      Needs the Supabase "Reset Password" email template to link here (see the migration notes).
+//   2. /set-password#access_token=...&type=recovery  (old style, still handled)
 //
 // This replaces a previous SetPassword.js that re-asked for Member No +
 // National ID and called a custom set_member_password RPC instead of
@@ -56,8 +63,8 @@ function getStrength(password) {
 const REQUIREMENTS = [
   { label: "At least 8 characters",       test: (p) => p.length >= 8 },
   { label: "One uppercase letter",         test: (p) => /[A-Z]/.test(p) },
+  { label: "One lowercase letter",         test: (p) => /[a-z]/.test(p) },
   { label: "One number",                   test: (p) => /[0-9]/.test(p) },
-  { label: "One special character",        test: (p) => /[^A-Za-z0-9]/.test(p) },
 ];
 
 export default function SetPassword() {
@@ -76,6 +83,8 @@ export default function SetPassword() {
   const [error, setError]               = useState("");
   const [success, setSuccess]           = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  const [needsConfirm, setNeedsConfirm] = useState(false);
+  const [confirming, setConfirming]     = useState(false);
 
   const strength = getStrength(password);
   const passwordsMatch = password && confirm && password === confirm;
@@ -90,6 +99,13 @@ export default function SetPassword() {
     // Check URL params — if type=recovery, wait for Supabase to process the hash
     const params = new URLSearchParams(location.search);
     const type = params.get("type");
+
+    // Scanner-proof link: wait for the member to press Continue before the token is used.
+    if (params.get("token_hash") && type === "recovery") {
+      setNeedsConfirm(true);
+      setVerifying(false);
+      return;
+    }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -124,6 +140,24 @@ export default function SetPassword() {
   }, []);
 
   // ============================================================================
+  // CONTINUE (token_hash links): the token is only used when the member presses the button
+  // ============================================================================
+  const handleContinue = async () => {
+    const tokenHash = new URLSearchParams(location.search).get("token_hash");
+    setConfirming(true);
+    setError("");
+    const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+    setConfirming(false);
+    setNeedsConfirm(false);
+    if (otpError) {
+      setSessionReady(false);   // shows the "Link Invalid" screen with a way to request a new one
+      return;
+    }
+    try { window.history.replaceState(null, "", location.pathname); } catch { /* ignore */ }
+    setSessionReady(true);
+  };
+
+  // ============================================================================
   // SUBMIT HANDLER
   // ============================================================================
   const handleSubmit = async (e) => {
@@ -149,19 +183,8 @@ export default function SetPassword() {
 
       if (updateError) throw updateError;
 
-      // If this was a first-time login, clear the must_change_password flag
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase
-          .from("members")
-          .update({
-            must_change_password: false,
-            first_login: false,
-            first_time_login: false,
-            password_set: "true",
-          })
-          .eq("auth_id", user.id);
-      }
+      // Nothing else to do here. The member row's flags (password_set etc.) are set by the
+      // activate-member function and can no longer be edited from the browser.
 
       setSuccess(true);
 
@@ -190,6 +213,37 @@ export default function SetPassword() {
           <img src={umovaEmblem} alt="Umova" className="h-16 mx-auto mb-4 object-contain" />
           <Loader2 className="animate-spin mx-auto text-green-700 mb-4" size={40} />
           <p className="text-slate-600 font-medium">Verifying your recovery link...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // CONFIRM STATE (token_hash link, not used yet)
+  // ============================================================================
+  if (needsConfirm) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-green-50 to-slate-200 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-[30px] shadow-2xl border border-slate-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-green-700 to-emerald-700 p-8 text-white text-center">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-white shadow-md flex items-center justify-center mb-3 p-1.5">
+              <img src={umovaEmblem} alt="Umova" className="w-full h-full object-contain" />
+            </div>
+            <h1 className="text-2xl font-black tracking-tight">Reset Your Password</h1>
+            <p className="text-green-100 text-xs mt-1">One more step to secure your account.</p>
+          </div>
+          <div className="p-8 text-center">
+            <p className="text-slate-500 text-sm mb-6">
+              Press the button to choose a new password for your SACCO account.
+            </p>
+            <button
+              onClick={handleContinue}
+              disabled={confirming}
+              className="w-full h-12 rounded-2xl bg-gradient-to-r from-green-700 to-emerald-700 text-white font-bold text-base shadow hover:shadow-lg transition disabled:opacity-60"
+            >
+              {confirming ? "Checking link..." : "Continue"}
+            </button>
+          </div>
         </div>
       </div>
     );

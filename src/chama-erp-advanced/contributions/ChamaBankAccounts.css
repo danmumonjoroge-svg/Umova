@@ -26,3 +26,8 @@
 
 .spin { animation: cba-spin 0.8s linear infinite; }
 @keyframes cba-spin { to { transform: rotate(360deg); } }
+
+.cba-bal { display: flex; flex-direction: column; margin-top: 4px; }
+.cba-bal b { font-size: 1rem; color: var(--forest, #0d5c3f); }
+.cba-bal small { color: var(--ink-soft, #4c6058); }
+.cba-unassigned { margin: 0 0 8px; padding: 8px 10px; font-size: 0.8rem; border-radius: 8px; background: var(--warn-bg, #fff7dc); color: var(--warn-ink, #6b5400); }

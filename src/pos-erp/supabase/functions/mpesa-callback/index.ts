@@ -40,9 +40,23 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// OPTIONAL hardening. Safaricom sends no Supabase login, so this function MUST be deployed with --no-verify-jwt
+// (otherwise Supabase answers 401 and the till never hears the result). To stop anyone else posting to it, set
+//   supabase secrets set MPESA_CALLBACK_TOKEN=<long random text>
+// and make MPESA_CALLBACK_URL end with /mpesa-callback/<that same text>. Unset = no check (old behaviour).
+const CALLBACK_TOKEN = Deno.env.get("MPESA_CALLBACK_TOKEN") || "";
 
 serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+
+  if (CALLBACK_TOKEN) {
+    const parts = new URL(req.url).pathname.split("/").filter(Boolean);
+    const i = parts.indexOf("mpesa-callback");
+    if ((parts[i + 1] || "") !== CALLBACK_TOKEN) {
+      console.error("[mpesa-callback] rejected: missing or wrong token in the URL");
+      return new Response("Forbidden", { status: 403 });
+    }
+  }
 
   let body: any;
   try {
@@ -88,6 +102,14 @@ serve(async (req) => {
       // NEEDS_ATTENTION material for a human, but still 200 back so
       // Safaricom doesn't retry a request that will never resolve.
       console.error("[mpesa-callback] confirm_mpesa_payment failed", error, stk.CheckoutRequestID);
+      // Leave the reason ON the row (result_code is deliberately left empty so a later retry can still settle it), so
+      // "Safaricom confirmed but the sale was not recorded" is visible in the table instead of only in a log.
+      try {
+        await supabase.from("lb_mpesa_transactions").update({
+          raw_callback: body,
+          result_desc: `Safaricom reported result ${stk.ResultCode}${mpesaReceiptNumber ? ` (code ${mpesaReceiptNumber})` : ""} but it could not be recorded: ${error.message}`.slice(0, 500),
+        }).eq("checkout_request_id", stk.CheckoutRequestID).in("status", ["PENDING", "NEEDS_ATTENTION", "TIMED_OUT"]);
+      } catch (e) { console.error("[mpesa-callback] could not note the error on the row", e); }
     } else {
       console.log("[mpesa-callback] processed", stk.CheckoutRequestID, data);
     }

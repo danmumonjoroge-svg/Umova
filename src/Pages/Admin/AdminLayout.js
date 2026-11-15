@@ -5,13 +5,12 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../Context/AuthContext";
 import { supabase } from "../../supabaseClient";
-import AppLock from "../../security/AppLock";
 import {
   Home, Bell, Search, LogOut, ChevronDown, ChevronLeft, MoreHorizontal,
 } from "lucide-react";
 import {
   APPROVER_ROLES, MORE_KEYS, MORE_MODULE, adminPath, hubPath,
-  moduleForPath, moduleByKey, visibleNav,
+  moduleForPath, moduleByKey, visibleNav, childForPath,
 } from "./adminNav";
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -90,7 +89,7 @@ export default function AdminLayout() {
     }
     const m = activeModule;
     if (m?.children) {
-      const c = m.children.find((x) => path === adminPath(x.to) || path.startsWith(adminPath(x.to) + "/"));
+      const c = childForPath(m, path);
       return { title: c?.label || m.label, backTo: hubPath(m.key) };
     }
     return { title: m?.label || "Admin", backTo: m && MORE_KEYS.includes(m.key) ? hubPath("more") : "/admin/dashboard" };
@@ -126,13 +125,17 @@ export default function AdminLayout() {
     return activeModule?.key === key;
   };
 
-  const isActiveLink = (to) => path === adminPath(to) || path.startsWith(adminPath(to) + "/");
+  // Longest match wins, so /admin/pos/products doesn't also light up "POS Terminal".
+  const activeChild = childForPath(activeModule, path);
+  const isActiveLink = (to) =>
+    activeModule?.children
+      ? activeChild?.to === to
+      : path === adminPath(to) || path.startsWith(adminPath(to) + "/");
 
   // AppLock sits INSIDE StaffGuard (App.js): the staff member is already authenticated and their role resolved,
   // so fingerprint only unlocks the app; it never changes what this role is allowed to do.
   // Same "finance" service as the member app (one Umova Finance account per phone). Web: renders children untouched.
   return (
-    <AppLock service="finance" client={supabase} onSignOut={logout}>
     <div className="um-app">
       {/* ───── sidebar (tablet rail / desktop) ───── */}
       <aside className="um-sidebar">
@@ -277,6 +280,5 @@ export default function AdminLayout() {
         </Link>
       </nav>
     </div>
-    </AppLock>
   );
 }

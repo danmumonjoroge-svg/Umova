@@ -1,0 +1,16 @@
+.fm-page { max-width: 760px; }
+.fm-balances { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.fm-bal { display: flex; flex-direction: column; padding: 10px 12px; background: var(--brand-tint); border-radius: 10px; min-width: 0; }
+.fm-bal span { font-size: 0.75rem; color: var(--ink-soft); }
+.fm-bal b { font-size: 1rem; color: var(--forest); overflow-wrap: anywhere; }
+.fm-bal small { font-size: 0.7rem; color: var(--warn-ink); }
+.fm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.fm-row { display: flex; justify-content: space-between; gap: 10px; padding: 12px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); }
+.fm-row > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fm-row small { color: var(--ink-soft); overflow-wrap: anywhere; }
+.fm-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+.fm-actions { display: flex; gap: 6px; }
+.fm-reject { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.fm-reject input { border: 1px solid var(--line); border-radius: 8px; padding: 8px; width: 200px; max-width: 100%; }
+.fm-warn { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 8px; font-size: 0.8rem; background: var(--warn-bg); color: var(--warn-ink); }
+@media (max-width: 480px) { .fm-row { flex-direction: column; } .fm-side { align-items: flex-start; } .fm-reject { align-items: stretch; } }

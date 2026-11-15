@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../supabaseClient";
 import { useChama } from "../ChamaContext";
 import { CheckCircle, XCircle, Loader2, AlertTriangle, ShieldAlert, X, ScanSearch } from "lucide-react";
+import { Panel, SubCard, SubCardList, StatGrid, Stat } from "../shell/ui";
 import "./TreasurerReconciliation.css";
 
 // -----------------------------------------------------------------------------
@@ -117,58 +118,53 @@ export default function TreasurerReconciliation({ chamaId: chamaIdProp }) {
         <div className="tr-loading"><Loader2 size={20} className="spin" /></div>
       ) : (
         <>
-          <section className="tr-section">
-            <h3><ScanSearch size={15} /> Awaiting verification ({pending.length})</h3>
+          <Panel icon={ScanSearch} title="Awaiting verification" badge={pending.length || ""} subtitle="Check each claim against the real account" tone="warn" defaultOpen>
             {pending.length === 0 ? (
               <p className="tr-empty">Nothing new to check.</p>
             ) : (
-              <div className="tr-table">
-                <div className="tr-table-head">
-                  <span>Member</span><span>Account</span><span>Claims</span><span>Ref</span><span>Purpose</span><span></span>
-                </div>
+              <SubCardList>
                 {pending.map((row) => (
-                  <div className="tr-table-row" key={row.id}>
-                    <span>{membersById[row.member_id]?.name || "—"}</span>
-                    <span>{accountsById[row.bank_account_id] || "—"}</span>
-                    <span className="tr-amount">{formatKES(row.amount)}</span>
-                    <span className="tr-ref">{row.transaction_ref || "—"}</span>
-                    <span className="tr-purpose">{row.contribution_type.replace("_", " ")}</span>
-                    <button className="tr-verify-btn" onClick={() => openVerifyModal(row)} disabled={busyId === row.id}>Check account</button>
-                  </div>
+                  <SubCard key={row.id} tone="gold" title={membersById[row.member_id]?.name || "—"} sub={`${row.contribution_type.replace("_", " ")} · ${accountsById[row.bank_account_id] || "—"}`} value={formatKES(row.amount)}>
+                    <StatGrid cols={2}>
+                      <Stat label="Reference" value={row.transaction_ref || "—"} />
+                      <Stat label="Paid on" value={row.contributed_on || "—"} />
+                    </StatGrid>
+                    <span className="cm-sub-actions">
+                      <button className="tr-verify-btn" onClick={() => openVerifyModal(row)} disabled={busyId === row.id}>Check account</button>
+                    </span>
+                  </SubCard>
                 ))}
-              </div>
+              </SubCardList>
             )}
-          </section>
+          </Panel>
 
-          <section className="tr-section">
-            <h3><CheckCircle size={15} /> Verified — ready to approve ({verified.length})</h3>
+          <Panel icon={CheckCircle} title="Verified — ready to approve" badge={verified.length || ""} tone="green" defaultOpen>
             {verified.length === 0 ? (
               <p className="tr-empty">Nothing verified yet.</p>
             ) : (
-              <div className="tr-table">
-                <div className="tr-table-head">
-                  <span>Member</span><span>Claimed</span><span>On statement</span><span>Match</span><span></span><span></span>
-                </div>
+              <SubCardList>
                 {verified.map((row) => {
                   const tone = closeCheckTone(row.amount, row.bank_statement_amount);
                   return (
-                    <div className="tr-table-row" key={row.id}>
-                      <span>{membersById[row.member_id]?.name || "—"}</span>
-                      <span className="tr-amount">{formatKES(row.amount)}</span>
-                      <span>{formatKES(row.bank_statement_amount)}</span>
-                      <span className={`tr-match ${tone}`}>{tone === "match" ? "Exact" : tone === "close" ? "Close" : "Mismatch"}</span>
-                      <button className="tr-approve-btn" onClick={() => approve(row)} disabled={busyId === row.id}>
-                        {busyId === row.id ? <Loader2 size={13} className="spin" /> : <CheckCircle size={13} />} Approve &amp; post
-                      </button>
-                      <button className="tr-reject-btn" onClick={() => reject(row, "Amount did not match the account statement")} disabled={busyId === row.id}>
-                        <XCircle size={13} />
-                      </button>
-                    </div>
+                    <SubCard key={row.id} tone={tone === "mismatch" ? "error" : tone === "close" ? "warn" : "ok"} title={membersById[row.member_id]?.name || "—"} sub={`Claimed ${formatKES(row.amount)}`} value={<span className={`tr-match ${tone}`}>{tone === "match" ? "Exact" : tone === "close" ? "Close" : "Mismatch"}</span>}>
+                      <StatGrid cols={2}>
+                        <Stat label="Claimed" value={formatKES(row.amount)} />
+                        <Stat label="On statement" value={formatKES(row.bank_statement_amount)} />
+                      </StatGrid>
+                      <span className="cm-sub-actions">
+                        <button className="tr-approve-btn" onClick={() => approve(row)} disabled={busyId === row.id}>
+                          {busyId === row.id ? <Loader2 size={13} className="spin" /> : <CheckCircle size={13} />} Approve &amp; post
+                        </button>
+                        <button className="tr-reject-btn" onClick={() => reject(row, "Amount did not match the account statement")} disabled={busyId === row.id} aria-label="Reject">
+                          <XCircle size={13} />
+                        </button>
+                      </span>
+                    </SubCard>
                   );
                 })}
-              </div>
+              </SubCardList>
             )}
-          </section>
+          </Panel>
         </>
       )}
 

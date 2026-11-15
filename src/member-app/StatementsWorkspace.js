@@ -15,7 +15,7 @@ export default function StatementsWorkspace() {
           <div className="uma-actions">
             <Link className="uma-btn" to="/member/statement">View</Link>
             <button className="uma-btn uma-btn--ghost" disabled={!ready}
-              onClick={() => generateStatementPDF({ ...profile, member_no: memberNo }, rows || [])}>Download PDF</button>
+              onClick={() => generateStatementPDF({ ...profile, member_no: memberNo }, rows || []).catch((e) => alert(e?.message || "Could not prepare your statement."))}>Download PDF</button>
           </div>
         </Card>
         <Card title="Savings Statement" note="Every deposit and withdrawal on your savings.">

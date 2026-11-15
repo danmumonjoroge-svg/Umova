@@ -7,7 +7,11 @@
 // lb_goods_received_notes / lb_purchase_orders / lb_supplier_payments /
 // lb_supplier_returns schema.
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import ContactActions from "../components/ContactActions";
+import DocumentActions from "../components/DocumentActions";
+import TriangulationSheet from "../components/TriangulationSheet";
+import { documentsService } from "../services/documentsService";
 import {
   Truck, Search, Plus, X, Phone, Mail, MapPin, CreditCard,
   FileText, Receipt, Undo2, Wallet, ChevronRight, Loader2, Printer,
@@ -19,18 +23,24 @@ import { supplierService } from "../services/supplierService";
 // file (replaces the old flat "print statement" that mixed POs into the
 // amounts).
 import SupplierStatementModal from "./SupplierStatementModal";
+import { FitPage, AddButton, SearchBox, FilterChips, MiniStats, CardGrid, DataCard, IconTile, TextBtn, Notice, LoadingBlock, EmptyBlock } from "../components/CardKit";
 import { singleFlight } from '../utils/singleFlight';
 
 export default function SuppliersPage() {
   const { suppliers, loading, error, create, update, deactivate, reactivate, fetch } = useSuppliers();
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
 
-  const filtered = suppliers.filter((s) =>
-    !search || s.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const owing = suppliers.filter((s) => Number(s.outstanding_balance) > 0);
+  const totalOwed = owing.reduce((n, s) => n + Number(s.outstanding_balance || 0), 0);
+  const filtered = suppliers.filter((s) => {
+    const okSearch = !search || s.name.toLowerCase().includes(search.toLowerCase());
+    const okFilter = filter === "all" || (filter === "owing" && Number(s.outstanding_balance) > 0) || (filter === "inactive" && !s.is_active);
+    return okSearch && okFilter;
+  });
 
   const handleSave = async (formData) => {
     if (editingSupplier) {
@@ -43,102 +53,62 @@ export default function SuppliersPage() {
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Truck size={22} className="text-emerald-600" /> Suppliers
-          </h1>
-          <p className="text-slate-500 text-sm">Manage suppliers and their purchase history.</p>
-        </div>
-        <button
-          onClick={() => { setEditingSupplier(null); setShowForm(true); }}
-          className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition"
-        >
-          <Plus size={16} /> Add Supplier
-        </button>
-      </div>
-
-      <div className="relative mb-5">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search suppliers…"
-          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
-        />
-      </div>
-
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">{error}</div>
+    <FitPage
+      title="Suppliers"
+      icon={Truck}
+      subtitle="Your suppliers and their purchase history."
+      action={<AddButton onClick={() => { setEditingSupplier(null); setShowForm(true); }} label="Supplier" icon={Plus} />}
+      summary={!loading && (
+        <MiniStats items={[
+          { label: "Suppliers", value: suppliers.length },
+          { label: "Owed to", value: owing.length, tone: owing.length ? "gold" : undefined },
+          { label: "Total owed", value: totalOwed.toLocaleString(), tone: totalOwed ? "bad" : undefined },
+        ]} />
       )}
+      toolbar={(
+        <div className="space-y-2">
+          <SearchBox value={search} onChange={setSearch} placeholder="Search suppliers…" />
+          <FilterChips value={filter} onChange={setFilter} options={[
+            { key: "all", label: "All" }, { key: "owing", label: "I owe them", count: owing.length }, { key: "inactive", label: "Inactive" },
+          ]} />
+        </div>
+      )}
+    >
+      {error && <Notice>{error}</Notice>}
+      {loading && <LoadingBlock text="Loading suppliers…" />}
+      {!loading && filtered.length === 0 && <EmptyBlock>No suppliers found.</EmptyBlock>}
 
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-            <tr>
-              <th className="text-left px-5 py-3">Supplier</th>
-              <th className="text-left px-5 py-3">Contact</th>
-              <th className="text-left px-5 py-3">Terms</th>
-              <th className="text-right px-5 py-3">Outstanding</th>
-              <th className="text-center px-5 py-3">Status</th>
-              <th className="px-5 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading && (
-              <tr><td colSpan={6} className="text-center py-10 text-slate-400">
-                <Loader2 size={18} className="animate-spin inline mr-2" /> Loading suppliers…
-              </td></tr>
-            )}
-            {!loading && filtered.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-10 text-slate-400">No suppliers found.</td></tr>
-            )}
-            {filtered.map((s) => (
-              <tr
-                key={s.id}
-                onClick={() => setSelectedSupplier(s)}
-                className="hover:bg-slate-50 cursor-pointer transition"
-              >
-                <td className="px-5 py-3.5">
-                  <div className="font-semibold text-slate-800">{s.name}</div>
-                  {s.registration_no && <div className="text-xs text-slate-400">{s.registration_no}</div>}
-                </td>
-                <td className="px-5 py-3.5 text-slate-600">
-                  <div>{s.contact_person || "—"}</div>
-                  <div className="text-xs text-slate-400">{s.phone || s.email || ""}</div>
-                </td>
-                <td className="px-5 py-3.5 text-slate-600">{s.payment_terms || "—"}</td>
-                <td className={`px-5 py-3.5 text-right font-semibold ${s.outstanding_balance > 0 ? "text-red-600" : "text-slate-400"}`}>
-                  {Number(s.outstanding_balance || 0).toLocaleString()}
-                </td>
-                <td className="px-5 py-3.5 text-center">
-                  <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${s.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                    {s.is_active ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => { setEditingSupplier(s); setShowForm(true); }}
-                      className="text-xs font-semibold text-slate-500 hover:text-emerald-700"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => (s.is_active ? deactivate(s.id) : reactivate(s.id))}
-                      className="text-xs font-semibold text-slate-500 hover:text-red-600"
-                    >
-                      {s.is_active ? "Deactivate" : "Reactivate"}
-                    </button>
-                    <ChevronRight size={15} className="text-slate-300" />
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <CardGrid>
+        {filtered.map((s) => {
+          const bal = Number(s.outstanding_balance || 0);
+          return (
+            <DataCard
+              key={s.id}
+              dim={!s.is_active}
+              alert={bal > 0}
+              onClick={() => setSelectedSupplier(s)}
+              thumb={<IconTile icon={Truck} />}
+              title={s.name}
+              subtitle={s.contact_person || s.phone || s.email || "No contact"}
+              pill={s.is_active ? undefined : { tone: "neutral", label: "Off" }}
+              big={{ value: bal.toLocaleString(), tone: bal > 0 ? "bad" : "muted", label: bal > 0 ? "owed" : "all paid" }}
+              metrics={[
+                { label: "Terms", value: s.payment_terms || "—" },
+                { label: "Phone", value: s.phone || "—" },
+              ]}
+              actions={(
+                <>
+                  <ContactActions size="sm" recipient={{ kind: 'SUPPLIER', id: s.id, name: s.name, phone: s.phone, email: s.email }} purpose="SUPPLIER_STATEMENT" />
+                  <TextBtn onClick={() => { setEditingSupplier(s); setShowForm(true); }}>Edit</TextBtn>
+                  <TextBtn tone={s.is_active ? "danger" : undefined} onClick={() => (s.is_active ? deactivate(s.id) : reactivate(s.id))}>
+                    {s.is_active ? "Deactivate" : "Reactivate"}
+                  </TextBtn>
+                </>
+              )}
+            />
+          );
+        })}
+      </CardGrid>
 
       {showForm && (
         <SupplierFormModal
@@ -155,7 +125,7 @@ export default function SuppliersPage() {
           onPaymentRecorded={fetch}
         />
       )}
-    </div>
+    </FitPage>
   );
 }
 
@@ -246,6 +216,7 @@ function Field({ label, children }) {
 export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
   const { purchaseOrders, grns, payments, returns, loading, refetch } = useSupplierDetail(supplier.id);
   const [tab, setTab] = useState("grns");
+  const [matchFor, setMatchFor] = useState(null);
   const [showPayment, setShowPayment] = useState(false);
   const [showStatement, setShowStatement] = useState(false);
 
@@ -334,10 +305,12 @@ export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
             <div className="text-center text-slate-400 text-sm py-8">No {active.label.toLowerCase()} yet.</div>
           )}
           {!loading && tab === "pos" && purchaseOrders.map((po) => (
-            <RowCard key={po.id} title={po.po_number} status={po.status} right={Number(po.total_amount).toLocaleString()} sub={po.order_date} />
+            <RowCard key={po.id} title={po.po_number} status={po.status} right={Number(po.total_amount).toLocaleString()} sub={po.order_date}
+              actions={<><DocumentActions items={[['PURCHASE_ORDER', 'Print PO', po.id]]} /><button type="button" onClick={() => setMatchFor(po.id)} className="text-xs font-semibold text-[#1F6B45] hover:underline">Check documents</button></>} />
           ))}
           {!loading && tab === "grns" && grns.map((g) => (
-            <RowCard key={g.id} title={g.grn_number} status={g.status} right={Number(g.total_amount).toLocaleString()} sub={g.received_date} />
+            <RowCard key={g.id} title={g.grn_number} status={g.status} right={Number(g.total_amount).toLocaleString()} sub={`${g.received_date || ''}${g.invoice_no ? ` · invoice ${g.invoice_no}` : ''}`}
+              actions={<DocumentActions items={[['GOODS_RECEIVED', 'Print delivery note', g.id]]} />} />
           ))}
           {!loading && tab === "payments" && payments.map((p) => (
             <RowCard key={p.id} title={p.payment_number} status={p.payment_method} right={Number(p.amount).toLocaleString()} sub={p.payment_date} />
@@ -347,6 +320,8 @@ export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
           ))}
         </div>
       </div>
+
+      {matchFor && <TriangulationSheet poId={matchFor} onClose={() => setMatchFor(null)} />}
 
       {showStatement && (
         <SupplierStatementModal supplier={supplier} onClose={() => setShowStatement(false)} />
@@ -363,12 +338,13 @@ export function SupplierDetailDrawer({ supplier, onClose, onPaymentRecorded }) {
   );
 }
 
-function RowCard({ title, status, right, sub }) {
+function RowCard({ title, status, right, sub, actions }) {
   return (
     <div className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0">
       <div>
         <div className="text-sm font-semibold text-slate-700">{title}</div>
         {sub && <div className="text-xs text-slate-400">{sub}</div>}
+        {actions && <div className="mt-1 flex flex-wrap gap-x-3">{actions}</div>}
       </div>
       <div className="text-right">
         <div className="text-sm font-bold text-slate-800">{right}</div>
@@ -385,6 +361,10 @@ function RecordPaymentModal({ supplier, onClose, onRecorded }) {
   const [reference, setReference] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
+  const [mismatches, setMismatches] = useState([]);
+  const [reason, setReason] = useState("");
+  // Before paying: do this supplier's orders, deliveries and invoices agree? A warning only; paying is still allowed with a reason.
+  useEffect(() => { documentsService.supplierMismatches({ supplierId: supplier.id }).then(setMismatches).catch(() => setMismatches([])); }, [supplier.id]);
 
   const submit = singleFlight('SuppliersPage.submit', async (e) => {
     e.preventDefault();
@@ -392,10 +372,15 @@ function RecordPaymentModal({ supplier, onClose, onRecorded }) {
       setErr("Enter a valid amount.");
       return;
     }
+    if (mismatches.length && !reason.trim()) {
+      setErr("Some documents do not agree. Please give a reason for paying anyway.");
+      return;
+    }
     setSaving(true);
     setErr(null);
     try {
       await supplierService.recordPayment({
+        notes: mismatches.length ? `Paid despite document differences (${mismatches.map((m) => m.po.po_number).join(", ")}): ${reason.trim()}` : null,
         businessId: tenant?.business_id,
         supplierId: supplier.id,
         // payment_number is no longer supplied here — record_supplier_payment()
@@ -422,6 +407,15 @@ function RecordPaymentModal({ supplier, onClose, onRecorded }) {
         </div>
         <form onSubmit={submit} className="space-y-3">
           {err && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg p-2.5">{err}</div>}
+          {mismatches.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-lg p-2.5 space-y-1">
+              <div className="font-bold">Check before paying: these documents do not agree</div>
+              {mismatches.slice(0, 4).map((m) => (
+                <div key={m.po.id}><b>{m.po.po_number}</b>: {m.match.issues[0]}{m.match.issues.length > 1 ? ` (+${m.match.issues.length - 1} more)` : ""}</div>
+              ))}
+              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for paying anyway (required)" className="input mt-1" />
+            </div>
+          )}
           <Field label="Amount *">
             <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="input" required />
           </Field>

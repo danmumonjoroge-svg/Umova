@@ -1,0 +1,5 @@
+.fd-actions { display: inline-flex; gap: 6px; flex-shrink: 0; }
+.fd-actions .cm-btn { min-height: 38px; padding: 0 12px; }
+.fd .cm-txns select, .pj .cm-txns select { max-width: 160px; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.pj-card { text-align: left; width: 100%; }
+.pj-profit.pos { color: var(--ok-ink); } .pj-profit.neg { color: var(--err-ink); }

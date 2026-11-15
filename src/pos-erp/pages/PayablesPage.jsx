@@ -26,65 +26,20 @@
 // due date to put there.
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Wallet, Loader2 } from 'lucide-react';
+import { Wallet } from 'lucide-react';
+import { FitPage, MiniStats, SearchBox, CardGrid, DataCard, IconTile, TextBtn, Notice, LoadingBlock, EmptyBlock } from '../components/CardKit';
 import { supplierService } from '../services/supplierService';
 import { SupplierDetailDrawer } from './SuppliersPage';
-import { useSupplierTemplates, useCommunicationLog } from '../hooks/useCommunication';
-import { normalizePhoneForWhatsApp } from '../services/communicationService';
+import ContactActions from '../components/ContactActions';
 
 export default function PayablesPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [search, setSearch] = useState('');
 
-  // §7's "Remind" mirrored for suppliers — reuses the shared WhatsApp
-  // path, no second message-sending implementation on this page.
-  const { templates } = useSupplierTemplates();
-  const { prepareWhatsAppForSupplier, markOpened, markSent, markNotSent } = useCommunicationLog();
-  const [remindError, setRemindError] = useState('');
-  const [remindingId, setRemindingId] = useState(null);
-  const [awaitingConfirm, setAwaitingConfirm] = useState(null); // { logId, supplierName }
-
-  const reminderTemplate = templates.find(t => t.message_type === 'SUPPLIER_PAYMENT_DUE');
-
-  const handleRemind = async (supplier) => {
-    setRemindError('');
-    if (!reminderTemplate) {
-      setRemindError('The WhatsApp reminder wording has not loaded yet. Give it a moment.');
-      return;
-    }
-    setRemindingId(supplier.id);
-    try {
-      const { log, url } = await prepareWhatsAppForSupplier({
-        supplier,
-        template: reminderTemplate,
-        variables: { balance: Number(supplier.outstanding_balance || 0).toLocaleString() },
-      });
-      const win = window.open(url, '_blank', 'noopener,noreferrer');
-      if (win) {
-        await markOpened(log.id);
-        setAwaitingConfirm({ logId: log.id, supplierName: supplier.name });
-      } else {
-        setRemindError('Your browser blocked the WhatsApp window. The reminder is saved — open it from Messages.');
-      }
-    } catch (err) {
-      setRemindError(err.message);
-    } finally {
-      setRemindingId(null);
-    }
-  };
-
-  const confirmReminderSent = async (didSend) => {
-    if (!awaitingConfirm) return;
-    try {
-      await (didSend ? markSent(awaitingConfirm.logId) : markNotSent(awaitingConfirm.logId));
-    } catch (err) {
-      setRemindError(err.message);
-    } finally {
-      setAwaitingConfirm(null);
-    }
-  };
+  // Supplier follow-ups use the shared MessageComposer (ContactActions) so the wording and amounts come from the records.
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -104,84 +59,54 @@ export default function PayablesPage() {
 
   const total = suppliers.reduce((s, x) => s + Number(x.outstanding_balance || 0), 0);
 
+  const shown = suppliers.filter((x) => !search || x.name?.toLowerCase().includes(search.toLowerCase()));
+  const overLimit = suppliers.filter((x) => Number(x.credit_limit) > 0 && Number(x.outstanding_balance) > Number(x.credit_limit)).length;
+
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Wallet size={22} className="text-amber-600" /> People I Owe
-          </h1>
-          <p className="text-slate-500 text-sm">Suppliers you currently owe money to.</p>
-        </div>
-        <div className="text-right">
-          <div className="text-xs font-bold text-slate-400 uppercase">Total outstanding</div>
-          <div className="text-2xl font-black text-red-600">{total.toLocaleString()}</div>
-        </div>
-      </div>
+    <FitPage
+      title="People I Owe"
+      icon={Wallet}
+      subtitle="Suppliers you currently owe money to."
+      summary={!loading && (
+        <MiniStats items={[
+          { label: 'Suppliers owed', value: suppliers.length },
+          { label: 'Over limit', value: overLimit, tone: overLimit ? 'bad' : undefined },
+          { label: 'Total outstanding', value: total.toLocaleString(), tone: total ? 'bad' : 'good' },
+        ]} />
+      )}
+      toolbar={<SearchBox value={search} onChange={setSearch} placeholder="Search suppliers…" />}
+    >
+      {error && <Notice>{error}</Notice>}
 
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">{error}</div>
+      {loading ? <LoadingBlock text="Loading payables…" /> : shown.length === 0 ? (
+        <EmptyBlock>{suppliers.length === 0 ? 'Nothing outstanding — all suppliers are paid up.' : 'No suppliers match.'}</EmptyBlock>
+      ) : (
+        <CardGrid>
+          {shown.map((s) => {
+            return (
+              <DataCard
+                key={s.id}
+                alert
+                onClick={() => setSelectedSupplier(s)}
+                thumb={<IconTile icon={Wallet} tone="gold" />}
+                title={s.name}
+                subtitle={s.contact_person || s.phone || 'No contact'}
+                big={{ value: Number(s.outstanding_balance || 0).toLocaleString(), tone: 'bad', label: 'owed' }}
+                metrics={[
+                  { label: 'Credit limit', value: Number(s.credit_limit || 0).toLocaleString() },
+                  { label: 'Phone', value: s.phone || '—' },
+                ]}
+                actions={(
+                  <>
+                    <TextBtn tone="gold" onClick={() => setSelectedSupplier(s)}>View &amp; pay</TextBtn>
+<ContactActions size="sm" recipient={{ kind: 'SUPPLIER', id: s.id, name: s.name, phone: s.phone, email: s.email }} purpose="SUPPLIER_BALANCE" />
+                  </>
+                )}
+              />
+            );
+          })}
+        </CardGrid>
       )}
-      {remindError && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">{remindError}</div>
-      )}
-      {awaitingConfirm && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-          <span className="text-sm text-amber-900 font-semibold">
-            Did you press Send in WhatsApp for {awaitingConfirm.supplierName}?
-          </span>
-          <button type="button" onClick={() => confirmReminderSent(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-800 text-white hover:bg-emerald-900">Yes, I sent it</button>
-          <button type="button" onClick={() => confirmReminderSent(false)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Not yet</button>
-        </div>
-      )}
-
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-            <tr>
-              <th className="text-left px-5 py-3">Supplier</th>
-              <th className="text-left px-5 py-3">Contact</th>
-              <th className="text-right px-5 py-3">Credit limit</th>
-              <th className="text-right px-5 py-3">Outstanding</th>
-              <th className="px-5 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading && (
-              <tr><td colSpan={5} className="text-center py-10 text-slate-400">
-                <Loader2 size={18} className="animate-spin inline mr-2" /> Loading payables…
-              </td></tr>
-            )}
-            {!loading && suppliers.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-10 text-slate-400">Nothing outstanding — all suppliers are paid up.</td></tr>
-            )}
-            {suppliers.map((s) => (
-              <tr key={s.id} onClick={() => setSelectedSupplier(s)} className="hover:bg-slate-50 cursor-pointer transition">
-                <td className="px-5 py-3.5 font-semibold text-slate-800">{s.name}</td>
-                <td className="px-5 py-3.5 text-slate-600">
-                  <div>{s.contact_person || '—'}</div>
-                  <div className="text-xs text-slate-400">{s.phone || ''}</div>
-                </td>
-                <td className="px-5 py-3.5 text-right text-slate-600">{Number(s.credit_limit || 0).toLocaleString()}</td>
-                <td className="px-5 py-3.5 text-right font-bold text-red-600">{Number(s.outstanding_balance || 0).toLocaleString()}</td>
-                <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                  <span className="text-xs font-semibold text-amber-700 hover:underline mr-3">View &amp; pay</span>
-                  {/* Row's onClick opens the drawer — stop that from
-                      also firing when the owner meant to press Remind. */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleRemind(s); }}
-                    disabled={remindingId === s.id || !normalizePhoneForWhatsApp(s.phone)}
-                    title={normalizePhoneForWhatsApp(s.phone) ? 'Send a WhatsApp reminder' : 'No usable WhatsApp number on this supplier'}
-                    className="text-xs font-semibold text-emerald-700 hover:underline disabled:text-slate-300 disabled:no-underline disabled:cursor-not-allowed"
-                  >
-                    {remindingId === s.id ? 'Opening…' : 'Remind'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
 
       {selectedSupplier && (
         <SupplierDetailDrawer
@@ -190,6 +115,6 @@ export default function PayablesPage() {
           onPaymentRecorded={fetch}
         />
       )}
-    </div>
+    </FitPage>
   );
 }

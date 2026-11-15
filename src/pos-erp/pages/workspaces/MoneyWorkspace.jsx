@@ -13,12 +13,11 @@
 // as one number). Add the card when a real Bank page exists.
 
 import React from 'react';
-import { Wallet, Smartphone, Users, Receipt, TrendingUp, BarChart3, FileBarChart, HardHat } from 'lucide-react';
+import { Wallet, Smartphone, Users, Receipt, TrendingUp, BarChart3, FileBarChart, HardHat, Coins, Printer, Target } from 'lucide-react';
 import { usePosErpAuth } from '../../auth/usePosErpAuth';
 import { financialReportsService } from '../../services/financialReportsService';
 import { mpesaService } from '../../services/mpesaService';
-import { WorkspacePage, SectionTitle, CardGrid, ActionCard, Stat, useStat, kes } from '../../components/workspace/WorkspaceKit';
-import { Link } from 'react-router-dom';
+import { WorkspacePage, SectionTitle, CardGrid, ActionCard, StatStrip, MiniGrid, MiniCard, Stat, useStat, kes } from '../../components/workspace/WorkspaceKit';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -40,23 +39,11 @@ export default function MoneyWorkspace() {
 
   return (
     <WorkspacePage title="My Money" subtitle="Where your money is, what came in, and what went out.">
-      {/* Today strip -- three plain numbers, not three big KPI cards */}
-      <div className="bg-white border border-[#DDE3DD] rounded-xl grid grid-cols-3 divide-x divide-[#DDE3DD] mb-2">
-        <div className="p-3 sm:p-4 min-w-0">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-[#68756D]">Made today</div>
-          <div className="text-base sm:text-xl font-bold truncate"><Stat state={income} format={(i) => kes(i.revenue)} /></div>
-        </div>
-        <div className="p-3 sm:p-4 min-w-0">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-[#68756D]">Spent today</div>
-          <div className="text-base sm:text-xl font-bold truncate"><Stat state={income} format={(i) => kes(i.totalExpenses)} /></div>
-        </div>
-        <div className="p-3 sm:p-4 min-w-0">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-[#68756D]">Profit today</div>
-          <div className={`text-base sm:text-xl font-bold truncate ${income.value && income.value.netIncome < 0 ? 'text-red-600' : 'text-[#237A52]'}`}>
-            <Stat state={income} format={(i) => kes(i.netIncome)} />
-          </div>
-        </div>
-      </div>
+      <StatStrip items={[
+        { label: 'Made today', value: <Stat state={income} format={(i) => kes(i.revenue)} /> },
+        { label: 'Spent today', value: <Stat state={income} format={(i) => kes(i.totalExpenses)} /> },
+        { label: 'Profit today', tone: income.value && income.value.netIncome < 0 ? 'bad' : 'good', value: <Stat state={income} format={(i) => kes(i.netIncome)} /> },
+      ]} />
 
       <SectionTitle>Where your money is</SectionTitle>
       <CardGrid>
@@ -97,6 +84,16 @@ export default function MoneyWorkspace() {
           action="See Profit"
         />
         <ActionCard
+          to="/pos/budgets" icon={Target} title="Targets & Budget"
+          description="What you planned against what happened, for sales and spending."
+          action="Open Budget"
+        />
+        <ActionCard
+          to="/pos/report-centre" icon={Printer} title="Printable Reports"
+          description="Stock, sales, each class, M-Pesa and more, as PDF to print or share."
+          action="Open Reports"
+        />
+        <ActionCard
           to="/pos/reports" icon={BarChart3} title="My Reports"
           description="End-of-day closing and daily summaries."
           action="Open Reports"
@@ -104,16 +101,11 @@ export default function MoneyWorkspace() {
       </CardGrid>
 
       <SectionTitle>More money tools</SectionTitle>
-      <div className="bg-white border border-[#DDE3DD] rounded-xl divide-y divide-[#DDE3DD]">
-        <Link to="/pos/financials" className="flex items-center gap-3 px-4 py-3 min-h-[48px] hover:bg-[#F7F6F0]">
-          <FileBarChart size={18} className="text-[#237A52] shrink-0" />
-          <div className="min-w-0"><div className="text-sm font-medium">Financial Statements</div><div className="text-xs text-[#68756D]">Income statement and balance sheet (advanced)</div></div>
-        </Link>
-        <Link to="/pos/equipment" className="flex items-center gap-3 px-4 py-3 min-h-[48px] hover:bg-[#F7F6F0]">
-          <HardHat size={18} className="text-[#237A52] shrink-0" />
-          <div className="min-w-0"><div className="text-sm font-medium">My Equipment</div><div className="text-xs text-[#68756D]">Tools, machines and other things you own</div></div>
-        </Link>
-      </div>
+      <MiniGrid>
+        <MiniCard to="/pos/loans" icon={Coins} title="My Loans" desc="Loans you are repaying, instalments and reminders" />
+        <MiniCard to="/pos/financials" icon={FileBarChart} title="Financial Statements" desc="Income statement and balance sheet" />
+        <MiniCard to="/pos/equipment" icon={HardHat} title="My Equipment" desc="Tools and machines you own" />
+      </MiniGrid>
     </WorkspacePage>
   );
 }

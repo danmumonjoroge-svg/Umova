@@ -4,7 +4,7 @@ import { useChama } from "../ChamaContext";
 import { Megaphone, CalendarDays, Clock, HeartHandshake, Pin, Trash2, Loader2, AlertCircle, CheckCircle2, Plus } from "lucide-react";
 import useCachedQuery from "../shell/useCachedQuery";
 import { formatDate, todayISO } from "../shell/format";
-import { Spinner, StaleNote, Notice, EmptyState } from "../shell/ui";
+import { Spinner, StaleNote, Notice, EmptyState, Panel } from "../shell/ui";
 
 // Chama Updates — meeting notices, reminders, welfare events, notices.
 // Deliberately separate from technical/system notifications. Backed by
@@ -98,24 +98,31 @@ export default function UpdatesWorkspace() {
         </>
       )}
 
-      {feed.length === 0 ? <EmptyState icon={Megaphone}>No updates yet.</EmptyState> : (
-        <ul className="cm-feed">
-          {feed.map((p) => {
-            const I = ICON[p.kind] || Megaphone;
-            return (
-              <li key={p._k}>
-                <span className="cm-list-icon"><I size={16} /></span>
-                <div>
-                  <strong>{p.pinned && <Pin size={12} />} {p.title}</strong>
-                  {p.body && <p>{p.body}</p>}
-                  <small>{p.event_date ? `${formatDate(p.event_date, { weekday: "short", day: "numeric", month: "short" })}` : formatDate(p.created_at)}</small>
-                </div>
-                {p._post && canPost && <button className="cm-icon-btn" onClick={() => remove(p.id)} aria-label="Delete update"><Trash2 size={15} /></button>}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {feed.length === 0 ? <EmptyState icon={Megaphone}>No updates yet.</EmptyState> : (() => {
+        const today = todayISO();
+        const upcoming = feed.filter((p) => p.event_date && p.event_date >= today);
+        const rest = feed.filter((p) => !upcoming.includes(p));
+        const renderItem = (p) => {
+          const I = ICON[p.kind] || Megaphone;
+          return (
+            <li key={p._k}>
+              <span className="cm-list-icon"><I size={16} /></span>
+              <div>
+                <strong>{p.pinned && <Pin size={12} />} {p.title}</strong>
+                {p.body && <p>{p.body}</p>}
+                <small>{p.event_date ? `${formatDate(p.event_date, { weekday: "short", day: "numeric", month: "short" })}` : formatDate(p.created_at)}</small>
+              </div>
+              {p._post && canPost && <button className="cm-icon-btn" onClick={() => remove(p.id)} aria-label="Delete update"><Trash2 size={15} /></button>}
+            </li>
+          );
+        };
+        return (
+          <>
+            {upcoming.length > 0 && <Panel icon={CalendarDays} title="Coming up" badge={upcoming.length} tone="green"><ul className="cm-feed">{upcoming.map(renderItem)}</ul></Panel>}
+            {rest.length > 0 && <Panel icon={Megaphone} title="Notices & news" badge={rest.length}><ul className="cm-feed">{rest.map(renderItem)}</ul></Panel>}
+          </>
+        );
+      })()}
     </div>
   );
 }

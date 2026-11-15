@@ -85,7 +85,7 @@ export const purchaseOrderService = {
   async getAll({ status, supplierId, page = 1, limit = 50 } = {}) {
     let query = supabase
       .from(PO_TABLE)
-      .select(`*, supplier:lb_suppliers(id, name, phone), items:${POI_TABLE}(*, product:lb_products(id, name, sku))`, { count: 'exact' })
+      .select(`*, supplier:lb_suppliers(id, name, phone, email), items:${POI_TABLE}(*, product:lb_products(id, name, sku))`, { count: 'exact' })
       .order('order_date', { ascending: false });
 
     if (status) query = query.eq('status', status);
@@ -103,7 +103,7 @@ export const purchaseOrderService = {
   async getById(id) {
     const { data, error } = await supabase
       .from(PO_TABLE)
-      .select(`*, supplier:lb_suppliers(id, name, phone), items:${POI_TABLE}(*, product:lb_products(id, name, sku, unit_id, cost_price))`)
+      .select(`*, supplier:lb_suppliers(id, name, phone, email), items:${POI_TABLE}(*, product:lb_products(id, name, sku, unit_id, cost_price))`)
       .eq('id', id)
       .single();
     if (error) throw error;
@@ -158,6 +158,17 @@ export const purchaseOrderService = {
     return this.getById(headerData.id);
   },
 
+  /**
+   * Phase 50 — the supplier promised a different date. Stores the NEW date in revised_delivery_date; expected_date (the original) is
+   * never overwritten. The database trigger counts revisions and stamps when it happened.
+   */
+  async reviseDelivery(id, { date, note }) {
+    if (!date) throw new Error('Choose the new delivery date.');
+    const { data, error } = await supabase.from(PO_TABLE).update({ revised_delivery_date: date, revised_delivery_note: note || null }).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  },
+
   async updateStatus(id, status) {
     const { data, error } = await supabase
       .from(PO_TABLE)
@@ -193,7 +204,7 @@ export const goodsReceivedService = {
   async getById(id) {
     const { data, error } = await supabase
       .from(GRN_TABLE)
-      .select(`*, supplier:lb_suppliers(id, name, phone), purchase_order:lb_purchase_orders(id, po_number), items:${GRI_TABLE}(*, product:lb_products(id, name, sku, unit_id))`)
+      .select(`*, supplier:lb_suppliers(id, name, phone, email), purchase_order:lb_purchase_orders(id, po_number), items:${GRI_TABLE}(*, product:lb_products(id, name, sku, unit_id))`)
       .eq('id', id)
       .single();
     if (error) throw error;
@@ -229,6 +240,8 @@ export const goodsReceivedService = {
         grn_number: grnNumber,
         status: 'COMPLETED',
         invoice_no: grn.invoice_no || null,
+        supplier_invoice_amount: grn.supplier_invoice_amount != null && grn.supplier_invoice_amount !== '' ? Number(grn.supplier_invoice_amount) : null,
+        supplier_invoice_date: grn.supplier_invoice_date || null,
         received_by: grn.received_by,
         subtotal,
         tax_total: 0,
@@ -282,6 +295,8 @@ export const goodsReceivedService = {
         grn_number: grnNumber,
         status: 'COMPLETED',
         invoice_no: grn.invoice_no || null,
+        supplier_invoice_amount: grn.supplier_invoice_amount != null && grn.supplier_invoice_amount !== '' ? Number(grn.supplier_invoice_amount) : null,
+        supplier_invoice_date: grn.supplier_invoice_date || null,
         received_by: grn.received_by,
         subtotal,
         tax_total: 0,

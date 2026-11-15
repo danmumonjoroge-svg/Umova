@@ -1,0 +1,399 @@
+// src/App.js
+
+import React from "react";
+import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
+import { useAuth, STAFF_ROLES } from "./Context/AuthContext";
+import { supabase } from "./supabaseClient";
+import AppLock from "./security/AppLock";
+import AndroidBackButton from "./security/AndroidBackButton";
+
+import AuthPage      from "./components/Auth/AuthPage";
+import AdminLogin    from "./components/Auth/AdminLogin";
+import SetPassword   from "./components/Auth/SetPassword";
+import PublicSite    from "./Public/PublicSite";
+
+import DashboardMain from "./components/Dashboard/DashboardMain";
+import MemberHome    from "./components/Dashboard/MemberHome";   // app-style home (replaces DashboardHome; that file can stay on disk)
+import Profile       from "./components/Dashboard/Profile";
+import Savings       from "./components/Dashboard/Savings";
+import ShareCapital  from "./components/Dashboard/ShareCapital";
+import Loans         from "./components/Dashboard/Loans";
+import Statements    from "./components/Dashboard/Statements";
+
+// ─────────────────────────────────────────────
+// CHAMA ERP ADVANCED
+// Fully self-contained: its own login (phone + password, multi-chama
+// select, license gate) and its own dashboard, built entirely from
+// src/chama-erp-advanced/. Nothing from the old chama module
+// (ChamaRouter.js, ChamaDashboard.js, chamamembers.js, etc.) is imported
+// anywhere in this file anymore — that folder can be deleted from disk.
+// ─────────────────────────────────────────────
+import { ChamaProvider }        from "./chama-erp-advanced/ChamaContext";
+import AuthGate                 from "./chama-erp-advanced/auth/AuthGate";
+import ChamaLoginScreen         from "./chama-erp-advanced/auth/ChamaLoginScreen";
+import ChamaLock                from "./chama-erp-advanced/auth/ChamaLock";
+import ChamaDashboardAdvanced   from "./chama-erp-advanced/ChamaDashboardAdvanced";
+import PlatformAdminGate        from "./chama-erp-advanced/platform-admin/PlatformAdminGate";
+import LicenseManager           from "./chama-erp-advanced/platform-admin/LicenseManager";
+
+import AdminLayout            from "./Pages/Admin/AdminLayout";
+import AdminDashboard         from "./Pages/Admin/Dashboard";
+import AdminERPDashboard      from "./Pages/Admin/ERPDashboard";
+import AdminMembers           from "./Pages/Admin/Members";
+import AdminMemberStatements  from "./Pages/Admin/MemberStatements";
+import AdminLoans             from "./Pages/Admin/Loans";
+import AdminLoanApplication   from "./Pages/Admin/LoanApplication";
+import AdminLoanApproval      from "./Pages/Admin/LoanApproval";
+import AdminLoanDisbursement  from "./Pages/Admin/LoanDisbursement";
+import AdminLoanRepayments    from "./Pages/Admin/LoanRepayments";
+import AdminLoanSchedule      from "./Pages/Admin/LoanSchedule";
+import AdminLoanPenalties     from "./Pages/Admin/LoanPenalties";
+import AdminInterestDashboard from "./Pages/Admin/InterestDashboard";
+import AdminTrialBalance      from "./Pages/Admin/TrialBalance";
+import AdminIncomeStatement   from "./Pages/Admin/IncomeStatement";
+import AdminBalanceSheet      from "./Pages/Admin/BalanceSheet";
+import AdminReports           from "./Pages/Admin/Reports";
+import AdminPayments          from "./Pages/Admin/Payments";
+import AdminSettings          from "./Pages/Admin/Settings";
+import AdminStoryDashboard    from "./Pages/Admin/StoryDashboard";
+import AdminHub               from "./Pages/Admin/AdminHub";
+import AdminWithdrawal        from "./Pages/Admin/Withdrawal";
+import AdminCashBank          from "./Pages/Admin/CashBankManagement";
+import AdminAccountsPayable   from "./Pages/Admin/AccountsPayable";
+import AdminAccountsReceivable from "./Pages/Admin/AccountsReceivable";
+import AdminFixedAssets       from "./Pages/Admin/FixedAssets";
+import AdminJournalEntry      from "./Pages/Admin/JournalEntry";
+import AdminAccountingPeriods from "./Pages/Admin/AccountingPeriods";
+import AdminPOSHub            from "./Pages/Admin/POSAdminDashboard";
+import AdminPOSTenants        from "./Pages/Admin/POSTenants";
+import AdminPOSRequests       from "./Pages/Admin/POSRegistrationRequests";
+import AdminChama             from "./Pages/Admin/ChamaAdminDashboard";
+
+// ─────────────────────────────────────────────
+// POS / INVENTORY (Universal Scanning Engine)
+// Self-contained under src/pos-erp/, mirroring the chama-erp-advanced
+// pattern: its own pages/hooks/services/scanning engine. It does NOT
+// get its own login — it's staff-only, so it rides the existing
+// StaffGuard/AdminLayout auth exactly like every other admin page below.
+// ─────────────────────────────────────────────
+import POSApp              from "./pos-erp/POSApp";
+import ElimuApp            from "./pos-erp/elimu/ElimuApp";
+import POSPage             from "./pos-erp/pages/POSPage";
+import ProductsPage        from "./pos-erp/pages/ProductsPage";
+import GoodsReceivingPage  from "./pos-erp/pages/GoodsReceivingPage";
+
+// STAFF_ROLES is imported from AuthContext.js — single source of truth,
+// also used by AdminLogin.js so the pre-signin role gate and the post-
+// signin routing gate never disagree.
+
+// ─────────────────────────────────────────────
+// UI LOADER
+// ─────────────────────────────────────────────
+function Loader() {
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-3xl shadow-xl p-10 w-[420px] text-center border border-slate-100">
+        <div className="w-16 h-16 border-4 border-emerald-800 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">UMOVA ERP SYSTEM</h2>
+        <p className="text-slate-500 text-sm mt-2 font-medium">Verifying workspace integrity...</p>
+      </div>
+    </div>
+  );
+}
+
+function UnassignedOnboarding() {
+  const { logout } = useAuth();
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-3xl shadow-xl p-10 w-[500px] text-center border border-slate-100">
+        <div className="text-4xl mb-4">⚠️</div>
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Account Profile Missing</h2>
+        <p className="text-slate-500 text-sm mt-3 leading-relaxed">
+          Your credentials are authenticated but your account UID is not linked
+          to an active record in the <span className="font-bold text-slate-700">members</span> or{" "}
+          <span className="font-bold text-slate-700">users</span> tables.
+        </p>
+        <button
+          onClick={logout}
+          className="mt-6 w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-2xl transition shadow-md"
+        >
+          Disconnect Session
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// GUARDS
+// ─────────────────────────────────────────────
+// Fingerprint lock + the one-time "turn on fingerprint" prompt for every signed-in Finance screen
+// (members and staff). Renders nothing extra on the web: it only does anything inside the Android/iOS app.
+function FinanceAppLock({ children }) {
+  const { logout } = useAuth();
+  return (
+    <AppLock service="finance" client={supabase} onSignOut={logout}>
+      {children}
+    </AppLock>
+  );
+}
+
+function MemberGuard() {
+  const { user, loading, role } = useAuth();
+
+  if (loading) return <Loader />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!role) return <Loader />;
+  if (role === "unassigned") return <Navigate to="/unassigned-onboarding" replace />;
+  if (STAFF_ROLES.includes(role)) return <Navigate to="/admin/dashboard" replace />;
+  if (role !== "member") return <Navigate to="/login" replace />;
+
+  return <Outlet />;
+}
+
+// ─────────────────────────────────────────────
+// STAFF GUARD
+// ─────────────────────────────────────────────
+function StaffGuard() {
+  const { user, loading, role } = useAuth();
+  const location = useLocation();
+
+  if (loading) return <Loader />;
+  if (!user) return <Navigate to="/admin-login" state={{ from: location.pathname }} replace />;
+  if (!role) return <Loader />;
+  if (role === "unassigned") return <Navigate to="/unassigned-onboarding" replace />;
+  if (!STAFF_ROLES.includes(role)) return <Navigate to="/member/dashboard" replace />;
+
+  return <Outlet />;
+}
+
+// Approver-only admin pages (admin / superadmin / manager). Same list the
+// nav uses, so hidden menu items can't be reached by typing the URL either.
+const APPROVER_ROLES = ["admin", "superadmin", "manager"];
+function ApproverOnly() {
+  const { role } = useAuth();
+  if (!APPROVER_ROLES.includes(role)) return <Navigate to="/admin/dashboard" replace />;
+  return <Outlet />;
+}
+
+function PostLoginRedirect() {
+  const { user, loading, role } = useAuth();
+
+  if (loading) return <Loader />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!role) return <Loader />;
+
+  if (role === "unassigned") return <Navigate to="/unassigned-onboarding" replace />;
+  if (role === "member") return <Navigate to="/member/dashboard" replace />;
+  if (STAFF_ROLES.includes(role)) return <Navigate to="/admin/dashboard" replace />;
+
+  return <Navigate to="/" replace />;
+}
+
+function AdminLoginRoute() {
+  const { user, loading, role } = useAuth();
+  const location = useLocation();
+  const from = location.state?.from || "/admin/dashboard";
+
+  if (loading) return <Loader />;
+
+  if (user && role && STAFF_ROLES.includes(role)) {
+    return <Navigate to={from} replace />;
+  }
+  if (user && role === "member") {
+    return <Navigate to="/member/dashboard" replace />;
+  }
+
+  return <AdminLogin />;
+}
+
+function MemberLoginRoute() {
+  const { user, loading, role } = useAuth();
+
+  if (loading) return <Loader />;
+
+  if (user && role === "member") {
+    return <Navigate to="/member/dashboard" replace />;
+  }
+  if (user && role && STAFF_ROLES.includes(role)) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
+  return <AuthPage />;
+}
+
+// ─────────────────────────────────────────────
+// ENGINE CORE
+// ─────────────────────────────────────────────
+function App() {
+  return (
+    <>
+    <AndroidBackButton />
+    <Routes>
+      <Route path="/" element={<PublicSite />} />
+      <Route path="/unassigned-onboarding" element={<UnassignedOnboarding />} />
+      <Route path="/set-password" element={<SetPassword />} />
+
+      <Route path="/login" element={<MemberLoginRoute />} />
+      <Route path="/admin-login" element={<AdminLoginRoute />} />
+
+      {/*
+        Chama ERP Advanced — self-contained: its own provider, its own
+        login gate, its own dashboard. AuthGate handles phone+password
+        login, multi-chama selection, and license checking on its own;
+        ChamaDashboardAdvanced only ever renders once all three have
+        passed. No route matching inside — it's a single-page sidebar
+        dashboard, not a sub-router, so "/chama" is enough (no /*).
+      */}
+      {/*
+        Chama is its OWN entry point with its OWN login (phone + password via
+        authenticate_user), separate from the Finance logins (/login members,
+        /admin-login staff). One ChamaProvider wraps both /chama/login and
+        /chama so multi-chama selection and licence state survive the hop
+        from the login screen to the dashboard. AuthGate sends logged-out
+        visitors to /chama/login (never to the Finance /login), and
+        ChamaLock adds the phone fingerprint lock (no-op on the web).
+      */}
+      <Route
+        path="/chama"
+        element={
+          <ChamaProvider>
+            <Outlet />
+          </ChamaProvider>
+        }
+      >
+        <Route path="login" element={<ChamaLoginScreen />} />
+        <Route
+          index
+          element={
+            <AuthGate>
+              <ChamaLock>
+                <ChamaDashboardAdvanced />
+              </ChamaLock>
+            </AuthGate>
+          }
+        />
+        <Route path="*" element={<Navigate to="/chama" replace />} />
+      </Route>
+
+      {/*
+        Platform-level chama licensing. Deliberately outside ChamaProvider/
+        AuthGate — this is what turns a chama's license on in the first
+        place, so it can't depend on a chama already being logged into.
+        Gated by a single shared key (REACT_APP_PLATFORM_ADMIN_KEY), not a
+        real login — see PlatformAdminGate.js for why, and what to replace
+        it with before more than one person needs access.
+      */}
+      <Route
+        path="/platform-admin"
+        element={
+          <PlatformAdminGate>
+            <LicenseManager />
+          </PlatformAdminGate>
+        }
+      />
+
+      {/*
+        "My Business" (pos-erp) — its OWN app with its OWN login (POSAuthProvider →
+        POSAuthGate → POSLogin / tenant signup / force-password-change / pending
+        screens) and its own routes: /pos, /pos/dashboard, /pos/products,
+        /pos/customers, /pos/money ... POSApp.jsx declares those as a nested
+        <Routes>, so this parent route MUST end in "/*". It was never mounted
+        before, so every /pos/... URL (including the public site's POS button)
+        hit the catch-all at the bottom and bounced back to the public site "/".
+        Deliberately outside StaffGuard: tenants are not Finance staff.
+      */}
+      <Route path="/pos/*" element={<POSApp />} />
+
+      {/* Elimu (school) — its own product and address, own header; same sign-in/school as My Business. Must end in "/*". */}
+      <Route path="/elimu/*" element={<ElimuApp />} />
+
+      <Route path="/redirect" element={<PostLoginRedirect />} />
+
+      <Route path="/member" element={<MemberGuard />}>
+        <Route element={<FinanceAppLock><DashboardMain /></FinanceAppLock>}>
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<MemberHome />} />
+          <Route path="profile" element={<Profile />} />
+          <Route path="savings" element={<Savings />} />
+          <Route path="shares" element={<ShareCapital />} />
+          <Route path="loans" element={<Loans />} />
+          <Route path="statement" element={<Statements />} />
+          {/* "statements" (plural) is what some links use; the page lives at "statement". */}
+          <Route path="statements" element={<Navigate to="/member/statement" replace />} />
+          {/* An unknown /member/... path stays inside the member app instead of
+              falling through to the public-site catch-all below. */}
+          <Route path="*" element={<Navigate to="/member/dashboard" replace />} />
+        </Route>
+      </Route>
+
+      <Route path="/admin" element={<StaffGuard />}>
+        <Route element={<FinanceAppLock><AdminLayout /></FinanceAppLock>}>
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="erp-dashboard" element={<AdminERPDashboard />} />
+          <Route path="members" element={<AdminMembers />} />
+          <Route path="member-statements" element={<AdminMemberStatements />} />
+          <Route path="loans" element={<AdminLoans />} />
+          <Route path="loan-application" element={<AdminLoanApplication />} />
+          <Route path="loan-approval" element={<AdminLoanApproval />} />
+          <Route path="loan-disbursement" element={<AdminLoanDisbursement />} />
+          <Route path="loan-repayments" element={<AdminLoanRepayments />} />
+          <Route path="loan-schedule" element={<AdminLoanSchedule />} />
+          <Route path="loan-penalties" element={<AdminLoanPenalties />} />
+          <Route path="interest-dashboard" element={<AdminInterestDashboard />} />
+          <Route path="trial-balance" element={<AdminTrialBalance />} />
+          <Route path="income-statement" element={<AdminIncomeStatement />} />
+          <Route path="balance-sheet" element={<AdminBalanceSheet />} />
+          <Route path="reports" element={<AdminReports />} />
+          <Route path="payments" element={<AdminPayments />} />
+          <Route path="settings" element={<AdminSettings />} />
+          <Route path="stories" element={<AdminStoryDashboard />} />
+
+          {/* Workspace hubs — the bottom tab bar (Money, Loans, More) and the
+              sidebar "Overview" links land here. This route was missing, so
+              every tab fell through to the "*" redirect below (= Home). */}
+          <Route path="hub/:module" element={<AdminHub />} />
+
+          {/* Money */}
+          <Route path="withdrawal" element={<AdminWithdrawal />} />
+          <Route path="cash-bank" element={<AdminCashBank />} />
+          <Route path="accounts-payable" element={<AdminAccountsPayable />} />
+          <Route path="accounts-receivable" element={<AdminAccountsReceivable />} />
+          <Route path="fixed-assets" element={<AdminFixedAssets />} />
+
+          {/* Accounting */}
+          <Route path="journal-entry" element={<AdminJournalEntry />} />
+          <Route path="accounting-periods" element={<AdminAccountingPeriods />} />
+
+          {/* POS approvals + Chama oversight (approver roles; nav hides them
+              from others, and ApproverOnly blocks direct URL access) */}
+          <Route element={<ApproverOnly />}>
+            <Route path="pos-admin" element={<AdminPOSHub />} />
+            <Route path="pos-tenants" element={<AdminPOSTenants />} />
+            <Route path="pos-requests" element={<AdminPOSRequests />} />
+            <Route path="chama" element={<AdminChama />} />
+          </Route>
+
+          {/* POS / Inventory (Universal Scanning Engine) — staff-only,
+              same StaffGuard/AdminLayout as everything else in this block.
+              Rides the same login as the rest of the admin area; the
+              "POS Login" button on the public site sends staff to
+              /admin-login with state={{ from: "/admin/pos" }} so
+              AdminLoginRoute lands them here instead of /admin/dashboard
+              after signing in. */}
+          <Route path="pos" element={<POSPage />} />
+          <Route path="pos/products" element={<ProductsPage />} />
+          <Route path="pos/goods-receiving" element={<GoodsReceivingPage />} />
+          {/* Same idea as /member: an unknown /admin/... path stays in the admin app. */}
+          <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
+        </Route>
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+    </>
+  );
+}
+
+export default App;

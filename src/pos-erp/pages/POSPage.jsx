@@ -4,10 +4,11 @@
 // unchanged: every sale still goes through createOfflineAwareSale() ->
 // saleService.create(), STK sales still come from confirm_mpesa_payment().
 // What changed:
-//   - M-Pesa is a PAYMENT MODE (Cash / M-Pesa / Card / Credit) with two
-//     ways to collect it: send the buyer a prompt (STK Push), or record
-//     the code when they already paid (works offline). See
-//     components/MpesaPayPanel.jsx.
+//   - M-Pesa is a PAYMENT METHOD (Cash / M-Pesa / Card / Credit). Picking it
+//     shows ONE compact section: a transaction-code field and a Prompt
+//     button. Typing a code records a manual payment (needs no Daraja, works
+//     offline); Prompt sends an STK Push and, once Safaricom confirms, the
+//     real code fills the same field. See components/MpesaPayPanel.jsx.
 //   - Phones get a two-step flow (Items -> Sale) with a sticky checkout
 //     bar instead of two half-height scrolling panes.
 //   - Payment methods follow Settings -> "Payment methods accepted".
@@ -15,6 +16,7 @@
 //     up to 500 and searches the server as you type.
 //   - Forest / Emerald / Gold styling, 44px+ touch targets.
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useProducts } from '../hooks/useProducts';
 import { useCashierShifts } from '../hooks/useCashierShifts';
 import { useCustomers } from '../hooks/useCustomers';
@@ -32,25 +34,29 @@ import { isNetworkFailure } from '../offline/netErrors';
 // Stage 2 (M-Pesa STK) -- see AUDIT.md Phase 12 and the stage-order note
 // there. Kept to its own hook/modal so the existing CASH/CARD/CREDIT
 // checkout path above (completeSale) is completely unchanged.
-import { useMpesaPayment } from '../hooks/useMpesaPayment';
+import { useMpesaPayment, mpesaInflight } from '../hooks/useMpesaPayment';
 // Phase 14 -- the sale receipt itself: print / WhatsApp / email.
 import ReceiptModal from '../components/ReceiptModal';
 import { receiptService } from '../services/receiptService';
 import { settingsService } from '../services/settingsService';
 import { folioService } from '../services/folioService';
+import { appointmentService } from '../services/salonService';
+import { useProviders } from '../hooks/useSalon';
+import { printDocument } from '../utils/printDocument';
+import { buildFolioDocumentHtml } from '../utils/folioDocument';
+import { kes } from '../components/workspace/WorkspaceKit';
 import { useCapabilities } from '../navigation/CapabilitiesContext';
 import { Image as ImageIcon, Camera, Search, ArrowLeft, Minus, Plus, Loader2, ShoppingCart } from 'lucide-react';
 import MpesaPayPanel from '../components/MpesaPayPanel';
-import MpesaPromptModal from '../components/MpesaPromptModal';
 import { mpesaService } from '../services/mpesaService';
-import { normalizeMpesaCode, isValidMpesaCode, isWholeShillings, resolveMpesa } from '../utils/mpesa';
+import { normalizeMpesaCode, isValidMpesaCode, isWholeShillings } from '../utils/mpesa';
 import { singleFlight } from '../utils/singleFlight';
+import { resolveEnabledMethods } from '../utils/paymentMethods';
 
 const VARIABLE_MODES = ['WEIGHT', 'VOLUME', 'CUSTOM'];
 
 // Owner-facing names. The stored value stays MOBILE_MONEY (that is what
 // lb_payments and every report already use) -- only the label changes.
-const ALL_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'CREDIT'];
 const METHOD_LABEL = { CASH: 'Cash', MOBILE_MONEY: 'M-Pesa', CARD: 'Card', CREDIT: 'Credit' };
 
 export default function POSPage() {
@@ -89,12 +95,9 @@ export default function POSPage() {
       .catch(() => { readCachedValue(sKey).then((v) => { if (v) setPosSettings(v); }); });
   }, [tenant?.business_id]);
   const [mpesaPhone, setMpesaPhone] = useState('');
-  const [showMpesaModal, setShowMpesaModal] = useState(false);
 
-  // ---- M-Pesa as a payment mode ----
-  const [mpesaMode, setMpesaMode] = useState('PROMPT'); // 'PROMPT' (STK push) | 'MANUAL' (buyer already paid; enter code)
-  const [mpesaCode, setMpesaCode] = useState('');
-  const [promptPhone, setPromptPhone] = useState(''); // the number the live prompt went to
+  // ---- M-Pesa as a payment method ----
+  const [mpesaCode, setMpesaCode] = useState(''); // typed by the cashier, or filled from the trusted confirmation
   const [mpesaConfig, setMpesaConfig] = useState(undefined); // undefined = still checking, null = none saved
   const [mobileView, setMobileView] = useState('items'); // phones only: 'items' | 'sale'
 
@@ -109,15 +112,11 @@ export default function POSPage() {
       .catch(() => { if (alive) setMpesaConfig(null); });
     return () => { alive = false; };
   }, [tenant?.business_id, isOnline]);
-  // "Already paid" (type the SMS code) always works: no setup, no internet. Only "Send prompt" needs both.
-  const { stkStatus, effectiveMode: effectiveMpesaMode } = resolveMpesa({ isOnline, config: mpesaConfig, chosenMode: mpesaMode });
+  // Availability of M-Pesa as a payment method does NOT depend on any of this: only the Prompt button does
+  // (see mpesaPanelState in utils/mpesa.js). A missing/failed config lookup just means "no prompts".
 
   // Payment methods follow Settings (default: all four).
-  const enabledMethods = (() => {
-    const list = posSettings?.settings?.payment_methods_enabled;
-    const filtered = Array.isArray(list) ? ALL_METHODS.filter((m) => list.includes(m)) : ALL_METHODS;
-    return filtered.length > 0 ? filtered : ALL_METHODS;
-  })();
+  const enabledMethods = resolveEnabledMethods(posSettings?.settings?.payment_methods_enabled);
 
   // Keep the offline product cache warm every time the online product
   // list refreshes. This is the ONLY writer of products_cache -- if the
@@ -135,6 +134,16 @@ export default function POSPage() {
   // none of this renders and the till behaves exactly as before.
   const { enabled: enabledCaps } = useCapabilities();
   const foliosOn = enabledCaps.includes('folios');
+  // Phase 54 (salon). The Sell page is the ONE place money is taken. Two hand-offs arrive here:
+  //   ?appointment=<id>  a booking being completed: its service goes in the cart for its customer, with the optional provider
+  //   ?folio=<id>        a customer's running bill being settled: the balance is the amount to pay, paid like any sale
+  const salonOn = enabledCaps.includes('salon');
+  const { providers } = useProviders(salonOn);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const apptParam = searchParams.get('appointment');
+  const folioParam = searchParams.get('folio');
+  const [folioSettle, setFolioSettle] = useState(null); // the folio being settled on this page, or null
+  const [folioDone, setFolioDone] = useState(null);     // the settled folio, for the receipt/invoice prompt
   const [openFolio, setOpenFolio] = useState(null);      // the selected customer's open folio, if any
   const [chargeToFolio, setChargeToFolio] = useState(false);
   const [folioChecked, setFolioChecked] = useState(false); // have we looked yet (so we don't flash "no folio")
@@ -232,9 +241,10 @@ export default function POSPage() {
   // whether quantity and weight_value should differ for these modes, so
   // both are set to the same entered amount. Revisit if that's wrong.
   const addToCart = useCallback((product, qty = 1, stock = null) => {
+    if (folioSettle) { setStockWarning('A folio is being settled. Finish or cancel it before adding items.'); return; }
     setStockWarning('');
     setCart(prevCart => {
-      const existing = prevCart.find(i => i.product_id === product.id);
+      const existing = prevCart.find(i => i.product_id === product.id && !i.appointment_id);
       const requestedQty = existing ? existing.quantity + qty : qty;
 
       if (product.track_inventory && !product.allow_negative_stock && stock && requestedQty > stock.quantity) {
@@ -249,7 +259,7 @@ export default function POSPage() {
         // was applied).
         const clampedDiscount = Math.min(existing.discount_amount || 0, requestedQty * existing.unit_price);
         return prevCart.map(i =>
-          i.product_id === product.id
+          i === existing
             ? { ...i, quantity: requestedQty, discount_amount: clampedDiscount, total: requestedQty * i.unit_price - clampedDiscount }
             : i
         );
@@ -266,9 +276,11 @@ export default function POSPage() {
         weight_value: isVariable ? qty : null,
         discount_amount: 0,
         total: qty * price,
+        is_service: product.track_inventory === false, // phase54: a service line can name who served it
+        employee_id: null,
       }];
     });
-  }, []);
+  }, [folioSettle]);
 
   // Every scan (camera, USB/Bluetooth, or manual) funnels through here —
   // the SAME resolution logic used by search/manual entry, per the
@@ -338,10 +350,14 @@ export default function POSPage() {
     }
   };
 
+  // A booking line is keyed by its appointment (so two bookings of the same service stay separate lines).
+  const lineKey = (i) => i.line_id || i.product_id;
+  const setLineProvider = (id, employeeId) => setCart(cart.map(i => (lineKey(i) === id ? { ...i, employee_id: employeeId || null } : i)));
+
   const updateQty = (id, qty) => {
-    if (qty <= 0) { setCart(cart.filter(i => i.product_id !== id)); return; }
+    if (qty <= 0) { setCart(cart.filter(i => lineKey(i) !== id)); return; }
     setCart(cart.map(i => {
-      if (i.product_id !== id) return i;
+      if (lineKey(i) !== id) return i;
       const clampedDiscount = Math.min(i.discount_amount || 0, qty * i.unit_price);
       return {
         ...i,
@@ -359,16 +375,18 @@ export default function POSPage() {
   // discount can never make a line negative.
   const updateDiscount = (id, discountAmount) => {
     setCart(cart.map(i => {
-      if (i.product_id !== id) return i;
+      if (lineKey(i) !== id) return i;
       const lineSubtotal = i.quantity * i.unit_price;
       const clamped = Math.max(0, Math.min(discountAmount, lineSubtotal));
       return { ...i, discount_amount: clamped, total: lineSubtotal - clamped };
     }));
   };
 
-  const subtotal = cart.reduce((s, i) => s + i.quantity * i.unit_price, 0);
-  const discountTotal = cart.reduce((s, i) => s + (i.discount_amount || 0), 0);
+  // Settling a folio: the amount to pay is the folio's balance, and everything below (cash, split, M-Pesa prompt) works on `total`.
+  const subtotal = folioSettle ? Number(folioSettle.balance_due) : cart.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+  const discountTotal = folioSettle ? 0 : cart.reduce((s, i) => s + (i.discount_amount || 0), 0);
   const total = subtotal - discountTotal;
+  const hasItems = folioSettle ? total > 0 : cart.length > 0;
   const change = parseFloat(customerAmount || 0) - total;
 
   // Split-payment helpers. Amounts are entered as strings in the inputs;
@@ -386,77 +404,135 @@ export default function POSPage() {
   const splitPaidTotal = splitPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
   const splitRemaining = total - splitPaidTotal;
 
-  // Stage 2 -- M-Pesa STK checkout. Deliberately separate from
-  // completeSale(): a sale for an STK payment isn't created by this
-  // page at all -- confirm_mpesa_payment() creates it server-side, only
-  // once Safaricom confirms (section 37). This function only sends the
-  // request and opens the waiting modal; the modal's own effect clears
-  // the cart once mpesa.phase reaches 'paid'.
-  const handleMpesaCheckout = async () => {
+  // Stage 2 -- the Prompt button (STK Push). Deliberately separate from
+  // completeSale(): a sale for an STK payment isn't created by this page at
+  // all -- confirm_mpesa_payment() creates it server-side, only once
+  // Safaricom confirms (section 37). This only sends the request; the panel
+  // shows "waiting", and the code field fills itself on confirmation.
+  const customerPhone = customers.find(c => c.id === selectedCustomerId)?.phone || '';
+  const promptPhoneValue = mpesaPhone || customerPhone;
+  const handlePrompt = async () => {
     if (!activeShift) { alert('Open a shift first'); return; }
-    if (cart.length === 0) return;
+    if (!hasItems) return;
     setSaleError('');
-    const phone = mpesaPhone || customers.find(c => c.id === selectedCustomerId)?.phone || '';
-    if (!phone) { setSaleError('Enter the buyer\'s M-Pesa phone number.'); return; }
+    if (!promptPhoneValue) { setSaleError('Enter the buyer\'s M-Pesa phone number.'); return; }
     // STK Push charges whole shillings only (the Edge Function rounds), so
     // a total with cents would charge a different amount than the sale
     // records. Say so up front instead of creating that mismatch.
     if (!isWholeShillings(total)) {
-      setSaleError(`M-Pesa prompts work in whole shillings and this sale is KES ${total.toLocaleString()}. Adjust a discount to a whole amount, or choose "Already paid" and enter the code.`);
+      setSaleError(`M-Pesa prompts work in whole shillings and this sale is KES ${total.toLocaleString()}. Adjust a discount to a whole amount, or enter the M-Pesa code instead.`);
       return;
     }
+    if (!isOnline) { setSaleError('Prompts need internet. Enter the M-Pesa code instead.'); return; }
 
-    const cartSnapshot = cart.map(i => ({
+    // A folio is paid by the prompt without a cart: the server reads the balance itself and settles the folio on confirmation.
+    const cartSnapshot = folioSettle ? null : cart.map(i => ({
       product_id: i.product_id, name: i.name, quantity: i.quantity, unit_price: i.unit_price,
       cost_price: i.cost_price, discount_amount: i.discount_amount || 0, selling_mode: i.selling_mode,
+      employee_id: i.employee_id || null, appointment_id: i.appointment_id || null,
     }));
-
-    setPromptPhone(phone);
-    setShowMpesaModal(true);
     try {
-      await mpesa.send({ phone, amount: total, cartSnapshot, customerId: selectedCustomerId || null, shiftId: activeShift.id });
+      await mpesa.send({
+        phone: promptPhoneValue, amount: total, cartSnapshot, folioId: folioSettle?.id || null, customerId: selectedCustomerId || null, shiftId: activeShift.id,
+        // Kept on this device while the buyer answers, so a refresh / app restart does not lose the sale.
+        resumeState: folioSettle
+          ? { folioId: folioSettle.id, customerId: selectedCustomerId || '', phone: promptPhoneValue, total }
+          : { cart, customerId: selectedCustomerId || '', phone: promptPhoneValue, total },
+      });
     } catch (err) {
       setSaleError(err.message || 'Failed to send the M-Pesa request.');
-      setShowMpesaModal(false);
     }
   };
 
-  // Phase 14: once M-Pesa confirms, fetch the receipt
-  // confirm_mpesa_payment() now writes (see schema/phase14_receipts.sql)
-  // in the background, so it's ready the moment the cashier presses
-  // "Done" below -- no extra wait on top of the STK confirmation itself.
-  const [mpesaReceipt, setMpesaReceipt] = useState(null);
+  // Trusted confirmation arrived -> the REAL M-Pesa receipt code appears in the same field. Only ever the code
+  // Safaricom's callback supplied (never a request id or sale number); if it carried none, the field stays empty.
   useEffect(() => {
-    if (mpesa.phase === 'paid' && mpesa.transaction?.sale_id) {
-      receiptService.getBySaleId(mpesa.transaction.sale_id).then(setMpesaReceipt).catch(() => {});
-    }
-    if (mpesa.phase === 'idle') setMpesaReceipt(null);
-  }, [mpesa.phase, mpesa.transaction]);
+    if (mpesa.confirmedCode) setMpesaCode(normalizeMpesaCode(mpesa.confirmedCode));
+  }, [mpesa.confirmedCode]);
 
-  // A request that is still waiting must never be forgotten about: hiding
-  // the modal keeps it alive (banner on the till), and the modal comes
-  // back by itself the moment the result arrives.
+  // ---- Auto-reconcile ----
+  // The sale itself is created by the server the moment Safaricom confirms (confirm_mpesa_payment builds it from the
+  // cart that was sent with the prompt). So when the till hears "paid" there is nothing left for the cashier to
+  // re-select or re-submit: clear the till, show the receipt, done. Never calls completeSale() (that would record the
+  // sale twice).
+  const [paidNotice, setPaidNotice] = useState('');
+  const finishedTxnRef = useRef(null);
   useEffect(() => {
-    if ((mpesa.phase === 'paid' || mpesa.phase === 'failed') && !showMpesaModal) setShowMpesaModal(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mpesa.phase]);
-  const mpesaBusy = mpesa.phase === 'sending' || mpesa.phase === 'pending';
-
-  const retryMpesaPrompt = () => { mpesa.reset(); handleMpesaCheckout(); };
-  const switchToMpesaCode = () => { mpesa.reset(); setShowMpesaModal(false); setMpesaMode('MANUAL'); };
-
-  const closeMpesaModal = () => {
-    const wasPaid = mpesa.phase === 'paid';
-    if (wasPaid) {
+    const txn = mpesa.transaction;
+    if (mpesa.phase !== 'paid' || !txn?.id || finishedTxnRef.current === txn.id) return undefined;
+    finishedTxnRef.current = txn.id;
+    let alive = true;
+    (async () => {
+      // A folio paid by prompt: the server settled it. Show the bill's invoice/receipt prompt, not a till receipt.
+      if (txn.folio_id) {
+        let fresh = null;
+        try { fresh = await folioService.getById(txn.folio_id); } catch { /* the settlement is recorded either way */ }
+        if (!alive) return;
+        setFolioSettle(null); setCart([]); setCustomerAmount(''); setSearch(''); setSelectedCustomerId(''); setMpesaPhone('');
+        setMpesaCode(''); setMobileView('items');
+        if (fresh) setFolioDone(fresh);
+        else setPaidNotice(`M-Pesa payment of KES ${Number(txn.amount).toLocaleString()} confirmed${txn.mpesa_receipt_number ? ` (${txn.mpesa_receipt_number})` : ''}. The folio is settled; print its receipt from Customer Folios.`);
+        mpesa.reset();
+        return;
+      }
+      // The receipt is written a moment after the status flips, so look a few times before giving up.
+      let receipt = null;
+      for (let i = 0; i < 4 && !receipt && txn.sale_id; i += 1) {
+        try { receipt = await receiptService.getBySaleId(txn.sale_id); } catch { /* try again */ }
+        if (!receipt && i < 3) await new Promise((r) => setTimeout(r, 1000));
+      }
+      if (!alive) return;
+      const customer = customers.find(c => c.id === txn.customer_id) || null;
       setCart([]); setCustomerAmount(''); setSearch(''); setSelectedCustomerId(''); setMpesaPhone('');
       setMpesaCode(''); setMobileView('items');
-    }
-    setShowMpesaModal(false);
-    if (wasPaid && mpesaReceipt) {
-      const customer = customers.find(c => c.id === mpesa.transaction?.customer_id) || null;
-      setReceiptModal({ receipt: mpesaReceipt, customer, isOffline: false });
-    }
-    mpesa.reset();
+      if (receipt) setReceiptModal({ receipt, customer, isOffline: false });
+      else setPaidNotice(`M-Pesa payment of KES ${Number(txn.amount).toLocaleString()} confirmed${txn.mpesa_receipt_number ? ` (${txn.mpesa_receipt_number})` : ''}. The sale is recorded; the receipt is under Sales.`);
+      mpesa.reset();
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mpesa.phase, mpesa.transaction?.id]);
+
+  // ---- Pick up after a refresh / app restart ----
+  // The cart and the request id were saved on this device when the prompt was sent (see useMpesaPayment).
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    if (resumedRef.current || !tenant?.id) return;
+    resumedRef.current = true;
+    mpesa.resume().then(({ state, saved }) => {
+      if (state === 'none' || !saved) return;
+      if (state === 'paid') return; // the auto-reconcile effect above shows the receipt and clears the till
+      // Only pick the sale back up while the buyer may still be paying (or it failed moments ago).
+      // Anything older starts the till clean: no old cart, no old phone number, no old error.
+      const ageMs = Date.now() - (saved.savedAt || 0);
+      if (state === 'failed' && ageMs > 3 * 60 * 1000) { mpesaInflight.clear(tenant?.id); mpesa.reset(); return; }
+      if (saved.folioId) {
+        folioService.getById(saved.folioId).then((f) => { if (f.status === 'OPEN') setFolioSettle(f); }).catch(() => {});
+      }
+      if (Array.isArray(saved.cart) && saved.cart.length) setCart(saved.cart);
+      setSelectedCustomerId(saved.customerId || '');
+      setMpesaPhone(saved.phone || '');
+      setPaymentMethod('MOBILE_MONEY');
+      setMobileView('sale');
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.id]);
+
+  const mpesaBusy = mpesa.phase === 'sending' || mpesa.phase === 'pending';
+  const mpesaPaid = mpesa.phase === 'paid';
+  // While a prompt is live (or just confirmed) the cart, customer and method must not change underneath it: the
+  // sale Safaricom's confirmation creates is the cart as it was when the prompt was sent.
+  const mpesaLocked = mpesaBusy || mpesaPaid;
+
+  // Paid is handled automatically above; this only stays as the button's action for the split second before it does.
+  const finishMpesaSale = () => {};
+
+  const selectPaymentMethod = (m) => {
+    if (mpesaLocked) return;
+    // Leaving M-Pesa after a failed/unanswered prompt starts clean. (A late confirmation for an abandoned prompt is
+    // still recorded by the server and appears on the M-Pesa page under "Needs attention" -- it is never lost.)
+    if (m !== 'MOBILE_MONEY' && mpesa.phase === 'failed') mpesa.reset();
+    setPaymentMethod(m); setSaleError('');
   };
 
   // Stops one M-Pesa SMS being used to "pay" for two sales. Online only:
@@ -483,10 +559,53 @@ export default function POSPage() {
     return false;
   };
 
+  // ---- Hand-offs from Appointments / Customer Folios (phase54) ----
+  const handoffRef = useRef({ appt: null, folio: null });
+  const clearParam = (key) => setSearchParams((p) => { const n = new URLSearchParams(p); n.delete(key); return n; }, { replace: true });
+  useEffect(() => {
+    if (!apptParam || handoffRef.current.appt === apptParam) return;
+    handoffRef.current.appt = apptParam;
+    (async () => {
+      try {
+        const a = await appointmentService.getById(apptParam);
+        if (!['SCHEDULED', 'CONFIRMED'].includes(a.status)) { setSaleError(`That appointment is already ${String(a.status).toLowerCase().replace('_', ' ')}.`); return; }
+        const price = Number(a.service?.selling_price) || 0;
+        setFolioSettle(null);
+        setCart((prev) => (prev.some((i) => i.appointment_id === a.id) ? prev : [...prev, {
+          line_id: `appt:${a.id}`, appointment_id: a.id, product_id: a.product_id, name: a.service?.name || 'Service',
+          quantity: 1, unit_price: price, cost_price: 0, selling_mode: 'PER_UNIT', weight_value: null,
+          discount_amount: 0, total: price, is_service: true, employee_id: a.employee_id || null,
+        }]));
+        setSelectedCustomerId(a.customer_id || '');
+        setMobileView('sale');
+      } catch (err) { setSaleError(err.message || 'Could not load that appointment.'); }
+      finally { clearParam('appointment'); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apptParam]);
+  useEffect(() => {
+    if (!folioParam || handoffRef.current.folio === folioParam) return;
+    handoffRef.current.folio = folioParam;
+    (async () => {
+      try {
+        const f = await folioService.getById(folioParam);
+        if (f.status !== 'OPEN') { setSaleError(`That folio is already ${String(f.status).toLowerCase()}.`); return; }
+        if (!(Number(f.balance_due) > 0)) { setSaleError('That folio has nothing to pay.'); return; }
+        setCart([]); setSplitMode(false); setSplitPayments([]); setCustomerAmount(''); setMpesaCode('');
+        setPaymentMethod((m) => (m === 'CREDIT' ? 'CASH' : m));
+        setFolioSettle(f);
+        setSelectedCustomerId(f.customer_id || '');
+        setMobileView('sale');
+      } catch (err) { setSaleError(err.message || 'Could not load that folio.'); }
+      finally { clearParam('folio'); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folioParam]);
+
   const checkoutRef = useRef(null); // { sig, ref }: idempotency key for the checkout in progress
   const completeSale = singleFlight('POSPage.completeSale', async () => {
     if (!activeShift) { alert('Open a shift first'); return; }
-    if (cart.length === 0) return;
+    if (!hasItems) return;
     setSaleError('');
 
     let payments;
@@ -574,6 +693,27 @@ export default function POSPage() {
       }
     }
 
+    // Phase 54: settling a customer's folio. Same payment choices as a sale; the money is recorded on the folio
+    // (settle_folio) and the folio closes with its invoice and receipt. Needs a connection.
+    if (folioSettle) {
+      if (!isOnline) { setSaleError('Settling a folio needs internet. Try again when you are back online.'); return; }
+      try {
+        await folioService.settle({
+          folioId: folioSettle.id, settledBy: staffId, shiftId: activeShift.id, tenantId: tenant?.id,
+          payments: payments.map((p) => ({ payment_method: p.payment_method, amount: p.amount, reference_no: p.reference_no || null })),
+        });
+        const fresh = await folioService.getById(folioSettle.id);
+        setFolioSettle(null); setFolioDone(fresh);
+        setCart([]); setCustomerAmount(''); setSearch(''); setSelectedCustomerId('');
+        setSplitPayments([]); setSplitMode(false); setMpesaCode(''); setMobileView('items');
+        setMpesaPhone(''); if (mpesa.phase !== 'idle') mpesa.reset();
+      } catch (err) {
+        if (err?.code === '23505' || /uq_lb_payments_mpesa_ref|M-PESA_CODE_USED/i.test(String(err?.message || ''))) setSaleError('That M-Pesa code was just used on another payment. Check the buyer\'s SMS.');
+        else setSaleError(err.message || 'Could not settle the folio.');
+      }
+      return;
+    }
+
     // shift_id is required — without it, closing this shift can never
     // find these sales when computing expected_cash (see conversation:
     // cashierService.js's closeShift filters lb_sales by shift_id).
@@ -590,6 +730,8 @@ export default function POSPage() {
         selling_mode: i.selling_mode,
         weight_value: i.weight_value,
         discount_amount: i.discount_amount || 0,
+        employee_id: i.employee_id || null,       // phase54: optional provider -> commission to payroll
+        appointment_id: i.appointment_id || null, // phase54: the booking this line completes
       })),
       payments,
     };
@@ -609,6 +751,8 @@ export default function POSPage() {
       setCart([]); setCustomerAmount(''); setSearch(''); setSelectedCustomerId('');
       setSplitPayments([]); setSplitMode(false); setMpesaCode(''); setMobileView('items');
       setChargeToFolio(false); setOpenFolio(null);
+      // This sale is finished: forget any earlier prompt that did not go through, so a refresh cannot bring its cart back.
+      setMpesaPhone(''); if (mpesa.phase !== 'idle') mpesa.reset();
       // Phase 14: show the receipt instead of a bare alert(). For an
       // online sale, fetch the REAL lb_receipts row saleService.create()
       // already wrote (has a server-issued receipt_number). For an
@@ -642,7 +786,12 @@ export default function POSPage() {
         }
       }
     } catch (err) {
-      setSaleError(err.message || 'Failed to complete sale.');
+      // Another till recorded the same M-Pesa code a moment ago: the database's unique rule refused it.
+      if (err?.code === '23505' || /uq_lb_payments_mpesa_ref|M-PESA_CODE_USED/i.test(String(err?.message || ''))) {
+        setSaleError('That M-Pesa code was just used on another sale. Check the buyer\'s SMS.');
+      } else {
+        setSaleError(err.message || 'Failed to complete sale.');
+      }
     }
   });
 
@@ -675,15 +824,16 @@ export default function POSPage() {
 
   const cartCount = cart.reduce((n, i) => n + (VARIABLE_MODES.includes(i.selling_mode) ? 1 : i.quantity), 0);
   const isMpesaSingle = !folioMode && !splitMode && paymentMethod === 'MOBILE_MONEY';
-  const isPrompt = isMpesaSingle && effectiveMpesaMode === 'PROMPT';
-  const isMpesaCode = isMpesaSingle && effectiveMpesaMode === 'MANUAL';
   const creditPicked = splitMode ? splitPayments.some(p => p.method === 'CREDIT') : paymentMethod === 'CREDIT';
-  const canSubmit = cart.length > 0
+  const canSubmit = hasItems
     && !mpesaBusy
     && !(!folioMode && splitMode && Math.abs(splitRemaining) > 0.01)
-    && !(isPrompt && stkStatus !== 'ready')
-    && !(isMpesaCode && !isValidMpesaCode(mpesaCode));
-  const submitLabel = folioMode ? `Charge to folio · KES ${total.toLocaleString()}` : isPrompt ? `Send M-Pesa prompt · KES ${total.toLocaleString()}` : `Complete sale · KES ${total.toLocaleString()}`;
+    && !(isMpesaSingle && !mpesaPaid && !isValidMpesaCode(mpesaCode));
+  const submitLabel = mpesaPaid ? 'Done · view receipt'
+    : folioSettle ? `Settle folio · KES ${total.toLocaleString()}`
+    : folioMode ? `Charge to folio · KES ${total.toLocaleString()}` : `Complete sale · KES ${total.toLocaleString()}`;
+  // A folio cannot be settled on credit (settle_folio refuses it), so the choice is not offered while settling one.
+  const payMethods = folioSettle ? enabledMethods.filter(m => m !== 'CREDIT') : enabledMethods;
 
   if (!activeShift) {
     return (
@@ -774,7 +924,7 @@ export default function POSPage() {
           {/* grid-cols-2 until lg: this pane is only half-width from md up,
               so three image cards in a half pane got cramped early. The
               square image box keeps every card the same height. */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className={`grid grid-cols-2 lg:grid-cols-3 gap-2 ${mpesaLocked ? 'pointer-events-none opacity-60' : ''}`} aria-disabled={mpesaLocked}>
             {filteredProducts.map(p => (
               <button key={p.id} onClick={() => addToCart(p)} className="bg-white border border-[#DDE3DD] rounded-xl hover:border-[#237A52] active:bg-emerald-50 text-left overflow-hidden flex flex-col min-w-0">
                 <div className="w-full aspect-square bg-[#F7F6F0] flex items-center justify-center overflow-hidden shrink-0">
@@ -814,22 +964,43 @@ export default function POSPage() {
         <div className={`${mobileView === 'sale' ? 'flex' : 'hidden'} md:flex flex-1 basis-0 min-h-0 min-w-0 p-3 md:p-4 overflow-y-auto bg-white flex-col md:border-l border-[#DDE3DD]`}>
           <div className="flex items-center gap-2 mb-2">
             <button onClick={() => setMobileView('items')} className="md:hidden -ml-2 p-2 text-[#26352D]" aria-label="Back to items"><ArrowLeft size={20} /></button>
-            <h3 className="font-bold text-[#26352D]">Current sale{cart.length > 0 ? ` (${cartCount})` : ''}</h3>
-            {cart.length > 0 && <button onClick={() => { setCart([]); setMobileView('items'); }} className="ml-auto text-xs font-semibold text-[#68756D] hover:text-red-600 min-h-[36px] px-2">Clear</button>}
+            <h3 className="font-bold text-[#26352D]">{folioSettle ? 'Settle folio' : `Current sale${cart.length > 0 ? ` (${cartCount})` : ''}`}</h3>
+            {folioSettle && <button disabled={mpesaLocked} onClick={() => { setFolioSettle(null); setSelectedCustomerId(''); setMobileView('items'); setMpesaPhone(''); setMpesaCode(''); if (mpesa.phase === 'failed') mpesa.reset(); }} className="ml-auto text-xs text-red-500 font-semibold min-h-[32px] disabled:opacity-40">Cancel</button>}
+            {!folioSettle && cart.length > 0 && <button disabled={mpesaLocked} onClick={() => { setCart([]); setMobileView('items'); setMpesaPhone(''); if (mpesa.phase === 'failed') mpesa.reset(); }} className="ml-auto text-xs font-semibold text-[#68756D] hover:text-red-600 min-h-[36px] px-2">Clear</button>}
           </div>
 
-          <div className="flex-1">
-            {cart.map(item => (
-              <div key={item.product_id} className="py-2.5 border-b border-[#DDE3DD]">
+          <div className={`flex-1 ${mpesaLocked ? 'pointer-events-none opacity-60' : ''}`} aria-disabled={mpesaLocked}>
+            {folioSettle && (
+              <div className="pb-2">
+                <div className="text-sm text-[#68756D] mb-1">{folioSettle.customer?.name} · {folioSettle.title ? `${folioSettle.title} · ` : ''}{folioSettle.folio_number}</div>
+                {folioService.sections(folioSettle.lines).map((g) => (
+                  <div key={g.key} className="mt-2">
+                    <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider text-[#68756D]"><span>{g.label}</span><span className="tabular-nums">{kes(g.subtotal)}</span></div>
+                    {!g.isPackage && g.lines.map((l) => (
+                      <div key={l.id} className="flex justify-between gap-2 text-sm py-1 border-b border-[#DDE3DD]">
+                        <span className="min-w-0 truncate">{l.shown}{Number(l.quantity) !== 1 ? ` × ${Number(l.quantity).toLocaleString()}` : ''}</span>
+                        <span className="tabular-nums shrink-0">{kes(l.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {(folioSettle.payments || []).length > 0 && (
+                  <div className="flex justify-between text-sm text-[#68756D] mt-2"><span>Already paid</span><span className="tabular-nums">-{kes(folioSettle.total_paid)}</span></div>
+                )}
+                <p className="text-xs text-[#68756D] mt-2">Pay the balance below, any way you would take a sale. The folio then closes with its invoice and receipt.</p>
+              </div>
+            )}
+            {!folioSettle && cart.map(item => (
+              <div key={lineKey(item)} className="py-2.5 border-b border-[#DDE3DD]">
                 <div className="flex justify-between items-center gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="font-medium truncate">{item.name}</div>
                     <div className="text-sm text-[#68756D]">{item.unit_price?.toLocaleString()} × {item.quantity}</div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <button onClick={() => updateQty(item.product_id, item.quantity - 1)} className="w-9 h-9 bg-[#F7F6F0] border border-[#DDE3DD] rounded-lg flex items-center justify-center" aria-label="Less"><Minus size={16} /></button>
+                    <button onClick={() => updateQty(lineKey(item), item.quantity - 1)} className="w-9 h-9 bg-[#F7F6F0] border border-[#DDE3DD] rounded-lg flex items-center justify-center" aria-label="Less"><Minus size={16} /></button>
                     <span className="w-7 text-center font-semibold">{item.quantity}</span>
-                    <button onClick={() => updateQty(item.product_id, item.quantity + 1)} className="w-9 h-9 bg-[#F7F6F0] border border-[#DDE3DD] rounded-lg flex items-center justify-center" aria-label="More"><Plus size={16} /></button>
+                    <button onClick={() => updateQty(lineKey(item), item.quantity + 1)} className="w-9 h-9 bg-[#F7F6F0] border border-[#DDE3DD] rounded-lg flex items-center justify-center" aria-label="More"><Plus size={16} /></button>
                   </div>
                   <span className="font-bold w-20 text-right shrink-0">{item.total?.toLocaleString()}</span>
                 </div>
@@ -840,14 +1011,25 @@ export default function POSPage() {
                   <input
                     type="number" inputMode="decimal" min="0" step="0.01"
                     value={item.discount_amount || ''}
-                    onChange={e => updateDiscount(item.product_id, parseFloat(e.target.value) || 0)}
+                    onChange={e => updateDiscount(lineKey(item), parseFloat(e.target.value) || 0)}
                     placeholder="0"
                     className="w-24 border border-[#DDE3DD] rounded-lg px-2 py-1.5 text-sm text-right"
                   />
                 </div>
+                {/* Phase 54: who served this service. Optional; when set, their commission goes to payroll. */}
+                {item.is_service && providers.length > 0 && (
+                  <div className="flex justify-end items-center gap-2 mt-1.5">
+                    <span className="text-xs text-[#68756D]">Served by</span>
+                    <select value={item.employee_id || ''} onChange={e => setLineProvider(lineKey(item), e.target.value)}
+                      className="w-40 min-w-0 border border-[#DDE3DD] rounded-lg px-2 py-1.5 text-sm bg-white">
+                      <option value="">Anyone</option>
+                      {providers.map(pv => <option key={pv.id} value={pv.id}>{pv.name}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
             ))}
-            {cart.length === 0 && (
+            {!folioSettle && cart.length === 0 && (
               <div className="text-[#68756D] text-center py-10 text-sm">
                 No items yet.
                 <button onClick={() => setMobileView('items')} className="md:hidden block mx-auto mt-3 text-[#237A52] font-semibold underline min-h-[44px]">Add items</button>
@@ -856,7 +1038,7 @@ export default function POSPage() {
           </div>
 
           <div className="border-t border-[#DDE3DD] pt-4 mt-4">
-            <div className="flex justify-between mb-1.5"><span className="text-[#68756D]">Subtotal</span><span className="font-semibold">{subtotal.toLocaleString()}</span></div>
+            <div className="flex justify-between mb-1.5"><span className="text-[#68756D]">{folioSettle ? 'Balance due' : 'Subtotal'}</span><span className="font-semibold">{subtotal.toLocaleString()}</span></div>
             {discountTotal > 0 && (
               <div className="flex justify-between mb-1.5 text-[#237A52]"><span>Discount</span><span className="font-semibold">-{discountTotal.toLocaleString()}</span></div>
             )}
@@ -866,7 +1048,7 @@ export default function POSPage() {
                 the DB trigger); optional otherwise. */}
             <div className="mb-3">
               <select
-                value={selectedCustomerId}
+                value={selectedCustomerId} disabled={mpesaLocked || !!folioSettle}
                 onChange={e => setSelectedCustomerId(e.target.value)}
                 className={`w-full border rounded-xl px-3 min-h-[48px] text-sm bg-white ${creditPicked && !selectedCustomerId ? 'border-red-400' : 'border-[#DDE3DD]'}`}
               >
@@ -878,7 +1060,7 @@ export default function POSPage() {
             </div>
 
             {/* Phase 19: pay now, or put it on the customer's folio. Only when Customer Folios is switched on. */}
-            {foliosOn && selectedCustomerId && (
+            {foliosOn && selectedCustomerId && !folioSettle && (
               <div className="mb-3">
                 <div className="grid grid-cols-2 gap-2" role="group" aria-label="When is this paid?">
                   {[[false, 'Pay now'], [true, 'Charge to folio']].map(([val, label]) => (
@@ -905,20 +1087,21 @@ export default function POSPage() {
               <span className="text-[11px] font-bold text-[#68756D] uppercase">How is the buyer paying?</span>
               <button
                 onClick={() => { setSplitMode(!splitMode); setSplitPayments([]); setSaleError(''); }}
-                className={`text-xs font-semibold px-2.5 min-h-[32px] rounded-lg ${splitMode ? 'bg-[#237A52] text-white' : 'bg-[#F7F6F0] border border-[#DDE3DD] text-[#26352D]'}`}
+                disabled={mpesaLocked}
+                className={`disabled:opacity-60 text-xs font-semibold px-2.5 min-h-[32px] rounded-lg ${splitMode ? 'bg-[#237A52] text-white' : 'bg-[#F7F6F0] border border-[#DDE3DD] text-[#26352D]'}`}
               >
                 {splitMode ? 'Split payment: on' : 'Split payment'}
               </button>
             </div>
 
             {!splitMode ? (
-              <div className={`grid gap-2 mb-3 ${enabledMethods.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                {enabledMethods.map(m => (
+              <div className={`grid gap-2 mb-3 ${payMethods.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {payMethods.map(m => (
                   <button
                     key={m}
-                    onClick={() => { setPaymentMethod(m); setSaleError(''); }}
-                    aria-pressed={paymentMethod === m}
-                    className={`min-h-[48px] rounded-xl text-sm font-semibold border transition-colors ${
+                    onClick={() => selectPaymentMethod(m)}
+                    aria-pressed={paymentMethod === m} disabled={mpesaLocked}
+                    className={`min-h-[48px] rounded-xl text-sm font-semibold border transition-colors disabled:opacity-60 ${
                       paymentMethod === m ? 'bg-[#237A52] text-white border-[#237A52]' : 'bg-white text-[#26352D] border-[#DDE3DD] hover:bg-[#F7F6F0]'
                     }`}
                   >{METHOD_LABEL[m]}</button>
@@ -937,7 +1120,7 @@ export default function POSPage() {
                         onChange={e => updateSplitPayment(p.id, 'method', e.target.value)}
                         className="border border-[#DDE3DD] rounded-lg px-2 min-h-[44px] text-sm shrink-0 bg-white"
                       >
-                        {enabledMethods.map(m => <option key={m} value={m}>{METHOD_LABEL[m]}</option>)}
+                        {payMethods.map(m => <option key={m} value={m}>{METHOD_LABEL[m]}</option>)}
                       </select>
                       <input
                         type="number" inputMode="decimal" min="0" step="0.01" placeholder="Amount"
@@ -972,14 +1155,16 @@ export default function POSPage() {
 
             </>)}
 
-            {/* M-Pesa: a payment mode with two ways to collect it. */}
+            {/* M-Pesa: ONE section -- code field + Prompt + a status line. Always available when M-Pesa is
+                accepted; only Prompt depends on Daraja. */}
             {isMpesaSingle && (
               <MpesaPayPanel
-                mode={effectiveMpesaMode} onModeChange={setMpesaMode}
-                phone={mpesaPhone || customers.find(c => c.id === selectedCustomerId)?.phone || ''}
-                onPhoneChange={setMpesaPhone}
                 code={mpesaCode} onCodeChange={setMpesaCode}
-                total={total} isOnline={isOnline} stkStatus={stkStatus}
+                phone={promptPhoneValue} onPhoneChange={setMpesaPhone} phoneFromCustomer={!mpesaPhone && !!customerPhone}
+                total={total} isOnline={isOnline} config={mpesaConfig} businessId={tenant?.business_id}
+                phase={mpesa.phase} txStatus={mpesa.transaction?.status} error={mpesa.error}
+                connectionIssue={mpesa.connectionIssue} onCheck={mpesa.refresh}
+                onPrompt={handlePrompt}
               />
             )}
 
@@ -990,21 +1175,21 @@ export default function POSPage() {
               </div>
             )}
 
-            {saleError && (
-              <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{saleError}</div>
+            {paidNotice && (
+              <div className="bg-[#237A52]/10 text-[#1B5138] text-sm rounded-lg px-3 py-2 mb-3 flex items-start justify-between gap-2">
+                <span>{paidNotice}</span>
+                <button type="button" onClick={() => setPaidNotice('')} className="shrink-0 font-semibold underline">OK</button>
+              </div>
             )}
 
-            {/* A prompt that's still live but hidden must stay visible. */}
-            {mpesa.phase === 'pending' && !showMpesaModal && (
-              <button onClick={() => setShowMpesaModal(true)} className="w-full mb-3 flex items-center gap-2 text-left bg-[#C6A15B]/15 border border-[#C6A15B]/40 text-[#7a5f1f] rounded-xl px-3 py-2.5 text-sm font-semibold">
-                <Loader2 size={16} className="animate-spin shrink-0" /> Waiting for the buyer's M-Pesa… tap to open
-              </button>
+            {saleError && (
+              <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{saleError}</div>
             )}
 
             {/* Sticky so the action is always reachable on a phone. */}
             <div className="sticky bottom-0 -mx-3 md:-mx-4 px-3 md:px-4 pt-2 pb-2 bg-white border-t border-[#DDE3DD]">
               <button
-                onClick={isPrompt ? handleMpesaCheckout : completeSale}
+                onClick={mpesaPaid ? finishMpesaSale : completeSale}
                 disabled={!canSubmit}
                 className="w-full min-h-[52px] bg-[#237A52] hover:bg-[#1B5138] text-white rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1015,24 +1200,22 @@ export default function POSPage() {
         </div>
       </div>
 
-      {/* M-Pesa prompt status (brief section 36/37). Never says "paid"
-          until mpesa.phase === 'paid', which only happens on the realtime
-          UPDATE the callback function produces -- see useMpesaPayment.js. */}
-      {showMpesaModal && (
-        <MpesaPromptModal
-          mpesa={mpesa}
-          total={total}
-          phone={promptPhone}
-          onDone={closeMpesaModal}
-          onHide={() => setShowMpesaModal(false)}
-          onRetry={retryMpesaPrompt}
-          onUseCode={switchToMpesaCode}
-        />
-      )}
-
       {/* Phase 14 -- the sale receipt (print/WhatsApp/email). Mounted
           last so it renders on top of everything else, including the
           M-Pesa modal it can appear right after. */}
+      {folioDone && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-3">
+            <h3 className="font-bold text-lg text-[#26352D]">Folio settled</h3>
+            <p className="text-sm text-[#68756D]">{folioDone.customer?.name} · {kes(folioDone.total_charges)} paid. Invoice {folioDone.invoice_number} · Receipt {folioDone.receipt_number}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => { try { printDocument(`Invoice ${folioDone.customer?.name || ''}`, buildFolioDocumentHtml(folioDone, 'invoice')); } catch (e) { setSaleError(e.message); } }} className="min-h-[48px] rounded-xl border border-[#DDE3DD] text-sm font-semibold">Print invoice</button>
+              <button onClick={() => { try { printDocument(`Receipt ${folioDone.customer?.name || ''}`, buildFolioDocumentHtml(folioDone, 'receipt')); } catch (e) { setSaleError(e.message); } }} className="min-h-[48px] rounded-xl bg-[#237A52] text-white text-sm font-bold">Print receipt</button>
+            </div>
+            <button onClick={() => setFolioDone(null)} className="w-full min-h-[44px] rounded-xl bg-[#F7F6F0] text-[#26352D] text-sm font-semibold">Done</button>
+          </div>
+        </div>
+      )}
       {receiptModal && (
         <ReceiptModal
           receipt={receiptModal.receipt}

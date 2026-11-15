@@ -46,7 +46,7 @@ export const invoiceService = {
     const { data: inv, error } = await supabase.from('lb_rent_invoice_summary').select('*').eq('id', id).single();
     if (error) throw error;
     const [lines, pays, cust, unit, biz, mp, ps] = await Promise.all([
-      supabase.from('lb_recurring_charge_invoices').select('id, amount, paid_amount, status, due_date, charge:lb_recurring_charges(charge_name)')
+      supabase.from('lb_recurring_charge_invoices').select('id, amount, net_amount, tax_amount, tax_rate, tax_inclusive, paid_amount, status, due_date, charge:lb_recurring_charges(charge_name)')
         .eq('rent_invoice_id', id).order('created_at'),
       supabase.from('lb_rent_invoice_payments').select('*').eq('rent_invoice_id', id).order('created_at'),
       supabase.from('lb_customers').select('id, name, phone, email').eq('id', inv.customer_id).single(),

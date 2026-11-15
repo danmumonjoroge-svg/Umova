@@ -134,6 +134,12 @@ const todayDate = () => new Date().toISOString().split("T")[0];
 
 const slugify = (text) => (text || "").toLowerCase().trim().replace(/\s+/g, "_");
 
+// Display-only: "loan_repayment" -> "Loan repayment". Never used for stored values.
+const prettyText = (text) => {
+  const t = String(text || "").replace(/_/g, " ").trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : "—";
+};
+
 const buildEmptyHeader = () => ({
   journal_id: generateJournalId(),
   posting_date: todayDate(),
@@ -640,6 +646,23 @@ const JournalEntry = () => {
     </select>
   );
 
+  // ---- Display-only helpers (no effect on posting logic) ----
+  const isBalanced = difference === 0;
+  const hasAmounts = debitTotal > 0 || creditTotal > 0;
+  const statusLabel = STATUS_LABELS[journalHeader.status] || journalHeader.status;
+  const transferAccount = ACCOUNT_OPTIONS.find(
+    (a) => a.id === (TRANSFER_TYPE_ACCOUNTS[transfer.transfer_type] || TRANSFER_TYPE_ACCOUNTS.Other)
+  );
+
+  let lockedMessage = "";
+  if (journalHeader.status === "Posted") {
+    lockedMessage =
+      "This journal has been posted and can no longer be edited. Use Reverse Journal to undo it, or New Journal to start another.";
+  } else if (journalHeader.status === "Reversed") {
+    lockedMessage =
+      "This journal has been reversed and is locked. Use New Journal to start another entry.";
+  }
+
   return (
     <div className="journal-entry-container">
       {/* ================= HEADER ================= */}
@@ -650,35 +673,45 @@ const JournalEntry = () => {
         </div>
 
         <div className="journal-actions">
-          <button className="btn btn-primary" onClick={clearJournal}>
+          <button type="button" className="btn btn-ghost act-new" onClick={clearJournal}>
             New Journal
           </button>
 
-          <button className="btn btn-secondary" onClick={saveDraft} disabled={!isEditable}>
+          <button
+            type="button"
+            className="btn btn-secondary act-draft"
+            onClick={saveDraft}
+            disabled={!isEditable}
+          >
             Save Draft
           </button>
 
           <button
-            className="btn btn-success"
+            type="button"
+            className="btn btn-primary act-post"
             disabled={isPosting || !isEditable}
             onClick={postJournalEntry}
           >
-            {isPosting ? "Posting…" : "Post"}
+            {isPosting ? "Posting…" : "Post to Ledger"}
           </button>
 
           <button
-            className="btn btn-danger"
+            type="button"
+            className="btn btn-danger act-reverse"
             disabled={isReversing || journalHeader.status !== "Posted"}
             onClick={reverseJournal}
           >
-            {isReversing ? "Reversing…" : "Reverse"}
+            {isReversing ? "Reversing…" : "Reverse Journal"}
           </button>
         </div>
       </div>
 
       {/* ================= TABS ================= */}
-      <div className="journal-tabs">
+      <div className="journal-tabs" role="tablist">
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "journal"}
           className={activeTab === "journal" ? "active" : ""}
           onClick={() => setActiveTab("journal")}
         >
@@ -686,6 +719,9 @@ const JournalEntry = () => {
         </button>
 
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "transfer"}
           className={activeTab === "transfer" ? "active" : ""}
           onClick={() => setActiveTab("transfer")}
         >
@@ -693,19 +729,42 @@ const JournalEntry = () => {
         </button>
       </div>
 
-      {/* ================= HEADER DETAILS ================= */}
+      {/* ================= MANUAL JOURNAL ================= */}
       {activeTab === "journal" && (
         <>
+          {lockedMessage && (
+            <div className="journal-notice" role="status">
+              {lockedMessage}
+            </div>
+          )}
+
+          {/* ---- Journal details ---- */}
           <div className="journal-card">
+            <div className="card-header">
+              <h3>Journal details</h3>
+              <span className={`status-badge status-${slugify(journalHeader.status)}`}>
+                {statusLabel}
+              </span>
+            </div>
+
+            <dl className="journal-meta">
+              <div>
+                <dt>Journal ID</dt>
+                <dd>{journalHeader.journal_id}</dd>
+              </div>
+              <div>
+                <dt>Created by</dt>
+                <dd>{journalHeader.created_by || "—"}</dd>
+              </div>
+            </dl>
+
             <div className="journal-grid">
               <div className="form-group">
-                <label>Journal ID</label>
-                <input value={journalHeader.journal_id} readOnly />
-              </div>
-
-              <div className="form-group">
-                <label>Posting Date</label>
+                <label htmlFor="je-posting-date">
+                  Posting date <span className="required" aria-hidden="true">*</span>
+                </label>
                 <input
+                  id="je-posting-date"
                   type="date"
                   value={journalHeader.posting_date}
                   onChange={(e) => updateHeader("posting_date", e.target.value)}
@@ -714,8 +773,9 @@ const JournalEntry = () => {
               </div>
 
               <div className="form-group">
-                <label>Transaction Type</label>
+                <label htmlFor="je-transaction-type">Transaction type</label>
                 <select
+                  id="je-transaction-type"
                   value={journalHeader.transaction_type}
                   onChange={(e) => updateHeader("transaction_type", e.target.value)}
                   disabled={!isEditable}
@@ -729,39 +789,37 @@ const JournalEntry = () => {
               </div>
 
               <div className="form-group">
-                <label>Status</label>
-                {/* Status is set only by Post / Reverse — never typed directly. */}
-                <input value={STATUS_LABELS[journalHeader.status]} readOnly />
-              </div>
-
-              <div className="form-group full-width">
-                <label>Purpose</label>
+                <label htmlFor="je-reference">Reference no. (optional)</label>
                 <input
-                  value={journalHeader.purpose}
-                  onChange={(e) => updateHeader("purpose", e.target.value)}
-                  disabled={!isEditable}
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Reference Number</label>
-                <input
+                  id="je-reference"
                   value={journalHeader.reference_no}
+                  placeholder="Defaults to the Journal ID"
                   onChange={(e) => updateHeader("reference_no", e.target.value)}
                   disabled={!isEditable}
                 />
               </div>
 
-              <div className="form-group">
-                <label>Created By</label>
-                <input value={journalHeader.created_by} readOnly />
+              <div className="form-group full-width">
+                <label htmlFor="je-purpose">
+                  Purpose <span className="required" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="je-purpose"
+                  value={journalHeader.purpose}
+                  placeholder="e.g. Monthly interest accrual"
+                  onChange={(e) => updateHeader("purpose", e.target.value)}
+                  disabled={!isEditable}
+                />
+                <span className="field-hint">Shown in the ledger and in Journal History.</span>
               </div>
 
               <div className="form-group full-width">
-                <label>Description / Narration</label>
+                <label htmlFor="je-description">Notes (optional)</label>
                 <textarea
+                  id="je-description"
                   rows="3"
                   value={journalHeader.description}
+                  placeholder="Add any extra detail for your own records"
                   onChange={(e) => updateHeader("description", e.target.value)}
                   disabled={!isEditable}
                 />
@@ -769,41 +827,56 @@ const JournalEntry = () => {
             </div>
           </div>
 
-          {/* ================= JOURNAL LINES ================= */}
+          {/* ---- Journal lines ---- */}
           <div className="journal-card">
             <div className="card-header">
-              <h3>Journal Lines</h3>
-              <button className="btn btn-primary" onClick={addLine} disabled={!isEditable}>
+              <div className="card-heading">
+                <h3>Journal lines</h3>
+                <p className="card-sub">
+                  Each line is either a debit or a credit. Total debits must equal total credits.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={addLine}
+                disabled={!isEditable}
+              >
                 + Add Line
               </button>
             </div>
 
             <div className="table-responsive">
-              <table className="journal-table">
+              <table className="journal-table lines-table">
                 <thead>
                   <tr>
-                    <th>#</th>
+                    <th>Line</th>
                     <th>Account</th>
-                    <th>Member</th>
+                    <th>Member (optional)</th>
                     <th>Debit</th>
                     <th>Credit</th>
-                    <th>Narration</th>
-                    <th>Actions</th>
+                    <th>Narration (optional)</th>
+                    <th>
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {journalLines.map((line) => (
                     <tr key={line.id}>
-                      <td>{line.line_no}</td>
-
                       <td>
+                        <span className="line-number">{line.line_no}</span>
+                      </td>
+
+                      <td data-label="Account">
                         <select
+                          aria-label={`Line ${line.line_no} account`}
                           value={line.account_id}
                           onChange={(e) => updateLine(line.id, "account_id", e.target.value)}
                           disabled={!isEditable}
                         >
-                          <option value="">Select Account</option>
+                          <option value="">Select account</option>
                           {ACCOUNT_OPTIONS.map((account) => (
                             <option key={account.id} value={account.id}>
                               {account.id} - {account.name}
@@ -812,7 +885,7 @@ const JournalEntry = () => {
                         </select>
                       </td>
 
-                      <td>
+                      <td data-label="Member (optional)">
                         <MemberSelect
                           value={line.member_no}
                           onChange={(value) => updateLine(line.id, "member_no", value)}
@@ -821,9 +894,11 @@ const JournalEntry = () => {
                         />
                       </td>
 
-                      <td>
+                      <td data-label="Debit">
                         <input
+                          aria-label={`Line ${line.line_no} debit`}
                           type="number"
+                          inputMode="decimal"
                           min="0"
                           step="0.01"
                           placeholder="0.00"
@@ -833,9 +908,11 @@ const JournalEntry = () => {
                         />
                       </td>
 
-                      <td>
+                      <td data-label="Credit">
                         <input
+                          aria-label={`Line ${line.line_no} credit`}
                           type="number"
+                          inputMode="decimal"
                           min="0"
                           step="0.01"
                           placeholder="0.00"
@@ -845,10 +922,11 @@ const JournalEntry = () => {
                         />
                       </td>
 
-                      <td>
+                      <td data-label="Narration (optional)">
                         <input
+                          aria-label={`Line ${line.line_no} narration`}
                           type="text"
-                          placeholder="Narration"
+                          placeholder="Defaults to Purpose"
                           value={line.narration}
                           onChange={(e) => updateLine(line.id, "narration", e.target.value)}
                           disabled={!isEditable}
@@ -858,6 +936,7 @@ const JournalEntry = () => {
                       <td>
                         <div className="row-actions">
                           <button
+                            type="button"
                             className="btn btn-info"
                             onClick={() => duplicateLine(line.id)}
                             disabled={!isEditable}
@@ -866,11 +945,12 @@ const JournalEntry = () => {
                           </button>
 
                           <button
+                            type="button"
                             className="btn btn-danger"
                             onClick={() => deleteLine(line.id)}
                             disabled={!isEditable}
                           >
-                            Delete
+                            Remove
                           </button>
                         </div>
                       </td>
@@ -884,27 +964,36 @@ const JournalEntry = () => {
           {/* ================= JOURNAL TOTALS ================= */}
           <div className="journal-summary">
             <div className="summary-card">
-              <h4>Journal Summary</h4>
+              <h4>Balance check</h4>
 
               <div className="summary-row">
-                <span>Total Debit</span>
+                <span>Total debit</span>
                 <strong>{money(debitTotal)}</strong>
               </div>
 
               <div className="summary-row">
-                <span>Total Credit</span>
+                <span>Total credit</span>
                 <strong>{money(creditTotal)}</strong>
               </div>
 
               <div className="summary-row">
                 <span>Difference</span>
-                <strong className={difference === 0 ? "balanced" : "not-balanced"}>
+                <strong className={isBalanced ? "balanced" : "not-balanced"}>
                   {money(difference)}
                 </strong>
               </div>
 
-              <div className={`summary-status ${difference === 0 ? "ok" : "warn"}`}>
-                {difference === 0 ? "Journal balanced" : "Journal not balanced"}
+              <div
+                className={`summary-status ${
+                  !hasAmounts ? "idle" : isBalanced ? "ok" : "warn"
+                }`}
+                role="status"
+              >
+                {!hasAmounts
+                  ? "Enter debit and credit amounts"
+                  : isBalanced
+                  ? "Balanced. Ready to post."
+                  : "Out of balance. Debits and credits must match."}
               </div>
             </div>
           </div>
@@ -915,12 +1004,18 @@ const JournalEntry = () => {
       {activeTab === "transfer" && (
         <div className="journal-card">
           <div className="card-header">
-            <h3>Member to Member Transfer</h3>
+            <div className="card-heading">
+              <h3>Member to member transfer</h3>
+              <p className="card-sub">
+                Moves a balance from one member to another as a balanced two-line journal
+                {transferAccount ? ` on ${transferAccount.id} - ${transferAccount.name}` : ""}.
+              </p>
+            </div>
           </div>
 
           <div className="journal-grid">
             <div className="form-group">
-              <label>From Member</label>
+              <label>From member</label>
               <MemberSelect
                 value={transfer.from_member_no}
                 onChange={(value) => updateTransfer("from_member_no", value)}
@@ -928,7 +1023,7 @@ const JournalEntry = () => {
             </div>
 
             <div className="form-group">
-              <label>To Member</label>
+              <label>To member</label>
               <MemberSelect
                 value={transfer.to_member_no}
                 onChange={(value) => updateTransfer("to_member_no", value)}
@@ -936,7 +1031,7 @@ const JournalEntry = () => {
             </div>
 
             <div className="form-group">
-              <label>Transfer Type</label>
+              <label>Transfer type</label>
               <select
                 value={transfer.transfer_type}
                 onChange={(e) => updateTransfer("transfer_type", e.target.value)}
@@ -950,9 +1045,12 @@ const JournalEntry = () => {
             </div>
 
             <div className="form-group">
-              <label>Amount</label>
+              <label>
+                Amount <span className="required" aria-hidden="true">*</span>
+              </label>
               <input
                 type="number"
+                inputMode="decimal"
                 min="0"
                 step="0.01"
                 placeholder="0.00"
@@ -962,7 +1060,9 @@ const JournalEntry = () => {
             </div>
 
             <div className="form-group full-width">
-              <label>Purpose</label>
+              <label>
+                Purpose <span className="required" aria-hidden="true">*</span>
+              </label>
               <input
                 type="text"
                 placeholder="Reason for transfer"
@@ -972,7 +1072,7 @@ const JournalEntry = () => {
             </div>
 
             <div className="form-group full-width">
-              <label>Narration</label>
+              <label>Narration (optional)</label>
               <textarea
                 rows="3"
                 value={transfer.narration}
@@ -982,49 +1082,64 @@ const JournalEntry = () => {
           </div>
 
           <div className="transfer-actions">
-            <button className="btn btn-success" disabled={isTransferring} onClick={postTransfer}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={isTransferring}
+              onClick={postTransfer}
+            >
               {isTransferring ? "Posting…" : "Post Transfer"}
             </button>
-            <button className="btn btn-secondary" onClick={() => setActiveTab("journal")}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setActiveTab("journal")}
+            >
               Back to Journal
             </button>
           </div>
         </div>
       )}
 
-      {/* ================= SEARCH ================= */}
+      {/* ================= HISTORY (with search) ================= */}
       <div className="journal-card">
         <div className="card-header">
-          <h3>Journal Search</h3>
+          <div className="card-heading">
+            <h3>Journal history</h3>
+            <p className="card-sub">
+              {filteredHistory.length === journalHistory.length
+                ? `${journalHistory.length} journal${journalHistory.length === 1 ? "" : "s"}`
+                : `Showing ${filteredHistory.length} of ${journalHistory.length} journals`}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={fetchJournalHistory}
+            disabled={isLoadingHistory}
+          >
+            {isLoadingHistory ? "Refreshing…" : "Refresh"}
+          </button>
         </div>
 
         <div className="search-box">
           <input
-            type="text"
+            type="search"
+            aria-label="Search journals"
             placeholder="Search Journal ID, Purpose, Reference..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
           />
         </div>
-      </div>
-
-      {/* ================= HISTORY ================= */}
-      <div className="journal-card">
-        <div className="card-header">
-          <h3>Journal History</h3>
-          <button className="btn btn-secondary" onClick={fetchJournalHistory} disabled={isLoadingHistory}>
-            {isLoadingHistory ? "Refreshing…" : "Refresh"}
-          </button>
-        </div>
 
         <div className="table-responsive">
-          <table className="journal-table">
+          <table className="journal-table history-table">
             <thead>
               <tr>
-                <th>Journal No</th>
+                <th>Journal no.</th>
                 <th>Date</th>
-                <th>Transaction Type</th>
-                <th>Purpose / Description</th>
+                <th>Type</th>
+                <th>Purpose</th>
                 <th>Reference</th>
                 <th>Lines</th>
                 <th>Status</th>
@@ -1035,21 +1150,25 @@ const JournalEntry = () => {
               {filteredHistory.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="empty-cell">
-                    {isLoadingHistory ? "Loading..." : "No journals found"}
+                    {isLoadingHistory
+                      ? "Loading journals…"
+                      : searchText.trim()
+                      ? "No journals match your search."
+                      : "No journals yet. Posted journals will appear here."}
                   </td>
                 </tr>
               ) : (
                 filteredHistory.map((journal) => (
                   <tr key={journal.journal_id}>
-                    <td>{journal.journal_id}</td>
-                    <td>{journal.posting_date}</td>
-                    <td>{journal.transaction_type}</td>
-                    <td>{journal.purpose}</td>
-                    <td>{journal.reference_no}</td>
-                    <td>{journal.lines.length}</td>
-                    <td>
+                    <td className="cell-id">{journal.journal_id}</td>
+                    <td data-label="Date">{journal.posting_date}</td>
+                    <td data-label="Type">{prettyText(journal.transaction_type)}</td>
+                    <td data-label="Purpose">{journal.purpose || "—"}</td>
+                    <td data-label="Reference">{journal.reference_no || "—"}</td>
+                    <td data-label="Lines">{journal.lines.length}</td>
+                    <td className="cell-status">
                       <span className={`status-badge status-${slugify(journal.status)}`}>
-                        {journal.status}
+                        {prettyText(journal.status)}
                       </span>
                     </td>
                   </tr>

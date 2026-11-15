@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
-import { supabase } from "../supabaseClient";
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { chamaSupabase as supabase } from "../supabaseClient";
 import { chamaPasskeys } from "./auth/chamaPasskeys";
 
 // =============================================================================
@@ -22,6 +22,27 @@ export const ChamaContext = createContext(null);
 const SESSION_KEY = "chama_session_v2";
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12 hours — after this, force re-login even if localStorage still has the blob
 
+// While some login paths (fingerprint / device) cannot yet mint a database session, a failed session start is
+// tolerated so nobody is locked out. Flip to true once those paths are covered AND RLS is on for the Chama tables.
+const REQUIRE_DB_SESSION = false;
+
+// Turns a verified phone + password + chosen chama into a real Supabase session carrying the Chama claims.
+async function startChamaDbSession(creds, chamaId) {
+  if (!creds?.phone || !creds?.password) return false;
+  const base = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1`;
+  const anon = process.env.REACT_APP_SUPABASE_KEY;
+  const res = await fetch(`${base}/chama-session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: anon, Authorization: `Bearer ${anon}` },
+    body: JSON.stringify({ phone: creds.phone, password: creds.password, chama_id: chamaId }),
+  });
+  if (!res.ok) throw new Error((await res.text()) || "Could not start a secure session");
+  const { token_hash } = await res.json();
+  const { error } = await supabase.auth.verifyOtp({ token_hash, type: "magiclink" });
+  if (error) throw error;
+  return true;
+}
+
 function isLicenseValid(m) {
   if (!m) return false;
   if (m.license_status !== "active" && m.license_status !== "trial") return false;
@@ -42,6 +63,9 @@ export function ChamaProvider({ children }) {
   const [chama, setChama] = useState(null);
   const [member, setMember] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Held in memory only (never stored) between the password step and the chama being chosen.
+  const pendingCreds = useRef(null);
 
   // ---- restore a previous session on load ----
   useEffect(() => {
@@ -120,6 +144,7 @@ export function ChamaProvider({ children }) {
       if (authErr) throw authErr;
       const authedUser = Array.isArray(authRows) ? authRows[0] : authRows;
       if (!authedUser) throw new Error("Incorrect phone number or password");
+      pendingCreds.current = { phone: phone.trim(), password };
 
       await finishLogin(authedUser);
     } catch (err) {
@@ -183,6 +208,19 @@ export function ChamaProvider({ children }) {
     }
 
     setLoading(true);
+    try {
+      await startChamaDbSession(pendingCreds.current, membership.chama_id);
+    } catch (err) {
+      if (REQUIRE_DB_SESSION) {
+        setLoading(false);
+        setAuthError(err.message || "Could not start a secure session. Please sign in again.");
+        setAuthStage("phone");
+        return;
+      }
+      console.warn("[chama] database session not started:", err?.message || err);
+    } finally {
+      pendingCreds.current = null;
+    }
     const [{ data: chamaRow }, { data: memberRow }] = await Promise.all([
       supabase.from("chamas").select("*").eq("id", membership.chama_id).single(),
       supabase.from("chama_members").select("*").eq("id", membership.chama_member_id).single(),
@@ -209,7 +247,8 @@ export function ChamaProvider({ children }) {
     setAuthStage(memberships.length > 1 ? "select_chama" : "phone");
   };
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try { await supabase.auth.signOut(); } catch { /* still log out locally */ }
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem("auth_token"); // legacy key some older screens still check
     sessionStorage.removeItem("platform_admin_unlocked");
@@ -218,7 +257,8 @@ export function ChamaProvider({ children }) {
     // restore the previous in-memory dashboard state without a fresh
     // authenticate_user() call. A real navigation closes that off entirely
     // and guarantees the next thing rendered is the login screen.
-    window.location.href = "/chama";
+    // Land on the CHAMA login, not /chama: /chama while logged out used to bounce to the Finance /login.
+    window.location.href = "/chama/login";
   }, []);
 
   // ---- Registration (first-time phone+password setup) ----

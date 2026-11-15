@@ -21,7 +21,7 @@ export default function MessagesWorkspace() {
       <CardGrid>
         <ActionCard
           variant="feature" to="/pos/messages" icon={MessageSquare} title="Customer Messages"
-          description="WhatsApp and email: receipts, reminders and payment follow-ups."
+          description="Messages ready to send, history, your wording and settings."
           action="Open Messages"
         />
         <ActionCard
@@ -33,7 +33,7 @@ export default function MessagesWorkspace() {
           variant={count > 0 ? 'alert' : 'default'}
           to="/pos/communication" icon={Bell} title="Notifications"
           stat={loading ? '…' : error ? '—' : count > 0 ? `${count} new` : 'All clear'}
-          description="Alerts about stock, shifts and cash."
+          description="Overdue payments, late deliveries, appointments and stock."
           action="See Notifications"
         />
       </CardGrid>

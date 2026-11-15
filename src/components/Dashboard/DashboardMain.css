@@ -1,10 +1,10 @@
 /* ============================================================
    UMOVA SACCO CORE ERP — DashboardMain.css
    Design Language: Premium Financial / Dark Sidebar ERP
-   Font Stack: "Instrument Serif" display · "DM Mono" data · "Figtree" UI
+   Font Stack: "DM Mono" data · "Figtree" UI
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap');
 
 /* ──────────────────────────────────────────────────────────────
    CSS CUSTOM PROPERTIES — Design Tokens
@@ -50,7 +50,7 @@
 
   /* Typography */
   --font-ui:      'Figtree', 'Segoe UI', sans-serif;
-  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-display: Georgia, serif;
   --font-mono:    'DM Mono', 'Fira Code', monospace;
 
   /* Timing */
@@ -67,7 +67,11 @@
   --radius-xl:  28px;
 
   /* Sidebar widths */
-  --sidebar-w: 320px;
+  --sidebar-w: 300px;
+  --sidebar-w-collapsed: 76px;
+  --bnav-h: 58px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -84,6 +88,9 @@ html, body, #root {
   overflow: hidden;
 }
 
+body { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+button { font-family: inherit; }
+
 body {
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
@@ -96,6 +103,7 @@ body {
    ────────────────────────────────────────────────────────────── */
 .dashboard-shell {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--stage-bg);
   display: flex;
@@ -129,7 +137,9 @@ body {
   inset-block: 0;
   left: 0;
   z-index: 50;
-  width: var(--sidebar-w);
+  width: min(var(--sidebar-w), 86vw);
+  padding-top: var(--safe-top);
+  overflow: hidden;
   background: linear-gradient(
     170deg,
     var(--sidebar-bg-top) 0%,
@@ -179,17 +189,26 @@ body {
   transform: translateX(0);
 }
 
-@media (min-width: 1280px) {
+/* Permanent sidebar from 1024px (laptops), drawer below */
+@media (min-width: 1024px) {
+  :root { --sidebar-w: 272px; }
   .sidebar {
     position: relative;
     transform: translateX(0) !important;
     flex-shrink: 0;
+    padding-top: 0;
+    transition: width var(--duration-slow) var(--ease-smooth);
   }
+}
+
+@media (min-width: 1280px) {
+  :root { --sidebar-w: 312px; }
 }
 
 /* ── SIDEBAR: LOGO STRIP ── */
 .sidebar__logo-strip {
-  padding: 24px;
+  padding: 20px;
+  gap: 10px;
   border-bottom: 1px solid var(--sidebar-border);
   display: flex;
   align-items: center;
@@ -201,6 +220,7 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
+  min-width: 0;
 }
 
 .sidebar__logo-wrap {
@@ -220,8 +240,8 @@ body {
 }
 
 .sidebar__logo-img {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
   display: block;
 }
@@ -254,7 +274,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border: none;
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
@@ -272,10 +294,32 @@ body {
   transform: scale(1.08);
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
   .sidebar__close-btn {
     display: none;
   }
+}
+
+/* Desktop-only collapse toggle */
+.sidebar__collapse-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(187, 247, 208, 0.85);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-smooth), color var(--duration-fast) var(--ease-smooth);
+}
+.sidebar__collapse-btn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.sidebar__collapse-btn svg { transition: transform var(--duration-base) var(--ease-smooth); }
+.sidebar--collapsed .sidebar__collapse-btn svg { transform: rotate(180deg); }
+@media (min-width: 1024px) {
+  .sidebar__collapse-btn { display: flex; }
 }
 
 /* ── SIDEBAR: IDENTITY / PROFILE MODULE ── */
@@ -347,7 +391,9 @@ body {
 /* ── SIDEBAR: NAVIGATION ── */
 .sidebar__nav-container {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px;
 }
 
@@ -397,6 +443,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
   padding: 11px 14px;
   border-radius: var(--radius-lg);
   text-decoration: none;
@@ -465,6 +513,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .sidebar__nav-icon {
@@ -479,6 +528,9 @@ body {
 
 .sidebar__nav-label {
   line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Suffix/balance badge */
@@ -493,6 +545,15 @@ body {
   white-space: nowrap;
   letter-spacing: 0.01em;
   transition: all var(--duration-base) var(--ease-smooth);
+}
+
+.sidebar__nav-badge--warn {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+}
+.sidebar__nav-link--active .sidebar__nav-badge--warn {
+  background: rgba(245, 158, 11, 0.18);
+  color: #92400e;
 }
 
 /* ── SIDEBAR: SECURITY STATUS STRIP ── */
@@ -548,8 +609,11 @@ body {
 
 /* ── SIDEBAR: LOGOUT BUTTON ── */
 .sidebar__footer {
-  padding: 14px 16px 18px;
+  padding: 14px 16px calc(18px + var(--safe-bottom));
   border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .sidebar__logout-btn {
@@ -557,7 +621,8 @@ body {
   background: var(--danger-dim);
   border: 1px solid var(--danger-border);
   color: #fca5a5;
-  padding: 13px 20px;
+  min-height: 46px;
+  padding: 12px 20px;
   border-radius: var(--radius-lg);
   font-family: var(--font-ui);
   font-weight: 700;
@@ -589,6 +654,26 @@ body {
   box-shadow: none;
 }
 
+.sidebar__exit-btn {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #d1fae5;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background var(--duration-base) var(--ease-smooth);
+}
+.sidebar__exit-btn:hover { background: rgba(255, 255, 255, 0.15); }
+
+.logout-icon,
 .sidebar__logout-btn .logout-icon {
   transition: transform var(--duration-fast) var(--ease-spring);
 }
@@ -612,7 +697,7 @@ body {
 .appbar {
   background: var(--stage-header-bg);
   border-bottom: 1px solid var(--stage-border);
-  padding: 16px 32px;
+  padding: calc(16px + var(--safe-top)) 32px 16px;
   box-shadow: var(--stage-shadow);
   position: relative;
   z-index: 30;
@@ -625,7 +710,8 @@ body {
 
 @media (max-width: 768px) {
   .appbar {
-    padding: 14px 16px;
+    padding: calc(10px + var(--safe-top)) 14px 10px;
+    gap: 10px;
   }
 }
 
@@ -651,14 +737,19 @@ body {
 .appbar__left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
 .appbar__menu-btn {
   display: none;
   align-items: center;
   justify-content: center;
-  padding: 9px;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  padding: 0;
   border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -676,7 +767,7 @@ body {
   border-color: rgba(148, 163, 184, 0.5);
 }
 
-@media (max-width: 1279px) {
+@media (max-width: 1023px) {
   .appbar__menu-btn {
     display: flex;
   }
@@ -686,6 +777,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .appbar__page-title {
@@ -695,6 +787,9 @@ body {
   color: #0f172a;
   letter-spacing: -0.04em;
   line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .appbar__subtitle {
@@ -702,6 +797,9 @@ body {
   color: #94a3b8;
   font-weight: 500;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .appbar__subtitle strong {
@@ -710,16 +808,19 @@ body {
 }
 
 @media (max-width: 640px) {
-  .appbar__subtitle {
-    display: none;
-  }
+  .appbar__subtitle { font-size: 11.5px; }
 }
 
 /* ── APPBAR: RIGHT CLUSTER ── */
 .appbar__right {
   display: flex;
   align-items: center;
-  gap: 18px;
+  flex-shrink: 0;
+  gap: 14px;
+}
+
+@media (max-width: 768px) {
+  .appbar__right { gap: 8px; }
 }
 
 /* Notification bell */
@@ -728,10 +829,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
-  border: none;
-  background: none;
-  color: #94a3b8;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid #eceff1;
+  background: #fafafa;
+  color: #64748b;
   cursor: pointer;
   border-radius: var(--radius-sm);
   transition:
@@ -746,19 +849,20 @@ body {
 
 .notification-btn__badge {
   position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 17px;
-  height: 17px;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
   background: var(--danger);
   color: #ffffff;
-  font-size: 8.5px;
+  font-size: 9.5px;
   font-weight: 900;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: badgeBounce 1.8s ease-in-out infinite;
+  animation: badgeBounce 1.8s ease-in-out 3;
   font-family: var(--font-ui);
   border: 2px solid #ffffff;
   line-height: 1;
@@ -784,6 +888,10 @@ body {
   .appbar__date-panel {
     display: none;
   }
+}
+
+@media (max-width: 1023px) {
+  .appbar__ssl-badge { display: none !important; }
 }
 
 .appbar__date-text {
@@ -822,11 +930,21 @@ body {
     radial-gradient(ellipse 80% 40% at 50% 0%, rgba(220, 252, 231, 0.35) 0%, transparent 65%),
     #f3f6f4;
   scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
 }
 
 @media (max-width: 768px) {
   .stage__viewport {
-    padding: 16px;
+    padding: 14px;
+  }
+}
+
+/* phone + tablet: leave room for the fixed bottom tab bar */
+@media (max-width: 1023px) {
+  .stage__viewport {
+    padding-bottom: calc(var(--bnav-h) + var(--safe-bottom) + 24px);
   }
 }
 
@@ -1023,6 +1141,14 @@ body {
   font-weight: 500;
 }
 
+/* Wrap a .ledger-table in this so wide statements scroll sideways instead of overflowing the page */
+.ledger-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.ledger-table-wrap .ledger-table { min-width: 560px; }
+
 /* Card containers */
 .content-card {
   background: #ffffff;
@@ -1213,6 +1339,9 @@ body {
   .content-card__body {
     padding: 14px 16px;
   }
+
+  .erp-input { font-size: 16px; min-height: 44px; }
+  .btn-primary, .btn-secondary { min-height: 44px; }
 }
 
 @media (min-width: 1280px) {
@@ -1232,4 +1361,225 @@ body {
 .erp-input:focus-visible {
   outline: 2px solid var(--green-400);
   outline-offset: 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ADDED: APPBAR — LOGOUT BUTTON (home page), PAGE CHIP, BELL PANEL
+   ══════════════════════════════════════════════════════════════ */
+
+/* Logout in the top bar. Phone: icon only (42px target). Tablet/desktop: icon + label. */
+.appbar__logout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+  height: 42px;
+  min-width: 42px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-smooth),
+    border-color var(--duration-fast) var(--ease-smooth),
+    color var(--duration-fast) var(--ease-smooth),
+    box-shadow var(--duration-base) var(--ease-smooth),
+    transform var(--duration-fast) var(--ease-spring);
+}
+
+.appbar__logout-btn:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+}
+
+.appbar__logout-btn:active {
+  transform: scale(0.97);
+  box-shadow: none;
+}
+
+.appbar__logout-label { display: none; }
+
+@media (min-width: 640px) {
+  .appbar__logout-btn { padding: 0 16px; }
+  .appbar__logout-label { display: inline; }
+}
+
+/* Single page-specific figure in the top bar (savings on Savings, loan on Loans...). Hidden on phones: the page hero already shows it. */
+.appbar__chip {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  line-height: 1.1;
+}
+.appbar__chip-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+}
+.appbar__chip-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+.appbar__chip--green { background: #f0fdf4; border: 1px solid #bbf7d0; color: var(--green-700); }
+.appbar__chip--amber { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; }
+@media (min-width: 640px) { .appbar__chip { display: inline-flex; } }
+
+/* Notification dropdown */
+.appbar__bell { position: relative; }
+
+.notif-scrim { position: fixed; inset: 0; z-index: 55; }
+
+.notif-panel {
+  position: fixed;
+  z-index: 60;
+  top: calc(64px + var(--safe-top));
+  left: 12px;
+  right: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+.notif-panel__head {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  font-weight: 800;
+  font-size: 0.8125rem;
+  color: #0f172a;
+}
+.notif-panel__body { max-height: min(60vh, 340px); overflow-y: auto; overscroll-behavior: contain; }
+.notif-panel__empty { text-align: center; color: #94a3b8; font-size: 0.78rem; padding: 24px 16px; }
+.notif-panel__item { padding: 10px 16px; border-bottom: 1px solid #f8fafc; font-size: 0.78rem; }
+.notif-panel__item b { display: block; color: #0f172a; }
+.notif-panel__item span { display: block; margin-top: 2px; color: #64748b; }
+
+@media (min-width: 640px) {
+  .notif-panel { left: auto; right: 24px; width: 340px; }
+}
+@media (min-width: 1024px) {
+  .notif-panel { position: absolute; top: calc(100% + 10px); right: 0; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ADDED: BOTTOM TAB BAR (phone + tablet)
+   ══════════════════════════════════════════════════════════════ */
+.bnav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 35;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  background: #ffffff;
+  border-top: 1px solid rgba(203, 213, 225, 0.7);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.06);
+  padding-bottom: var(--safe-bottom);
+}
+.bnav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: var(--bnav-h);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #64748b;
+  text-decoration: none;
+}
+.bnav__item--active {
+  color: #123c2a;
+  font-weight: 800;
+  box-shadow: inset 0 3px 0 #c6a15b;
+}
+.bnav__item--active svg { color: #b8903f; }
+@media (min-width: 1024px) { .bnav { display: none; } }
+
+/* ══════════════════════════════════════════════════════════════
+   ADDED: COLLAPSIBLE SIDEBAR RAIL (desktop only)
+   ══════════════════════════════════════════════════════════════ */
+@media (min-width: 1024px) {
+  .sidebar--collapsed { width: var(--sidebar-w-collapsed); }
+
+  .sidebar--collapsed .sidebar__logo-strip { flex-direction: column; padding: 16px 0 12px; }
+  .sidebar--collapsed .sidebar__brand-text,
+  .sidebar--collapsed .sidebar__member-info,
+  .sidebar--collapsed .sidebar__profile-card .sidebar__pulse-dot,
+  .sidebar--collapsed .sidebar__nav-section-label,
+  .sidebar--collapsed .sidebar__nav-label,
+  .sidebar--collapsed .sidebar__nav-badge,
+  .sidebar--collapsed .sidebar__security-strip,
+  .sidebar--collapsed .sidebar__btn-label { display: none; }
+
+  .sidebar--collapsed .sidebar__identity { padding: 12px 10px; }
+  .sidebar--collapsed .sidebar__profile-card { padding: 8px 0; justify-content: center; background: none; border: 0; }
+  .sidebar--collapsed .sidebar__nav-container { padding: 12px 10px; }
+  .sidebar--collapsed .sidebar__nav-link { justify-content: center; padding: 11px 0; }
+  .sidebar--collapsed .sidebar__nav-link:hover { transform: none; }
+  .sidebar--collapsed .sidebar__footer { padding-left: 10px; padding-right: 10px; }
+  .sidebar--collapsed .sidebar__logout-btn,
+  .sidebar--collapsed .sidebar__exit-btn { padding: 12px 0; }
+}
+
+/* short laptop screens: keep the footer from crowding the nav */
+@media (min-width: 1024px) and (max-height: 700px) {
+  .sidebar__security-strip { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ADDED: PAGE KPI GRID — each page renders only ITS OWN KPIs
+   <div class="kpi-grid"> <div class="metric-card">…</div> </div>
+   ══════════════════════════════════════════════════════════════ */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (min-width: 640px)  { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } }
+@media (min-width: 1024px) { .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); } }
+
+/* ══════════════════════════════════════════════════════════════
+   ADDED: TOUCH + MOTION PREFERENCES
+   ══════════════════════════════════════════════════════════════ */
+
+/* Touch screens have no hover: don't let "hover lift" effects stick after a tap */
+@media (hover: none) {
+  .sidebar__nav-link:hover,
+  .sidebar__close-btn:hover,
+  .sidebar__logout-btn:hover,
+  .metric-card:hover,
+  .btn-primary:hover,
+  .btn-secondary:hover { transform: none; }
+  .sidebar__logout-btn:hover { box-shadow: none; }
+  .appbar__logout-btn:hover { background: #fef2f2; border-color: #fecaca; color: #b91c1c; box-shadow: none; }
+  .appbar__logout-btn:active { background: var(--danger); border-color: var(--danger); color: #fff; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

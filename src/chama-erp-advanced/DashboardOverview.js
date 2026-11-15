@@ -4,6 +4,7 @@ import { useChama } from "./ChamaContext";
 import {
   Wallet, PiggyBank, HandCoins, HeartHandshake, Users, Clock, Loader2, TrendingUp,
 } from "lucide-react";
+import { Panel } from "./shell/ui";
 import "./DashboardOverview.css";
 
 // -----------------------------------------------------------------------------
@@ -77,18 +78,25 @@ export default function DashboardOverview({ chamaId: chamaIdProp }) {
         <p>{chama?.name} · {chama?.chama_no}</p>
       </div>
 
-      <div className="dov-grid">
-        {cards.map((c) => (
-          <div className={`dov-card ${c.tone}`} key={c.label}>
-            <span className="dov-card-icon"><c.icon size={16} /></span>
-            <div>
-              <p className="dov-card-label">{c.label}</p>
-              <p className="dov-card-value">{c.value}</p>
-              {c.sub && <p className="dov-card-sub">{c.sub}</p>}
-            </div>
+      {[
+        { title: "Money in the Chama", icon: PiggyBank, tone: "green", items: cards.slice(0, 4) },
+        { title: "People and work", icon: Users, tone: "", items: cards.slice(4) },
+      ].map((g) => (
+        <Panel key={g.title} icon={g.icon} title={g.title} tone={g.tone}>
+          <div className="dov-grid">
+            {g.items.map((c) => (
+              <div className={`dov-card ${c.tone}`} key={c.label}>
+                <span className="dov-card-icon"><c.icon size={16} /></span>
+                <div>
+                  <p className="dov-card-label">{c.label}</p>
+                  <p className="dov-card-value">{c.value}</p>
+                  {c.sub && <p className="dov-card-sub">{c.sub}</p>}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </Panel>
+      ))}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import "./umova-theme.css";
 
 // Shared Admin UI primitives. Styles live in umova-theme.css (ua-* classes).
@@ -214,5 +215,49 @@ export function MemberPicker({ members, value, onChange, label = "Member", id = 
         </>
       )}
     </div>
+  );
+}
+
+
+// ───────── break long pages into small cards ─────────
+
+// A card whose body folds away. Use it to split a long page into sections:
+//   <CollapsibleCard title="Repayment history" summary="12 records" defaultOpen={false}>…</CollapsibleCard>
+export function CollapsibleCard({ title, summary, defaultOpen = true, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className={`ua-card ua-collapse ${open ? "open" : ""}`}>
+      <button type="button" className="ua-collapse-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span className="ua-collapse-title">
+          <strong>{title}</strong>
+          {summary && <small>{summary}</small>}
+        </span>
+        <ChevronDown size={18} className="ua-collapse-chev" />
+      </button>
+      {open && <div className="ua-collapse-body">{children}</div>}
+    </section>
+  );
+}
+
+// Small stat tile for a row of mini cards inside a page.
+export function MiniStat({ label, value, tone }) {
+  return (
+    <div className={`ua-mini ${tone || ""}`}>
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+// One page, several views: tabs on top, only the active panel renders.
+// sections: [{ key, label, count?, render: () => node }]
+export function SectionTabs({ sections, initial }) {
+  const [key, setKey] = useState(initial || sections[0]?.key);
+  const active = sections.find((s) => s.key === key) || sections[0];
+  return (
+    <>
+      <Tabs value={active.key} onChange={setKey} items={sections.map(({ key: k, label, count }) => ({ key: k, label, count }))} />
+      {active.render()}
+    </>
   );
 }

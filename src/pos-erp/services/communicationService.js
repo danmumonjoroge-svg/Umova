@@ -19,6 +19,7 @@
 // real API nothing here can observe delivery (§43).
 
 import { posSupabase as supabase } from './posSupabaseClient';
+import { getRegisteredBusinessName } from './businessIdentity';
 
 // §52's exact default set — seeded per-business on first visit to
 // CustomerCommunicationPage.jsx (via templateService.ensureDefaults()),
@@ -33,7 +34,7 @@ const DEFAULT_TEMPLATES = [
   { message_type: 'INVOICE', channel: 'SMS', body: 'Hello {{customer_name}}, your {{period}} invoice {{invoice_number}} is KES {{amount}}. Amount outstanding: KES {{outstanding}}. Due {{due_date}}. {{payment_hint}} Thank you, {{business_name}}.' },
   { message_type: 'INVOICE', channel: 'WHATSAPP', body: 'Hi {{customer_name}}, here is your {{period}} invoice {{invoice_number}} from {{business_name}}.\nAmount: KES {{amount}}\nOutstanding: KES {{outstanding}}\nDue: {{due_date}}\n{{payment_hint}}' },
   { message_type: 'INVOICE', channel: 'EMAIL', subject: 'Invoice {{invoice_number}} — {{period}}', body: 'Hello {{customer_name}},\n\nYour {{period}} invoice {{invoice_number}} is KES {{amount}} (outstanding KES {{outstanding}}), due {{due_date}}.\n{{payment_hint}}\n\nThank you,\n{{business_name}}' },
-  { message_type: 'RECEIPT', channel: 'SMS', body: 'Receipt {{receipt_number}} for {{amount}} — thank you for shopping with {{business_name}}.' },
+  { message_type: 'RECEIPT', channel: 'SMS', body: 'Thank you for shopping with {{business_name}}! Receipt {{receipt_number}} for {{amount}}. Karibu tena.' },
   { message_type: 'STATEMENT', channel: 'SMS', body: 'Hi {{customer_name}}, your current balance with {{business_name}} is {{balance}}.' },
   { message_type: 'APPOINTMENT_REMINDER', channel: 'SMS', body: 'Reminder: your appointment at {{business_name}} is at {{appointment_time}}.' },
 
@@ -51,7 +52,7 @@ const DEFAULT_TEMPLATES = [
   // not imply a date that was never recorded. §7: do not fake ageing.
   { message_type: 'PAYMENT_DUE', channel: 'WHATSAPP', body: 'Hi {{customer_name}}, a reminder that your balance with {{business_name}} is KES {{balance}}. Kindly settle when you can. Thank you.' },
   { message_type: 'PAYMENT_OVERDUE', channel: 'WHATSAPP', body: 'Hi {{customer_name}}, your balance with {{business_name}} is KES {{balance}} and is now overdue. Kindly settle when you can. Thank you.' },
-  { message_type: 'RECEIPT', channel: 'WHATSAPP', body: 'Hi {{customer_name}}, here is your receipt {{receipt_number}} for KES {{amount}}. Thank you for your business. — {{business_name}}' },
+  { message_type: 'RECEIPT', channel: 'WHATSAPP', body: 'Hi {{customer_name}}, thank you for shopping with {{business_name}}! Here is your receipt {{receipt_number}} for KES {{amount}}. Karibu tena.' },
   { message_type: 'STATEMENT', channel: 'WHATSAPP', body: 'Hi {{customer_name}}, your current balance with {{business_name}} is KES {{balance}}. Reply here if anything looks wrong.' },
   { message_type: 'APPOINTMENT_REMINDER', channel: 'WHATSAPP', body: 'Hi {{customer_name}}, this is a reminder about your appointment at {{business_name}} at {{appointment_time}}. See you then!' },
 ];
@@ -75,8 +76,67 @@ const DEFAULT_SUPPLIER_TEMPLATES = [
 // lb_customers row to attach a tracked communicationLogService entry
 // to — see receiptService.js's header for why that path can't use
 // whatsappService.prepare() directly.
+//
+// {{business_name}} is ALWAYS the business's registered name (see
+// businessIdentity.js). It wins over any business_name a caller passes, so a
+// screen that forgets it — or passes the editable profile name — still sends
+// the registered one. If no registered name is known (should not happen once
+// signed in) the caller's value is used, and failing that the placeholder is
+// left visible rather than silently dropped.
 export function renderTemplate(body, variables) {
-  return (body || '').replace(/\{\{(\w+)\}\}/g, (match, key) => (variables[key] != null ? String(variables[key]) : match));
+  const registered = getRegisteredBusinessName();
+  const vars = registered ? { ...variables, business_name: registered } : (variables || {});
+  return (body || '').replace(/\{\{(\w+)\}\}/g, (match, key) => (vars[key] != null && vars[key] !== '' ? String(vars[key]) : match));
+}
+
+// ------------------------------------------------------------------
+// Message groups — how messages are organised for the owner.
+// Purely a display grouping over the existing message_type values (the
+// database enum is unchanged, so no migration is needed). "Thank you after
+// sale" is the RECEIPT message: it is what goes out right after a sale and
+// its wording thanks the customer.
+// ------------------------------------------------------------------
+export const MESSAGE_GROUPS = [
+  { key: 'reminders', label: 'Reminders', hint: 'Payment and appointment reminders', types: ['PAYMENT_DUE', 'PAYMENT_OVERDUE', 'APPOINTMENT_REMINDER'] },
+  { key: 'thankyou', label: 'Thank you after sale', hint: 'Receipt and thank-you after a sale or payment', types: ['RECEIPT', 'PAYMENT_RECEIVED'] },
+  { key: 'accounts', label: 'Statements & invoices', hint: 'Balance statements and invoices', types: ['STATEMENT', 'INVOICE'] },
+  { key: 'welcome', label: 'Welcome', hint: 'Greeting a new customer', types: ['WELCOME'] },
+  { key: 'suppliers', label: 'Suppliers', hint: 'Orders and payment notes to suppliers', types: ['SUPPLIER_ORDER', 'SUPPLIER_PAYMENT_SENT', 'SUPPLIER_PAYMENT_DUE', 'SUPPLIER_STATEMENT', 'SUPPLIER_DELIVERY_REMINDER'] },
+];
+const OTHER_GROUP = { key: 'other', label: 'Other', hint: '', types: [] };
+
+export function groupOfType(messageType) {
+  return MESSAGE_GROUPS.find(g => g.types.includes(messageType)) || OTHER_GROUP;
+}
+
+// Plain names an owner would use, instead of RAW_ENUM_VALUES.
+const TYPE_LABELS = {
+  PAYMENT_DUE: 'Payment reminder',
+  PAYMENT_OVERDUE: 'Overdue payment reminder',
+  APPOINTMENT_REMINDER: 'Appointment reminder',
+  RECEIPT: 'Thank you — receipt',
+  PAYMENT_RECEIVED: 'Thank you — payment received',
+  STATEMENT: 'Balance statement',
+  INVOICE: 'Invoice',
+  WELCOME: 'Welcome',
+  SUPPLIER_ORDER: 'Place an order',
+  SUPPLIER_PAYMENT_SENT: 'Payment sent',
+  SUPPLIER_PAYMENT_DUE: 'Balance reminder',
+  SUPPLIER_STATEMENT: 'Balance statement',
+  SUPPLIER_DELIVERY_REMINDER: 'Delivery reminder',
+};
+export function messageTypeLabel(messageType) {
+  return TYPE_LABELS[messageType] || String(messageType || '').replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase());
+}
+
+/** Groups a list of rows (templates or history) that have a message_type. Empty groups are left out. */
+export function groupMessages(rows) {
+  const out = [];
+  for (const g of [...MESSAGE_GROUPS, OTHER_GROUP]) {
+    const items = (rows || []).filter(r => groupOfType(r.message_type).key === g.key);
+    if (items.length) out.push({ ...g, items });
+  }
+  return out;
 }
 
 export const templateService = {

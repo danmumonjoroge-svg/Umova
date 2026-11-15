@@ -23,6 +23,7 @@ import { HardHat, Plus, Loader2, Info, Wrench, Archive } from 'lucide-react';
 import { useAssets } from '../hooks/useAssets';
 import { useSuppliers } from '../hooks/useSuppliers';
 import { assetService, bookValue, monthlyDepreciation, monthBounds, DEPRECIATION_METHODS } from '../services/assetService';
+import { FitPage, AddButton, SearchBox, FilterChips, MiniStats, CardGrid, DataCard, IconTile, TextBtn, Notice, LoadingBlock, EmptyBlock } from '../components/CardKit';
 import { singleFlight } from '../utils/singleFlight';
 
 const CATEGORY_SUGGESTIONS = ['Fridge', 'Freezer', 'Vehicle', 'Computer', 'Furniture', 'Machinery', 'Equipment'];
@@ -58,6 +59,8 @@ function fmt(n) {
 }
 
 export default function AssetsPage() {
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');
   const { assets, summary, loading, error, create, update, setMaintenance, dispose, postDepreciation } = useAssets();
   const { suppliers } = useSuppliers();
 
@@ -152,179 +155,150 @@ export default function AssetsPage() {
     return null;
   };
 
+  const shown = assets.filter((a) => {
+    const q = search.toLowerCase();
+    const okSearch = !search || a.name?.toLowerCase().includes(q) || a.category?.toLowerCase().includes(q) || a.location?.toLowerCase().includes(q);
+    const okFilter = filter === 'all' || (filter === 'active' && a.status === 'ACTIVE') || (filter === 'repair' && a.status === 'UNDER_MAINTENANCE') || (filter === 'gone' && (a.status === 'DISPOSED' || a.status === 'WRITTEN_OFF'));
+    return okSearch && okFilter;
+  });
+
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-2">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <HardHat size={22} className="text-amber-600" /> My Equipment
-          </h1>
-          <p className="text-slate-500 text-sm">
-            Fridges, freezers, vehicles, furniture — the things you bought once and keep using.
-            <span className="text-slate-400"> (Accountant: fixed asset register &amp; depreciation.)</span>
-          </p>
-        </div>
-        <button onClick={() => (showForm ? setShowForm(false) : openCreate())} className="bg-emerald-800 hover:bg-emerald-900 text-white px-4 py-2 rounded-xl font-semibold shadow-[0_2px_0_0_rgba(251,191,36,0.6)] flex items-center gap-2">
-          <Plus size={16} /> {showForm ? 'Cancel' : 'Add Equipment'}
-        </button>
-      </div>
-
-      {/* Said plainly, because assuming otherwise means double-counting. */}
-      <div className="flex items-start gap-2 bg-slate-50 border border-slate-200 text-slate-600 text-sm rounded-xl px-4 py-3 my-4">
-        <Info size={16} className="mt-0.5 shrink-0 text-slate-400" />
-        <span>
-          Adding equipment here records what you own — it does not take the money out of My Money or add it to People I Owe.
-          If you paid for it from the business, record that separately. Wear and tear, once you record it, does show up in My Profit.
-        </span>
-      </div>
-
-      {summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-            <div className="text-xs font-bold text-slate-400 uppercase">What it all cost</div>
-            <div className="text-xl font-black text-slate-800">{fmt(summary.cost)}</div>
-          </div>
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-            <div className="text-xs font-bold text-slate-400 uppercase">Wear and tear so far</div>
-            <div className="text-xl font-black text-amber-700">{fmt(summary.accumulated)}</div>
-          </div>
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-            <div className="text-xs font-bold text-slate-400 uppercase">Worth now</div>
-            <div className="text-xl font-black text-emerald-800">{fmt(summary.netBookValue)}</div>
-          </div>
+    <FitPage
+      title="My Equipment"
+      icon={HardHat}
+      subtitle="Fridges, freezers, vehicles, furniture — bought once, used for years."
+      action={<AddButton onClick={() => (showForm ? setShowForm(false) : openCreate())} open={showForm} label="Equipment" icon={Plus} />}
+      summary={summary && (
+        <MiniStats items={[
+          { label: 'Cost', value: fmt(summary.cost).replace(/\.00$/, '') },
+          { label: 'Wear & tear', value: fmt(summary.accumulated).replace(/\.00$/, ''), tone: 'gold' },
+          { label: 'Worth now', value: fmt(summary.netBookValue).replace(/\.00$/, ''), tone: 'good' },
+        ]} />
+      )}
+      toolbar={(
+        <div className="space-y-2">
+          <SearchBox value={search} onChange={setSearch} placeholder="Search equipment…" />
+          <FilterChips value={filter} onChange={setFilter} options={[
+            { key: 'all', label: 'All' }, { key: 'active', label: 'In use' },
+            { key: 'repair', label: 'Repairing' }, { key: 'gone', label: 'Sold / gone' },
+          ]} />
         </div>
       )}
+    >
+      {/* Said plainly, because assuming otherwise means double-counting. */}
+      <Notice tone="gold">
+        <span className="flex items-start gap-2"><Info size={14} className="mt-0.5 shrink-0" />
+          <span>Adding equipment records what you own — it does not take money out of My Money or add to People I Owe. Wear and tear, once recorded, shows in My Profit.</span>
+        </span>
+      </Notice>
 
-      {actionError && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{actionError}</div>}
+      {actionError && <div className="mb-2 bg-[#FBE4E0] border border-[#F0C2BB] text-[#8F2E24] text-sm rounded-xl px-3 py-2">{actionError}</div>}
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white p-4 rounded-2xl shadow mb-6 grid grid-cols-1 md:grid-cols-3 gap-3 border border-slate-100">
+        <form onSubmit={handleSubmit} className="bg-white p-3 rounded-xl mb-3 grid grid-cols-1 md:grid-cols-3 gap-2.5 border border-[#E3DBB8] border-t-[3px] border-t-[#C9A227]">
           {formError && <div className="md:col-span-3 bg-red-50 text-red-700 text-sm rounded px-3 py-2">{formError}</div>}
 
-          <input required placeholder="What is it? (e.g. Chest freezer)" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
-          <input list="asset-categories" placeholder="Type (fridge, vehicle…)" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
+          <input required placeholder="What is it? (e.g. Chest freezer)" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm" />
+          <input list="asset-categories" placeholder="Type (fridge, vehicle…)" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm" />
           <datalist id="asset-categories">{CATEGORY_SUGGESTIONS.map(c => <option key={c} value={c} />)}</datalist>
-          <select value={form.supplier_id} onChange={e => setForm({ ...form, supplier_id: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2 text-sm">
+          <select value={form.supplier_id} onChange={e => setForm({ ...form, supplier_id: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm text-sm">
             <option value="">Bought from (optional)</option>
             {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
 
           <div className="flex flex-col gap-1">
             <label className="text-xs text-slate-500">When you bought it</label>
-            <input required type="date" value={form.purchase_date} onChange={e => setForm({ ...form, purchase_date: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
+            <input required type="date" value={form.purchase_date} onChange={e => setForm({ ...form, purchase_date: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-slate-500">What it cost (KES)</label>
-            <input required type="number" min="0" step="0.01" value={form.purchase_cost} onChange={e => setForm({ ...form, purchase_cost: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
+            <input required type="number" min="0" step="0.01" value={form.purchase_cost} onChange={e => setForm({ ...form, purchase_cost: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-slate-500">What it'll be worth at the end (KES)</label>
-            <input type="number" min="0" step="0.01" value={form.salvage_value} onChange={e => setForm({ ...form, salvage_value: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
+            <input type="number" min="0" step="0.01" value={form.salvage_value} onChange={e => setForm({ ...form, salvage_value: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm" />
           </div>
 
-          <input placeholder="Serial number (optional)" value={form.serial_number} onChange={e => setForm({ ...form, serial_number: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
-          <input placeholder="Where it is (optional)" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
+          <input placeholder="Serial number (optional)" value={form.serial_number} onChange={e => setForm({ ...form, serial_number: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm" />
+          <input placeholder="Where it is (optional)" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm" />
           <div className="flex flex-col gap-1">
             <label className="text-xs text-slate-500">How many years it will last</label>
-            <input type="number" min="1" value={form.useful_life_years} onChange={e => setForm({ ...form, useful_life_years: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
+            <input type="number" min="1" value={form.useful_life_years} onChange={e => setForm({ ...form, useful_life_years: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm" />
           </div>
 
           <div className="flex flex-col gap-1 md:col-span-2">
             <label className="text-xs text-slate-500">How its value should drop over time</label>
-            <select value={form.depreciation_method} onChange={e => setForm({ ...form, depreciation_method: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2">
+            <select value={form.depreciation_method} onChange={e => setForm({ ...form, depreciation_method: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm">
               {DEPRECIATION_METHODS.map(m => <option key={m} value={m}>{METHOD_LABELS[m]}</option>)}
             </select>
           </div>
           {form.depreciation_method === 'REDUCING_BALANCE' && (
             <div className="flex flex-col gap-1">
               <label className="text-xs text-slate-500">Percentage each year</label>
-              <input type="number" min="0" max="100" step="0.01" value={form.depreciation_rate} onChange={e => setForm({ ...form, depreciation_rate: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2" />
+              <input type="number" min="0" max="100" step="0.01" value={form.depreciation_rate} onChange={e => setForm({ ...form, depreciation_rate: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm" />
             </div>
           )}
 
-          <input placeholder="Notes (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2 md:col-span-3" />
+          <input placeholder="Notes (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm md:col-span-3" />
 
-          <button type="submit" disabled={saving} className="bg-emerald-800 hover:bg-emerald-900 text-white px-6 py-2 rounded-xl md:col-span-3 disabled:opacity-60 font-semibold shadow-[0_2px_0_0_rgba(251,191,36,0.6)]">
+          <button type="submit" disabled={saving} className="bg-[#1F6B45] hover:bg-[#17553A] border-b-2 border-[#C9A227] text-white min-h-[42px] rounded-lg md:col-span-3 disabled:opacity-60 font-semibold">
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Save'}
           </button>
         </form>
       )}
 
       {loading ? (
-        <div className="text-center py-10 text-slate-500"><Loader2 size={16} className="animate-spin inline mr-2" /> Loading…</div>
+        <LoadingBlock />
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-4 py-3">Couldn't load equipment: {error}</div>
+        <Notice>Couldn't load equipment: {error}</Notice>
+      ) : shown.length === 0 ? (
+        <EmptyBlock>{assets.length === 0 ? 'Nothing here yet. Add the fridge, the freezer, the delivery bike.' : 'No equipment matches.'}</EmptyBlock>
       ) : (
-        <div className="bg-white rounded-2xl shadow overflow-x-auto border border-slate-100">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-2">Item</th><th>Bought</th><th>Cost</th>
-                <th>Wear and tear</th><th>Worth now</th><th>Status</th><th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map(a => {
-                const blocker = depreciationBlocker(a);
-                const monthly = monthlyDepreciation(a);
-                const result = assetService.disposalResult(a);
-                return (
-                  <tr key={a.id} className="border-t border-slate-100 align-top">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-800">{a.name}</div>
-                      <div className="text-xs text-slate-400">
-                        {[a.category, a.location, a.supplier?.name && `from ${a.supplier.name}`].filter(Boolean).join(' · ') || '—'}
-                      </div>
-                      {result != null && (
-                        <div className={`text-xs mt-1 font-semibold ${result >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                          {result >= 0 ? 'Made' : 'Lost'} {fmt(Math.abs(result))} on disposal
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 text-slate-500 whitespace-nowrap">{a.purchase_date}</td>
-                    <td className="py-3">{fmt(a.purchase_cost)}</td>
-                    <td className="py-3 text-amber-700">{fmt(a.accumulated_depreciation)}</td>
-                    <td className="py-3 font-bold text-emerald-800">{fmt(bookValue(a))}</td>
-                    <td className="py-3">
-                      <span className={`text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <div className="flex flex-wrap gap-3">
-                        <button onClick={() => openEdit(a)} className="text-emerald-700 text-sm hover:underline">Edit</button>
-
-                        {blocker ? (
-                          <span className="text-sm text-slate-300" title="Wear and tear can't be worked out yet">{blocker}</span>
-                        ) : (
-                          <button
-                            onClick={() => handleDepreciate(a)}
-                            disabled={busyId === a.id}
-                            className="text-amber-700 text-sm hover:underline disabled:text-slate-300"
-                            title={`Records ${fmt(monthly)} of wear and tear for this month`}
-                          >
-                            {busyId === a.id ? 'Recording…' : `Record wear (${fmt(monthly)})`}
-                          </button>
-                        )}
-
-                        {a.status === 'ACTIVE' && (
-                          <button onClick={() => setMaintenance(a.id, true)} className="text-slate-600 text-sm hover:underline flex items-center gap-1"><Wrench size={13} /> Repairing</button>
-                        )}
-                        {a.status === 'UNDER_MAINTENANCE' && (
-                          <button onClick={() => setMaintenance(a.id, false)} className="text-emerald-700 text-sm hover:underline">Back in use</button>
-                        )}
-                        {a.status !== 'DISPOSED' && a.status !== 'WRITTEN_OFF' && (
-                          <button onClick={() => { setDisposing(a); setActionError(''); }} className="text-slate-500 text-sm hover:text-red-600 flex items-center gap-1"><Archive size={13} /> Sold / gone</button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {assets.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">Nothing here yet. Add the fridge, the freezer, the delivery bike.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <CardGrid>
+          {shown.map((a) => {
+            const blocker = depreciationBlocker(a);
+            const monthly = monthlyDepreciation(a);
+            const result = assetService.disposalResult(a);
+            const tone = a.status === 'ACTIVE' ? 'good' : a.status === 'UNDER_MAINTENANCE' ? 'warn' : 'neutral';
+            return (
+              <DataCard
+                key={a.id}
+                dim={a.status === 'DISPOSED' || a.status === 'WRITTEN_OFF'}
+                thumb={<IconTile icon={HardHat} tone="gold" />}
+                title={a.name}
+                subtitle={[a.category, a.location].filter(Boolean).join(' · ') || a.purchase_date}
+                pill={{ tone, label: STATUS_LABEL[a.status] }}
+                big={{ value: fmt(bookValue(a)).replace(/\.00$/, ''), tone: 'good', label: 'worth now' }}
+                metrics={[
+                  { label: 'Cost', value: fmt(a.purchase_cost).replace(/\.00$/, '') },
+                  { label: 'Wear & tear', value: fmt(a.accumulated_depreciation).replace(/\.00$/, ''), tone: 'gold' },
+                ]}
+                actions={(
+                  <>
+                    <TextBtn onClick={() => openEdit(a)}>Edit</TextBtn>
+                    {!blocker && a.status !== 'DISPOSED' && a.status !== 'WRITTEN_OFF' && (
+                      <TextBtn tone="gold" disabled={busyId === a.id} onClick={() => handleDepreciate(a)} title={`Records ${fmt(monthly)} of wear and tear for this month`}>
+                        {busyId === a.id ? 'Recording…' : 'Record wear'}
+                      </TextBtn>
+                    )}
+                    {a.status === 'ACTIVE' && <TextBtn onClick={() => setMaintenance(a.id, true)}>Repairing</TextBtn>}
+                    {a.status === 'UNDER_MAINTENANCE' && <TextBtn onClick={() => setMaintenance(a.id, false)}>Back in use</TextBtn>}
+                    {a.status !== 'DISPOSED' && a.status !== 'WRITTEN_OFF' && (
+                      <TextBtn tone="danger" onClick={() => { setDisposing(a); setActionError(''); }}>Sold / gone</TextBtn>
+                    )}
+                  </>
+                )}
+              >
+                {blocker && <div className="mt-1 text-[10px] text-[#A29E80] leading-tight">{blocker}</div>}
+                {result != null && (
+                  <div className={`mt-1 text-[10.5px] font-semibold ${result >= 0 ? 'text-[#1B6B45]' : 'text-[#B23A2E]'}`}>
+                    {result >= 0 ? 'Made' : 'Lost'} {fmt(Math.abs(result))} on disposal
+                  </div>
+                )}
+              </DataCard>
+            );
+          })}
+        </CardGrid>
       )}
 
       {/* Disposal */}
@@ -337,11 +311,11 @@ export default function AssetsPage() {
             </p>
             <div className="flex flex-col gap-1">
               <label className="text-xs text-slate-500">When</label>
-              <input required type="date" value={disposalForm.disposalDate} onChange={e => setDisposalForm({ ...disposalForm, disposalDate: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2 w-full" />
+              <input required type="date" value={disposalForm.disposalDate} onChange={e => setDisposalForm({ ...disposalForm, disposalDate: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm w-full" />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs text-slate-500">What you got for it (KES)</label>
-              <input type="number" min="0" step="0.01" value={disposalForm.proceeds} onChange={e => setDisposalForm({ ...disposalForm, proceeds: e.target.value })} className="border border-slate-200 rounded-xl px-3 py-2 w-full" />
+              <input type="number" min="0" step="0.01" value={disposalForm.proceeds} onChange={e => setDisposalForm({ ...disposalForm, proceeds: e.target.value })} className="border border-[#E3DBB8] rounded-lg px-3 min-h-[40px] text-sm w-full" />
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input type="checkbox" checked={disposalForm.writtenOff} onChange={e => setDisposalForm({ ...disposalForm, writtenOff: e.target.checked, proceeds: e.target.checked ? '0' : disposalForm.proceeds })} />
@@ -351,7 +325,7 @@ export default function AssetsPage() {
               This doesn't add the money to My Money. If you were paid for it, record that separately.
             </p>
             <div className="flex gap-2 pt-1">
-              <button type="submit" disabled={busyId === disposing.id} className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white py-2 rounded-xl font-semibold disabled:opacity-60">
+              <button type="submit" disabled={busyId === disposing.id} className="flex-1 bg-[#1F6B45] hover:bg-[#17553A] border-b-2 border-[#C9A227] text-white py-2 rounded-xl font-semibold disabled:opacity-60">
                 {busyId === disposing.id ? 'Saving…' : 'Confirm'}
               </button>
               <button type="button" onClick={() => setDisposing(null)} className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600">Cancel</button>
@@ -359,6 +333,6 @@ export default function AssetsPage() {
           </form>
         </div>
       )}
-    </div>
+    </FitPage>
   );
 }

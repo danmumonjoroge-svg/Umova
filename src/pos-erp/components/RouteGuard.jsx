@@ -19,7 +19,7 @@ export default function RouteGuard() {
   const { pathname } = useLocation();
   const access = useAccess();
   if (access(pathname)) return <Outlet />;
-  // The till is the default landing page; people without sales access go Home instead of a dead end.
+  // Home is the default landing page.
   if (pathname === '/pos' || pathname === '/pos/') return <Navigate to="/pos/dashboard" replace />;
   return (
     <div className="p-6 max-w-md mx-auto text-center">

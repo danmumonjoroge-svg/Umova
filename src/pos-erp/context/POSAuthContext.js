@@ -24,6 +24,7 @@ import { saveOfflineIdentity, loadOfflineIdentity, clearOfflineIdentity, canReac
 import { isNetworkFailure } from "../offline/netErrors";
 import { ensureCacheOwner, clearOfflineCaches } from "../offline/offlineCache";
 import { countUnsent } from "../offline/syncEngine";
+import { setRegisteredBusinessName } from "../services/businessIdentity";
 
 const POSAuthContext = createContext(null);
 
@@ -58,6 +59,10 @@ export function POSAuthProvider({ children }) {
   const validating = useRef(false);
   const stageRef = useRef("checking");
   useEffect(() => { stageRef.current = authStage; }, [authStage]);
+
+  // Messages (WhatsApp / SMS / email / receipts / invoices) always carry the REGISTERED business name. Keep it in step with
+  // whichever business is signed in, and clear it the moment nobody is, so one business's name never reaches another's messages.
+  useEffect(() => { setRegisteredBusinessName(tenant?.business_name || ""); }, [tenant]);
 
   const forceSignOut = useCallback(async (notice) => {
     clearOfflineIdentity(); // a signed-out (or refused) person must not be able to re-enter offline

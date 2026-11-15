@@ -28,13 +28,23 @@
 // disappearing from view.
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Smartphone, Loader2, CheckCircle2, Clock, XCircle, AlertTriangle, Settings as SettingsIcon, ChevronDown, ExternalLink } from 'lucide-react';
+import { Smartphone, Loader2, CheckCircle2, Clock, XCircle, AlertTriangle, Settings as SettingsIcon, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, ArrowDownLeft, RefreshCw } from 'lucide-react';
 import { mpesaService } from '../services/mpesaService';
 import { usePosErpAuth } from '../auth/usePosErpAuth';
 import { singleFlight } from '../utils/singleFlight';
+import MpesaInbox from '../components/MpesaInbox';
+import { usePermissions } from '../navigation/PermissionsContext';
 
 function fmt(n) { return (Number(n) || 0).toLocaleString(); }
-function todayISO() { return new Date().toISOString().slice(0, 10); }
+function isoLocal(d) { const z = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; }
+function todayISO() { return isoLocal(new Date()); }
+function shiftDay(iso, by) { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + by); return isoLocal(d); }
+function prettyDay(iso) {
+  if (iso === todayISO()) return 'Today';
+  if (iso === shiftDay(todayISO(), -1)) return 'Yesterday';
+  return new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
+const timeOf = (v) => new Date(v).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
 // ============================================================
 // Phase 13 -- M-Pesa setup, in the app, for the owner themselves.
@@ -70,7 +80,7 @@ function MpesaSettings({ tenant }) {
   const [savedMsg, setSavedMsg] = useState('');
 
   const [form, setForm] = useState({
-    shortcode: '', environment: 'sandbox', isActive: false,
+    shortcode: '', environment: 'sandbox', isActive: false, accountType: 'paybill', tillNumber: '',
     consumerKey: '', consumerSecret: '', passkey: '',
   });
 
@@ -82,7 +92,7 @@ function MpesaSettings({ tenant }) {
       setConfig(cfg);
       if (!cfg?.is_active) setOpen(true); // not switched on yet -> show the setup instead of hiding it
       if (cfg) {
-        setForm(f => ({ ...f, shortcode: cfg.shortcode || '', environment: cfg.environment || 'sandbox', isActive: !!cfg.is_active }));
+        setForm(f => ({ ...f, shortcode: cfg.shortcode || '', environment: cfg.environment || 'sandbox', isActive: !!cfg.is_active, accountType: cfg.account_type || 'paybill', tillNumber: cfg.till_number || '' }));
       }
     } catch (err) {
       setError(err.message);
@@ -100,6 +110,7 @@ function MpesaSettings({ tenant }) {
       const result = await mpesaService.saveConfig({
         tenantId: tenant?.id, businessId: tenant?.business_id,
         shortcode: form.shortcode, environment: form.environment, isActive: form.isActive,
+        accountType: form.accountType, tillNumber: form.tillNumber,
         // Blank means "leave whatever's already saved alone" -- only
         // send a field the owner actually typed something into.
         consumerKey: form.consumerKey || undefined,
@@ -120,7 +131,8 @@ function MpesaSettings({ tenant }) {
     }
   });
 
-  const readyToTurnOn = config?.has_consumer_key && config?.has_consumer_secret && config?.has_passkey && form.shortcode;
+  // A credential counts if it is already saved OR typed in now (it is saved together with the switch when Save is pressed).
+  const readyToTurnOn = !!form.shortcode && (config?.has_consumer_key || !!form.consumerKey) && (config?.has_consumer_secret || !!form.consumerSecret) && (config?.has_passkey || !!form.passkey);
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl mb-6 overflow-hidden">
@@ -156,10 +168,25 @@ function MpesaSettings({ tenant }) {
               {savedMsg && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl px-4 py-3">{savedMsg}</div>}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Till / Paybill number" help={FIELD_HELP.shortcode}>
+                <Field label="What do customers pay to?">
+                  <select value={form.accountType} onChange={e => setForm({ ...form, accountType: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm">
+                    <option value="paybill">A Paybill number</option>
+                    <option value="till">A Till number (Buy Goods)</option>
+                  </select>
+                </Field>
+
+                <Field label={form.accountType === 'till' ? 'Store / Head Office number' : 'Paybill number'}
+                  help={form.accountType === 'till' ? 'The number Safaricom approved your Daraja app for (what you used in Go Live).' : FIELD_HELP.shortcode}>
                   <input required value={form.shortcode} onChange={e => setForm({ ...form, shortcode: e.target.value })}
                     placeholder="e.g. 174379" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
                 </Field>
+
+                {form.accountType === 'till' && (
+                  <Field label="Till number" help="The Buy Goods till number customers pay to. This is where the prompt takes money.">
+                    <input required value={form.tillNumber} onChange={e => setForm({ ...form, tillNumber: e.target.value })}
+                      placeholder="e.g. 5123456" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+                  </Field>
+                )}
 
                 <Field label="Mode">
                   <select value={form.environment} onChange={e => setForm({ ...form, environment: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm">
@@ -240,6 +267,13 @@ export default function MpesaPage() {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [manualRows, setManualRows] = useState([]);
+  const { can } = usePermissions();
+  const [c2bConfig, setC2bConfig] = useState(null);
+  const loadC2bConfig = useCallback(() => {
+    if (!tenant?.business_id) return;
+    mpesaService.getConfig(tenant.business_id).then(setC2bConfig).catch(() => setC2bConfig(null));
+  }, [tenant]);
+  useEffect(() => { loadC2bConfig(); }, [loadC2bConfig]);
 
   const load = useCallback(async () => {
     if (!tenant?.business_id) return;
@@ -252,6 +286,7 @@ export default function MpesaPage() {
         setManualRows(await mpesaService.getManualForDate({
           businessId: tenant.business_id, date,
           stkReceipts: stk.map((r) => r.mpesa_receipt_number),
+          stkSaleIds: stk.map((r) => r.sale_id),
         }));
       } catch (manualErr) {
         console.error('[MpesaPage] manual payments failed to load:', manualErr);
@@ -269,13 +304,24 @@ export default function MpesaPage() {
   // The old "Received" tile summed EVERY request, failed and cancelled
   // included, so it overstated what came in. First tile is now real money
   // only: confirmed prompts + codes recorded at the till.
-  const totals = rows.reduce((acc, r) => {
+  const seenReceipts = new Set();
+  const uniqueRows = rows.filter((r) => {
+    const k = r.mpesa_receipt_number && String(r.mpesa_receipt_number).trim().toUpperCase();
+    if (!k || r.status !== 'PAID') return true;
+    if (seenReceipts.has(k)) return false;
+    seenReceipts.add(k); return true;
+  });
+  const totals = uniqueRows.reduce((acc, r) => {
     if (r.status === 'PAID') acc.confirmed += Number(r.amount || 0);
     if (r.status === 'PENDING') acc.pending += Number(r.amount || 0);
     if (r.status === 'NEEDS_ATTENTION') acc.needsAttention += Number(r.amount || 0);
     return acc;
   }, { confirmed: 0, pending: 0, needsAttention: 0 });
-  const manualTotal = manualRows.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  // Typed at the till vs. paid through a customer prompt (see getManualForDate): only the first kind is "typed".
+  const typedRows = manualRows.filter((p) => !p.via_prompt);
+  const promptExtraRows = manualRows.filter((p) => p.via_prompt);
+  const manualTotal = typedRows.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  totals.confirmed += promptExtraRows.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
   const matched = rows.filter(r => r.status === 'PAID' && r.sale_id);
   const unmatched = rows.filter(r => r.status === 'PAID' && !r.sale_id); // see header note -- expected to always be empty under this design
@@ -295,128 +341,138 @@ export default function MpesaPage() {
     }
   };
 
+  const [filter, setFilter] = useState('all');
+  const paidCount = uniqueRows.filter((r) => r.status === 'PAID').length;
+  const inCount = paidCount + manualRows.length;
+  const inTotal = totals.confirmed + manualTotal;
+  const waitCount = pending.length + needsAttention.length;
+  const waitTotal = totals.pending + totals.needsAttention;
+
+  // One list for the whole day, newest first, instead of five separate boxes.
+  const feed = [
+    ...uniqueRows.filter((r) => r.status === 'PAID').map((r) => ({
+      key: `s${r.id}`, kind: 'in', at: r.requested_at, amount: r.amount,
+      title: r.customer?.name || r.phone || 'Customer', sub: [r.mpesa_receipt_number, r.sale ? `Sale #${r.sale.sale_number}` : null].filter(Boolean).join(' · '), pill: 'Paid', row: r,
+    })),
+    ...manualRows.map((p) => ({
+      key: `m${p.id}`, kind: 'in', at: p.created_at, amount: p.amount,
+      title: p.via_prompt ? 'Customer prompt' : 'Code typed at till', sub: p.reference_no || 'no code entered', pill: 'Paid',
+    })),
+    ...pending.map((r) => ({
+      key: `p${r.id}`, kind: 'wait', at: r.requested_at, amount: r.amount,
+      title: r.customer?.name || r.phone, sub: 'Waiting for the customer to enter their PIN', pill: 'Waiting', row: r, canGiveUp: true,
+    })),
+    ...needsAttention.map((r) => ({
+      key: `n${r.id}`, kind: 'wait', at: r.requested_at, amount: r.amount,
+      title: r.customer?.name || r.phone, sub: 'No reply. If they paid, it will still appear above.', pill: 'No reply', row: r,
+    })),
+    ...failed.map((r) => ({
+      key: `f${r.id}`, kind: 'fail', at: r.requested_at, amount: r.amount,
+      title: r.customer?.name || r.phone, sub: r.result_desc || 'Not completed', pill: (STATUS_META[r.status] || {}).label || 'Failed', row: r,
+    })),
+  ].sort((a, b) => new Date(b.at) - new Date(a.at));
+  const shown = filter === 'all' ? feed : feed.filter((f) => f.kind === filter);
+  const KIND = {
+    in: { bg: 'bg-emerald-100 text-emerald-700', pill: 'bg-emerald-50 text-emerald-700', Icon: ArrowDownLeft, amt: 'text-emerald-700', sign: '+' },
+    wait: { bg: 'bg-amber-100 text-amber-700', pill: 'bg-amber-50 text-amber-800', Icon: Clock, amt: 'text-slate-700', sign: '' },
+    fail: { bg: 'bg-red-100 text-red-600', pill: 'bg-red-50 text-red-700', Icon: XCircle, amt: 'text-slate-400', sign: '' },
+  };
+  const giveUpAll = async () => { for (const r of pending) { await handleGiveUp(r); } };
+  const chips = [['all', 'All', feed.length], ['in', 'Money in', feed.filter((f) => f.kind === 'in').length], ['wait', 'Waiting', feed.filter((f) => f.kind === 'wait').length], ['fail', 'Failed', feed.filter((f) => f.kind === 'fail').length]];
+
   return (
-    <div className="px-4 py-4 sm:p-6 max-w-5xl mx-auto min-w-0">
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-2">
-        <h1 className="hidden md:flex text-2xl font-bold text-slate-800 items-center gap-2">
-          <Smartphone size={22} className="text-emerald-700" /> M-Pesa
-        </h1>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="border border-slate-200 rounded-xl px-3 min-h-[44px] text-sm bg-white" />
-      </div>
-      <p className="text-sm text-slate-500 mb-4">
-        Take M-Pesa at the till by choosing <span className="font-semibold text-slate-700">M-Pesa</span> as the payment method: send the buyer a prompt, or enter the code if they already paid. This page is where you set it up and check the day's payments.
-      </p>
-
-      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{error}</div>}
-
-      <MpesaSettings tenant={tenant} />
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 col-span-2 sm:col-span-1 min-w-0">
-          <div className="text-xs font-bold text-slate-400 uppercase">M-Pesa in today</div>
-          <div className="text-xl font-black text-slate-800 truncate">{fmt(totals.confirmed + manualTotal)}</div>
+    <div className="px-4 py-4 sm:p-6 max-w-3xl mx-auto min-w-0 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="hidden md:flex text-2xl font-bold text-slate-800 items-center gap-2"><Smartphone size={22} className="text-emerald-700" /> M-Pesa</h1>
+        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-full p-1 mx-auto md:mx-0">
+          <button onClick={() => setDate(shiftDay(date, -1))} aria-label="Previous day" className="w-9 h-9 grid place-items-center rounded-full hover:bg-slate-100"><ChevronLeft size={18} /></button>
+          <label className="relative px-3 text-sm font-bold text-slate-800 min-w-[96px] text-center cursor-pointer">
+            {prettyDay(date)}
+            <input type="date" value={date} max={todayISO()} onChange={(e) => e.target.value && setDate(e.target.value)} className="absolute inset-0 opacity-0 w-full cursor-pointer" />
+          </label>
+          <button onClick={() => setDate(shiftDay(date, 1))} disabled={date >= todayISO()} aria-label="Next day" className="w-9 h-9 grid place-items-center rounded-full hover:bg-slate-100 disabled:opacity-30"><ChevronRight size={18} /></button>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 min-w-0">
-          <div className="text-xs font-bold text-slate-400 uppercase">Prompts paid</div>
-          <div className="text-xl font-black text-emerald-700 truncate">{fmt(totals.confirmed)}</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 min-w-0">
-          <div className="text-xs font-bold text-slate-400 uppercase">Codes recorded</div>
-          <div className="text-xl font-black text-slate-800 truncate">{fmt(manualTotal)}</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 min-w-0">
-          <div className="text-xs font-bold text-slate-400 uppercase">Waiting / check</div>
-          <div className="text-xl font-black text-amber-700 truncate">{fmt(totals.pending + totals.needsAttention)}</div>
-        </div>
+        <button onClick={load} aria-label="Refresh" className="w-10 h-10 grid place-items-center rounded-full bg-white border border-slate-200 text-slate-600"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /></button>
       </div>
 
-      {loading ? (
-        <div className="text-center py-10 text-slate-500"><Loader2 size={16} className="animate-spin inline mr-2" /> Loading…</div>
-      ) : (
-        <div className="space-y-6">
-          <Section title={`Matched (${matched.length})`} empty="No confirmed payments yet today.">
-            {matched.map(r => (
-              <Row key={r.id} r={r} extra={r.sale ? `Sale #${r.sale.sale_number}` : null} />
-            ))}
-          </Section>
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{error}</div>}
 
-          <Section title={`Recorded at the till (${manualRows.length})`} empty="No M-Pesa codes recorded by a cashier today.">
-            {manualRows.map(p => (
-              <div key={p.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-800">KES {(Number(p.amount) || 0).toLocaleString()}</div>
-                  <div className="text-xs text-slate-400 truncate">
-                    {new Date(p.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-                    {p.reference_no ? ` · ${p.reference_no}` : ' · no code entered'}
+      <div className="rounded-3xl p-5 text-white shadow-sm" style={{ background: 'linear-gradient(135deg,#17553A,#1F6B45)' }}>
+        <div className="text-[11px] font-bold uppercase tracking-wider opacity-80">Money received · {prettyDay(date)}</div>
+        <div className="mt-1 text-4xl font-black tracking-tight">KES {fmt(inTotal)}</div>
+        <div className="text-sm opacity-90">{inCount === 0 ? 'No payments yet' : `${inCount} payment${inCount === 1 ? '' : 's'}`}</div>
+        {(totals.confirmed > 0 || manualTotal > 0) && (
+          <div className="mt-3 flex gap-2 text-xs">
+            <span className="rounded-full bg-white/15 px-3 py-1.5">Customer prompts <b>KES {fmt(totals.confirmed)}</b></span>
+            <span className="rounded-full bg-white/15 px-3 py-1.5">Typed at till <b>KES {fmt(manualTotal)}</b></span>
+          </div>
+        )}
+        {waitCount > 0 && (
+          <div className="mt-4 rounded-2xl bg-black/15 px-4 py-3 flex items-center justify-between gap-3">
+            <div className="text-sm"><b>KES {fmt(waitTotal)}</b> <span className="opacity-90">not paid yet · {waitCount} request{waitCount === 1 ? '' : 's'}</span></div>
+            <button onClick={() => setFilter('wait')} className="text-xs font-bold underline underline-offset-2 whitespace-nowrap">View</button>
+          </div>
+        )}
+      </div>
+
+      {/* Money customers sent straight to the till: the cashier matches it to a bill and clears it. */}
+      {(can('payments.record') || can('finance.view')) && <MpesaInbox config={c2bConfig} onConfigChanged={loadC2bConfig} />}
+
+      <section>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-extrabold text-slate-800">Activity</h2>
+          {filter === 'wait' && pending.length > 1 && (
+            <button onClick={giveUpAll} disabled={!!busyId} className="text-xs font-bold text-slate-500 hover:text-red-600">Give up on all waiting</button>
+          )}
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+          {chips.map(([k, label, n]) => (
+            <button key={k} onClick={() => setFilter(k)}
+              className={`shrink-0 px-3.5 min-h-[36px] rounded-full text-sm font-bold border ${filter === k ? 'bg-emerald-800 text-white border-emerald-800' : 'bg-white text-slate-600 border-slate-200'}`}>
+              {label} <span className={filter === k ? 'opacity-80' : 'text-slate-400'}>{n}</span>
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="text-center py-10 text-slate-500"><Loader2 size={16} className="animate-spin inline mr-2" /> Loading…</div>
+        ) : shown.length === 0 ? (
+          <div className="bg-white border border-slate-100 rounded-2xl px-4 py-10 text-center text-slate-400 text-sm">
+            {feed.length === 0 ? `No M-Pesa activity ${date === todayISO() ? 'today' : 'on this day'}.` : 'Nothing in this group.'}
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-100 rounded-2xl divide-y divide-slate-100 overflow-hidden">
+            {shown.map((f) => {
+              const k = KIND[f.kind];
+              return (
+                <div key={f.key} className="px-4 py-3 flex items-center gap-3">
+                  <span className={`w-10 h-10 rounded-full grid place-items-center shrink-0 ${k.bg}`}><k.Icon size={18} /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="text-sm font-bold text-slate-800 truncate">{f.title}</div>
+                      <div className={`text-sm font-black whitespace-nowrap ${k.amt}`}>{k.sign}KES {fmt(f.amount)}</div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <div className="text-xs text-slate-400 truncate">{timeOf(f.at)}{f.sub ? ` · ${f.sub}` : ''}</div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${k.pill}`}>{f.pill}</span>
+                    </div>
+                    {f.canGiveUp && (
+                      <button disabled={busyId === f.row.id} onClick={() => handleGiveUp(f.row)} className="mt-1 text-xs font-bold text-slate-500 hover:text-red-600">
+                        {busyId === f.row.id ? 'Saving…' : 'Give up on this'}
+                      </button>
+                    )}
                   </div>
                 </div>
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full whitespace-nowrap bg-slate-100 text-slate-600">Typed by cashier</span>
-              </div>
-            ))}
-          </Section>
+              );
+            })}
+          </div>
+        )}
+        {filter === 'wait' && waitCount > 0 && (
+          <p className="text-xs text-slate-500 mt-2 px-1">These are requests sent to a customer's phone that were not completed. They are not money in.</p>
+        )}
+      </section>
 
-          {unmatched.length > 0 && (
-            <Section title={`Unmatched (${unmatched.length})`} tone="amber" empty="">
-              {unmatched.map(r => <Row key={r.id} r={r} extra="No matching sale — check this manually" />)}
-            </Section>
-          )}
-
-          <Section title={`Pending (${pending.length})`} empty="Nothing waiting on a customer right now.">
-            {pending.map(r => (
-              <Row key={r.id} r={r} extra="Waiting for confirmation"
-                action={<button disabled={busyId === r.id} onClick={() => handleGiveUp(r)} className="text-xs font-bold text-slate-500 hover:text-red-600">
-                  {busyId === r.id ? 'Saving…' : "Give up on this"}
-                </button>} />
-            ))}
-          </Section>
-
-          {needsAttention.length > 0 && (
-            <Section title={`Needs attention (${needsAttention.length})`} tone="amber" empty="">
-              {needsAttention.map(r => <Row key={r.id} r={r} extra={r.result_desc} />)}
-            </Section>
-          )}
-
-          <Section title={`Failed / Cancelled (${failed.length})`} empty="No failed payments today.">
-            {failed.map(r => <Row key={r.id} r={r} extra={r.result_desc} />)}
-          </Section>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Section({ title, children, empty }) {
-  const items = React.Children.toArray(children);
-  return (
-    <div>
-      <h2 className="font-bold text-slate-700 mb-2 text-sm uppercase tracking-wide">{title}</h2>
-      <div className="bg-white border border-slate-100 rounded-2xl divide-y divide-slate-100">
-        {items.length === 0 ? <div className="px-4 py-6 text-center text-slate-400 text-sm">{empty}</div> : items}
-      </div>
-    </div>
-  );
-}
-
-function Row({ r, extra, action }) {
-  const meta = STATUS_META[r.status] || STATUS_META.PENDING;
-  return (
-    <div className="px-4 py-3 flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <div className="text-sm font-semibold text-slate-800">
-          KES {(Number(r.amount) || 0).toLocaleString()} — {r.customer?.name || r.phone}
-        </div>
-        <div className="text-xs text-slate-400">
-          {new Date(r.requested_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-          {r.mpesa_receipt_number ? ` · ${r.mpesa_receipt_number}` : ''}
-          {extra ? ` · ${extra}` : ''}
-        </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {action}
-        <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full whitespace-nowrap ${meta.bg}`}>
-          <meta.Icon size={11} /> {meta.label}
-        </span>
-      </div>
+      <MpesaSettings tenant={tenant} />
     </div>
   );
 }

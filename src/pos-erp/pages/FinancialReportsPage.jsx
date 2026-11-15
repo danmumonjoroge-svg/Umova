@@ -136,6 +136,7 @@ export default function FinancialReportsPage() {
               <tbody>
                 <tr><td colSpan={2} className="font-bold text-slate-700 pt-2 pb-1">Liabilities</td></tr>
                 <StatementRow label="Accounts Payable" value={balance.liabilities.accountsPayable} indent />
+                {balance.liabilities.loans > 0 && <StatementRow label="Loans (still to repay)" value={balance.liabilities.loans} indent />}
                 <StatementRow label="Total Liabilities" value={balance.liabilities.total} bold divider />
               </tbody>
             </table>
