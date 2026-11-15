@@ -5,7 +5,7 @@
 // Hidden entries never remove a route: a bookmark still works; the database decides access.
 import React, { Suspense, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, CalendarCheck, Wallet, LayoutGrid, GraduationCap, ClipboardList, Layers, UserRound, MessageSquare, CalendarDays, BarChart3, Settings, Clock } from 'lucide-react';
+import { Home, Users, CalendarCheck, Wallet, LayoutGrid, GraduationCap, ClipboardList, Layers, UserRound, MessageSquare, CalendarDays, BarChart3, Settings, Clock, DoorOpen, ScanLine } from 'lucide-react';
 import { NAV_ITEMS } from '../utils/permissions.js';
 import { useElimuAccess } from '../hooks/useElimu.js';
 import { OfflineBanner } from './ui.jsx';
@@ -14,7 +14,7 @@ import { registeredModules } from '../registry.js';
 import AppSheet from './AppSheet.jsx';
 
 const ICONS = { dashboard: Home, students: Users, admissions: ClipboardList, classes: Layers, guardians: UserRound, academics: GraduationCap, attendance: CalendarCheck,
-  timetable: Clock, fees: Wallet, communication: MessageSquare, calendar: CalendarDays, reports: BarChart3, settings: Settings };
+  timetable: Clock, rooms: DoorOpen, gate: ScanLine, fees: Wallet, communication: MessageSquare, calendar: CalendarDays, reports: BarChart3, settings: Settings };
 const PRIMARY = ['dashboard', 'students', 'attendance', 'fees'];       // the four tabs; everything else lives under More
 
 export default function ElimuLayout({ basePath = '/elimu' }) {

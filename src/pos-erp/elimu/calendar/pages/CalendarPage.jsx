@@ -32,7 +32,7 @@ function EventSheet({ ev, ids, onClose, onSaved, onCancelEvent }) {
   const [v, setV] = useState({ ...ev, affects_attendance: ev.id ? ev.affects_attendance : NO_SCHOOL_TYPES.includes(ev.event_type) }); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true); setErr(null);
-    try { const { id, created_at, updated_at, ...rest } = v; await calendarService.save(ev.id ? { id: ev.id, ...rest } : { ...ids, ...rest }); onSaved(); } catch (e) { setErr(e.message); } finally { setBusy(false); }
+    try { const { id, created_at, updated_at, ...r0 } = v; const rest = { ...r0, expected_amount: r0.expected_amount === '' || r0.expected_amount == null ? null : Number(r0.expected_amount), expected_note: (r0.expected_note || '').trim() || null }; await calendarService.save(ev.id ? { id: ev.id, ...rest } : { ...ids, ...rest }); onSaved(); } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   return (
     <Sheet title={ev.id ? 'Edit event' : 'New event'} onClose={onClose}>
@@ -40,6 +40,8 @@ function EventSheet({ ev, ids, onClose, onSaved, onCancelEvent }) {
       <SelectField label="Type" value={v.event_type} onChange={(t) => setV({ ...v, event_type: t || 'OTHER', affects_attendance: NO_SCHOOL_TYPES.includes(t) })} options={EVENT_TYPES.map(([value, label]) => ({ value, label }))} placeholder="Type" />
       <div className="grid grid-cols-2 gap-x-3"><Field label="From"><input type="date" className={fieldClass} value={v.start_date} onChange={(e) => setV({ ...v, start_date: e.target.value, end_date: v.end_date < e.target.value ? e.target.value : v.end_date })} /></Field><Field label="To"><input type="date" className={fieldClass} min={v.start_date} value={v.end_date} onChange={(e) => setV({ ...v, end_date: e.target.value })} /></Field></div>
       <label className="flex items-center gap-2 text-sm mb-2"><input type="checkbox" checked={!!v.affects_attendance} onChange={(e) => setV({ ...v, affects_attendance: e.target.checked })} /> No attendance is taken on these days</label>
+      <div className="grid grid-cols-2 gap-x-3"><Field label="Money expected (KES)" hint="Shown to parents"><input type="number" inputMode="decimal" min="0" className={fieldClass} value={v.expected_amount ?? ''} onChange={(e) => setV({ ...v, expected_amount: e.target.value })} /></Field>
+        <Field label="Note to parents"><input className={fieldClass} value={v.expected_note || ''} onChange={(e) => setV({ ...v, expected_note: e.target.value })} placeholder="e.g. bring lunch" /></Field></div>
       <ErrorLine error={err} />
       <div className="flex gap-2"><button className={`${btnPrimary} flex-1`} disabled={busy || !v.title?.trim() || !v.start_date || !v.end_date} onClick={save}>Save</button>{ev.id && <button className={btn} onClick={onCancelEvent}>Cancel event</button>}</div>
     </Sheet>

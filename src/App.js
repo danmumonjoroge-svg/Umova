@@ -79,6 +79,7 @@ import AdminChama             from "./Pages/Admin/ChamaAdminDashboard";
 import POSApp              from "./pos-erp/POSApp";
 // Elimu school management: its own app and sign-in (same business account as POS), mounted below at /school/*.
 import ElimuApp            from "./pos-erp/elimu/ElimuApp";
+import ParentApp           from "./pos-erp/elimu/parent/ParentApp";
 import POSPage             from "./pos-erp/pages/POSPage";
 import ProductsPage        from "./pos-erp/pages/ProductsPage";
 import GoodsReceivingPage  from "./pos-erp/pages/GoodsReceivingPage";
@@ -312,6 +313,9 @@ function App() {
         ElimuApp declares its own nested <Routes> (/school, /school/students, /school/attendance, /school/school-finance/...).
       */}
       <Route path="/school/*" element={<ElimuApp />} />
+
+      {/* Elimu parent portal: phone number + SMS code, read-only, its own sign-in (not POS, not StaffGuard). */}
+      <Route path="/parent/*" element={<ParentApp />} />
 
       <Route path="/redirect" element={<PostLoginRedirect />} />
 

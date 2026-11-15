@@ -35,6 +35,8 @@ export const NAV_ITEMS = [
   { key: 'academics',     label: 'Academics',     to: '/academics',     action: 'structure.view', owned: false },
   { key: 'attendance',    label: 'Attendance',    to: '/attendance',    action: 'students.view',  owned: false },
   { key: 'timetable',     label: 'Timetable',     to: '/timetable',     action: 'structure.view', owned: false },
+  { key: 'rooms',         label: 'Rooms',         to: '/rooms',         action: 'timetable.view', owned: false },
+  { key: 'gate',          label: 'Gate',          to: '/gate',          action: 'attendance.take_any', owned: false },
   { key: 'fees',          label: 'Fees',          to: '/fees',          action: 'students.view',  owned: false },
   { key: 'communication', label: 'Communication', to: '/communication', action: 'comms.history',  owned: true },
   { key: 'calendar',      label: 'Calendar',      to: '/calendar',      action: 'students.view',  owned: false },
