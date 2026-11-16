@@ -109,6 +109,12 @@ test('offline queue: merges marks, no duplicate submit, stops at network failure
   await o.enqueueMarks({ tenantId: 't', sessionId: 's1', marks: [{ enrollment_id: 'a', status: 'ABSENT' }, { enrollment_id: 'b', status: 'PRESENT' }] });
   assert.equal((await o.list('t')).length, 1); assert.equal((await o.list('t'))[0].payload.marks.find((m) => m.enrollment_id === 'a').status, 'ABSENT');
   await o.enqueueSubmit({ tenantId: 't', sessionId: 's1' }); assert.equal(await o.enqueueSubmit({ tenantId: 't', sessionId: 's1' }), null);
+  const completedSubmit = mk(); await completedSubmit.enqueueSubmit({ tenantId: 't', sessionId: 'done' });
+  await completedSubmit.drain({ tenantId: 't', handlers: { submit: async () => ({ ok: true }) } });
+  assert.equal(await completedSubmit.enqueueSubmit({ tenantId: 't', sessionId: 'done' }), null, 'a confirmed submit is not queued again');
+  assert.equal((await o.list('other-tenant')).length, 0, 'queue rows are isolated by tenant');
+  await o.enqueueSubmit({ tenantId: 'other-tenant', sessionId: 's1' });
+  assert.equal((await o.list('t')).filter((r) => r.payload.type === 'submit').length, 1, 'a submit in another tenant does not deduplicate this tenant queue');
   // offline: nothing synced, still pending
   const off = await o.drain({ tenantId: 't', handlers: { marks: async () => { const e = new Error('x'); e.network = true; throw e; }, submit: async () => ({ ok: true }) } });
   assert.equal(off.stoppedOffline, true); assert.equal((await o.summary('t')).pending, 2); assert.equal((await o.summary('t')).synced, 0);
@@ -122,14 +128,21 @@ test('offline queue: merges marks, no duplicate submit, stops at network failure
   // success
   const o3 = mk(); await o3.enqueueMarks({ tenantId: 't', sessionId: 's3', marks: [{ enrollment_id: 'a', status: 'PRESENT' }] });
   assert.equal((await o3.drain({ tenantId: 't', handlers: { marks: async () => ({ ok: true }) } })).synced, 1);
+  const o4 = mk();
+  await o4.enqueueMessage({ tenantId: 't', message: { recordId: 'r1', purpose: 'ABSENT', guardianId: 'g1', channel: 'SMS' } });
+  await o4.enqueueMessage({ tenantId: 't', message: { recordId: 'r1', purpose: 'ABSENT', guardianId: 'g1', channel: 'SMS' } });
+  assert.equal((await o4.list('t')).length, 1, 'same guardian message is queued once');
   // POS sync engine must ignore these rows: statuses are Elimu-specific
   assert.ok(Object.values(S).every((v) => v.startsWith('ELIMU_')));
 });
 test('CSV escaping', () => {
   assert.equal(toCsv([{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }], [{ a: 'x,y', b: 'say "hi"' }]), 'A,B\n"x,y","say ""hi"""');
 });
-test('JS role actions match the database role map (snapshot generated from elimu_role_actions)', () => {
-  const snap = JSON.parse(fs.readFileSync(path.join(here, '../../../role_actions.snapshot.json'), 'utf8'));
+// The snapshot is exported from the live database (select role, array_agg(action order by action) from elimu_role_actions group by role -> {role: [actions]}).
+// Looked up inside the project first (elimu/tests/sql/), then the legacy location beside the repo. Skipped, not failed, when it has not been exported.
+const SNAPSHOT = [path.join(here, 'sql/role_actions.snapshot.json'), path.join(here, '../../../role_actions.snapshot.json')].find((f) => fs.existsSync(f));
+test('JS role actions match the database role map (snapshot generated from elimu_role_actions)', { skip: SNAPSHOT ? false : 'role_actions.snapshot.json not found: export it from the database into elimu/tests/sql/' }, () => {
+  const snap = JSON.parse(fs.readFileSync(SNAPSHOT, 'utf8'));
   for (const [role, acts] of Object.entries(snap)) assert.deepEqual([...(ROLE_ACTIONS[role] || [])].sort(), acts, `role ${role}`);
   assert.deepEqual(Object.keys(ROLE_ACTIONS).sort(), Object.keys(snap).sort());
 });

@@ -6,8 +6,13 @@
 // Added here: finance purposes/templates, variable building from finance data, and duplicate prevention (elimu_fin_notifications).
 import { renderText } from '../../../supabase/functions/_shared/comm/render.js';
 import { smsInfo, normalizeMsisdn, isValidEmail, contactFor, whatsappFormat, describeStatus, findBusinessTemplate } from '../../../utils/comm';
-import { FINANCE_PURPOSE_BY_KEY, FINANCE_DEFAULT_TEMPLATES, FINANCE_VARIABLE_LABELS } from '../templates/financeTemplates';
+import { FINANCE_PURPOSE_BY_KEY, FINANCE_DEFAULT_TEMPLATES, FINANCE_VARIABLE_LABELS, FINANCE_PURPOSES } from '../templates/financeTemplates';
 import { toCents, formatMoney } from '../../finance/utils/money';
+import { registerPurpose } from '../purposes';
+
+for (const p of FINANCE_PURPOSES) {
+  try { registerPurpose({ key: p.key, label: p.label, fields: p.variables || ['guardian_name', 'student_name', 'school_name'] }); } catch (e) { if (!String(e?.message || '').includes('already registered')) throw e; }
+}
 
 export const channelsFor = ['SMS', 'WHATSAPP', 'EMAIL'];
 const plainMoney = (v) => { try { return formatMoney(toCents(v, { allowNegative: true }), '').trim(); } catch { return String(v ?? ''); } };
@@ -66,29 +71,28 @@ export const eventKey = ({ purpose, referenceId, channel, recipient, resend = 0 
 /**
  * Records a reviewed message. Nothing is sent here. Returns the log row (status QUEUED = "prepared").
  * Duplicate: returns {duplicate:true} and does NOT create a second log row.
- * `supabase` and `comm` (commEngineService) are injected so this stays testable; pages pass the real ones.
+ * The finance dedupe RPC client and shared guardian-recording adapter are injected so this stays testable.
  */
-export async function prepareRecord({ supabase, comm, tenantId, businessId, userId, studentId, composed, final, reference, resend = 0 }) {
+export async function prepareRecord({ supabase, tenantId, businessId, userId, studentId, guardianId, contactId, composed, final, reference, resend = 0, recordGuardianMessage, fetchLog }) {
   if (composed.problems?.length && !final.to) throw new Error(composed.problems[0]);
   if (final.body !== composed.body && !String(final.body || '').trim()) throw new Error('The message is empty.');
+  if (!guardianId) throw new Error('A verified guardian link is required. This finance contact cannot be messaged until it is linked to a guardian record with consent details.');
+  if (typeof recordGuardianMessage !== 'function' || typeof fetchLog !== 'function') throw new Error('The shared guardian communication service is required.');
   const key = eventKey({ purpose: composed.purpose, referenceId: reference?.id, channel: composed.channel, recipient: final.to, resend });
   const { data: reg, error: regErr } = await supabase.rpc('elimu_fin_register_notification', {
     p_business: businessId, p_student: studentId, p_purpose: composed.purpose, p_channel: composed.channel, p_recipient: final.to,
     p_reference_type: reference?.type ?? null, p_reference_id: reference?.id ?? null, p_event_key: key, p_comm_log_id: null });
   if (regErr) throw regErr;
   if (reg.duplicate) return { duplicate: true, notificationId: reg.notification_id };
-  const row = {
-    tenant_id: tenantId, business_id: businessId, channel: composed.channel,
-    message_type: 'OTHER',                                     // legacy enum; the real discriminator is `purpose` (text)
-    purpose: composed.purpose, recipient_kind: 'OTHER', recipient_name: final.recipientName || null,
-    recipient: final.to, subject: final.subject || null, generated_message: composed.body, rendered_message: final.body,
-    was_edited: final.body !== composed.body || (final.subject || '') !== (composed.subject || ''),
-    template_source: composed.source, status: 'QUEUED', initiated_by: 'USER',
-    reference_type: reference?.type || null, reference_id: reference?.id || null, reference_label: reference?.label || null, created_by: userId ?? null,
-  };
-  const { data: log, error } = await supabase.from('lb_communication_log').insert(row).select('*').single();
+  const recorded = await recordGuardianMessage({
+    tenantId, channel: composed.channel, purpose: composed.purpose, guardianId, contactId: contactId || null,
+    studentId, subject: final.subject, body: final.body, generated: composed.body,
+    templateSource: composed.source || 'ELIMU_FINANCE', referenceLabel: reference?.label || null, status: 'QUEUED',
+  });
+  const { data: log, error } = await fetchLog(recorded.logId);
   if (error) throw error;
-  await supabase.rpc('elimu_fin_attach_comm_log', { p_notification: reg.notification_id, p_comm_log: log.id });
+  const { error: attachError } = await supabase.rpc('elimu_fin_attach_comm_log', { p_notification: reg.notification_id, p_comm_log: log.id });
+  if (attachError) throw attachError;
   return { duplicate: false, log, notificationId: reg.notification_id };
 }
 

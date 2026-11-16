@@ -50,7 +50,9 @@ export const communicationService = {
    * status: 'QUEUED' (prepared) | 'OPENED' (handed to the phone's app). Never anything stronger.
    */
   async record({ channel, purpose, guardianId, contactId, studentId, applicationId, subject, body, generated, templateId, templateSource, referenceLabel, status = 'QUEUED', tenantId }) {
-    const payload = { channel, purpose, guardian_id: guardianId, contact_id: contactId, student_id: studentId || null, application_id: applicationId || null,
+    if (!guardianId) throw new Error('A verified guardian link is required before preparing a guardian message.');
+    if (!purpose || !String(purpose).startsWith('ELIMU_')) throw new Error('Choose a valid Elimu communication purpose.');
+    const payload = { channel, purpose, guardian_id: guardianId, contact_id: contactId || null, student_id: studentId || null, application_id: applicationId || null,
       subject: subject || null, message: body, generated_message: generated ?? body, template_id: templateId || null, template_source: templateSource || null, reference_label: referenceLabel || null, status };
     if (!online()) {
       const draftId = newDraftId();
@@ -71,6 +73,7 @@ export const communicationService = {
   /** "I sent it myself." The only way a hand-off becomes SENT, and it is labelled as marked by staff. */
   async confirmSentByHand(logId) { return unwrap(await supabase.rpc('elimu_mark_message', { p_log: logId, p_status: 'SENT' })); },
   async cancel(logId) { return unwrap(await supabase.rpc('elimu_mark_message', { p_log: logId, p_status: 'CANCELLED' })); },
+  async getLog(logId) { return supabase.from('lb_communication_log').select('*').eq('id', logId).single(); },
 
   /** Server-side provider send through the EXISTING comm-send function. Never throws for "not configured". */
   async sendViaProvider(logId) {

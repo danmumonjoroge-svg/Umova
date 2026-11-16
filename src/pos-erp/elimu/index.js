@@ -24,3 +24,15 @@ export { setupService } from './services/ElimuSetupService.js';
 export { useElimuAccess, useElimuSetup, ElimuAccessProvider } from './hooks/useElimu.js';
 export { canElimu } from './utils/permissions.js';
 export { normalizeMsisdn, contactFor } from './utils/phone.js';
+
+// ---- Elimu session contract (app/auth) -- see AUTHENTICATION.md ----
+// ElimuApp itself is NOT re-exported here (it imports every module); the host imports it from './pos-erp/elimu/ElimuApp.jsx'.
+export { ElimuAuthProvider, useElimuSession, useElimuAuth } from './app/auth/ElimuAuthContext.jsx';
+export { ELIMU_ROLES, normalizeRole, roleLabel } from './app/auth/roles.js';
+export { ElimuAuthError, AUTH_ERROR, authMessage } from './app/auth/authAdapter.js';
+
+// ---- Elimu shell (app/) ----
+export { useElimuShell } from './app/shell/ElimuShell.jsx';
+export { LoadingState, ErrorState, EmptyState, PageContainer } from './app/shell/states.jsx';
+export { SETTINGS_SECTIONS } from './app/navigation/settingsRegistry.js';
+export { NAV_GROUPS } from './app/navigation/navModel.js';

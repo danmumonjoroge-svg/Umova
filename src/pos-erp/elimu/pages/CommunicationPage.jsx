@@ -17,10 +17,22 @@ export default function CommunicationPage({ basePath = '/elimu' }) {
   const [err, setErr] = useState(null);
   const resolve = async (id, st) => { try { await communicationService.resolveQueueItem(id, st); q.reload(); } catch (e) { setErr(friendlyError(e)); } };
   const toggle = async (r) => { try { await communicationService.setRule(r.id, !r.is_active); rules.reload(); } catch (e) { setErr(friendlyError(e)); } };
+  const pendingCount = (q.data || []).length;
+  const activeRules = (rules.data || []).filter((r) => r.is_active).length;
   return (
-    <FitPage title="Communication" subtitle="Nothing is sent automatically">
-      <div className="flex gap-1 mb-3">{[['queue', 'To do'], ['history', 'History'], ['rules', 'Reminders']].map(([k, l]) => <button key={k} onClick={() => setTab(k)} className={`px-3 min-h-[40px] rounded-full text-sm ${tab === k ? 'bg-[#1F6B45] text-white' : 'bg-white border border-[#E3DBB8]'}`}>{l}</button>)}</div>
+    <FitPage title="Communication" subtitle="Review work, message history and reminder rules">
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="rounded-xl border border-[#E3DBB8] bg-white p-3"><div className="text-[11px] uppercase tracking-wide text-slate-500">Prepared work</div><div className="text-2xl font-semibold text-[#1F6B45]">{q.loading && !q.data ? '—' : pendingCount}</div><div className="text-xs text-slate-500">Not sent automatically</div></div>
+        <div className="rounded-xl border border-[#E3DBB8] bg-white p-3"><div className="text-[11px] uppercase tracking-wide text-slate-500">Active reminder rules</div><div className="text-2xl font-semibold text-[#1F6B45]">{rules.loading && !rules.data ? '—' : activeRules}</div><div className="text-xs text-slate-500">Create review reminders</div></div>
+      </div>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex gap-1">{[['queue', 'To do'], ['history', 'History'], ['rules', 'Reminders']].map(([k, l]) => <button key={k} onClick={() => setTab(k)} className={`px-3 min-h-[40px] rounded-full text-sm ${tab === k ? 'bg-[#1F6B45] text-white' : 'bg-white border border-[#E3DBB8]'}`}>{l}</button>)}</div>
+        <button type="button" className="px-3 min-h-[40px] rounded-lg border border-[#E3DBB8] text-sm" onClick={() => { q.reload(); rules.reload(); }}>Refresh</button>
+      </div>
+      <div className="mb-3 rounded-xl border border-[#E3DBB8] bg-[#FBF8EA] px-3 py-2 text-xs text-[#6F7461]">Messages are prepared for staff review. Opening a phone app is not proof of sending; provider delivery appears only when confirmed by the provider.</div>
       {err && <Notice tone="bad">{err}</Notice>}
+      {q.error && <Notice tone="bad">Could not load the prepared-work queue: {friendlyError(q.error)}</Notice>}
+      {rules.error && <Notice tone="bad">Could not load reminder rules: {friendlyError(rules.error)}</Notice>}
       {tab === 'queue' && (q.loading && !q.data ? <LoadingBlock /> : (q.data || []).length === 0 ? <EmptyBlock>Nothing waiting. When an application is decided or a student is admitted, a reminder to tell the family appears here.</EmptyBlock> :
         <ul className="space-y-2">{q.data.map((n) => (
           <li key={n.id} className="bg-white border border-[#E3DBB8] rounded-xl p-3"><div className="text-sm font-medium">{n.title}</div><div className="text-[11px] text-slate-500 mb-2">{EVENTS[n.event_type]?.label || n.event_type} · {formatDateTime(n.created_at)}</div>

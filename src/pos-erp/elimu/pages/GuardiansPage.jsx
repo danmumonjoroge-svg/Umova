@@ -17,14 +17,16 @@ export function GuardiansPage({ basePath = '/elimu' }) {
   const { can } = useElimuAccess(); const [search, setSearch] = useState(''); const q = useDebounced(search); const [page, setPage] = useState(0); const [adding, setAdding] = useState(false);
   const list = useAsync(() => guardianService.list({ search: q, page }), [q, page]);
   return (
-    <FitPage title="Guardians" subtitle={list.data ? `${list.data.total} on record` : ''} toolbar={<SearchBox value={search} onChange={(v) => { setSearch(v); setPage(0); }} placeholder="Guardian name" />}
-      action={can('guardians.manage') && <button type="button" className="px-3 min-h-[40px] rounded-lg bg-[#1F6B45] text-white text-sm font-semibold" onClick={() => setAdding(true)}>Add</button>}>
+    <FitPage title="Guardians" subtitle={list.data ? `${list.data.total} family contacts on record` : 'Family contacts'}
+      action={can('guardians.manage') && <button type="button" className="px-3 min-h-[40px] rounded-xl bg-[#1F6B45] text-white text-sm font-semibold shadow-sm" onClick={() => setAdding(true)}>＋ Add guardian</button>}
+      summary={<div className="grid grid-cols-2 gap-2"><div className="rounded-xl border border-[#E3DBB8] bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-slate-500">Directory records</div><div className="text-lg font-bold text-[#1F6B45]">{list.data?.total ?? '—'}</div></div><div className="rounded-xl border border-[#E3DBB8] bg-[#FBF8EA] px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-slate-500">On this page</div><div className="text-lg font-bold text-[#5C4A12]">{list.data?.rows.length ?? '—'}</div></div></div>}
+      toolbar={<SearchBox value={search} onChange={(v) => { setSearch(v); setPage(0); }} placeholder="Search guardian name" />}>
       {list.error && <Notice tone="bad">{list.error}</Notice>}
       {list.loading && !list.data ? <LoadingBlock /> : list.data?.rows.length === 0 ? <EmptyBlock>No guardians found.</EmptyBlock> :
         <CardGrid>{list.data?.rows.map((g) => {
           const phone = g.elimu_guardian_contacts?.find((c) => c.kind === 'PHONE');
           const kids = (g.elimu_student_guardians || []).filter((l) => !l.ended_on).length;
-          return <DataCard key={g.id} title={`${g.first_name} ${g.last_name}`} subtitle={`${kids} student${kids === 1 ? '' : 's'}${phone ? ` · ${displayPhone(phone.value)}` : ' · no phone'}`}><Link to={`${basePath}/guardians/${g.id}`} className="text-sm font-semibold text-[#1F6B45] underline">Open</Link></DataCard>;
+          return <DataCard key={g.id} title={`${g.first_name} ${g.last_name}`} subtitle={`${kids} linked student${kids === 1 ? '' : 's'}`}><div className="mt-2 pt-2 border-t border-[#F0EACF] flex items-center justify-between gap-2"><span className="text-xs text-slate-500 truncate">{phone ? displayPhone(phone.value) : 'No phone on record'}</span><Link to={`${basePath}/guardians/${g.id}`} className="text-sm font-semibold text-[#1F6B45] underline underline-offset-2">View profile →</Link></div></DataCard>;
         })}</CardGrid>}
       {list.data && <Pager page={page} total={list.data.total} pageSize={list.data.pageSize} onPage={setPage} />}
       {adding && <GuardianFormSheet onClose={() => setAdding(false)} onSaved={() => list.reload()} />}

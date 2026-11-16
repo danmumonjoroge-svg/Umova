@@ -6,35 +6,37 @@ import { examService } from '../services/examService';
 import { elimuOffline, overlayPending } from '../../offline/elimuOfflineStore';
 import { buildSavePayload, parseMarks } from '../utils/markValidation';
 import { isNetworkFailure } from '../../../offline/netErrors';
+import { useElimu } from '../../shared/hooks/ElimuContext';
 
 const PAGE = 100;
 const toRow = (r) => ({ ...r, marksText: r.obtained_marks == null ? '' : String(r.obtained_marks), dirty: false, error: null });
 
 export function useMarkSheet(assessmentId) {
   const online = useOnline();
+  const { tenantId } = useElimu();
   const [sheet, setSheet] = useState(null);                 // { assessment, total, summary }
   const [rows, setRows] = useState([]);
   const [state, setState] = useState({ loading: true, error: null, saving: false, fromCache: false });
   const [search, setSearch] = useState(''); const [page, setPage] = useState(0);
-  const [sync, setSync] = useState({ waiting: 0, needsAttention: 0 }); const [notice, setNotice] = useState(null);
+  const [sync, setSync] = useState({ waiting: 0, needsAttention: 0, legacyUnscoped: 0 }); const [notice, setNotice] = useState(null);
   const busy = useRef(false);
 
-  const refreshSync = useCallback(async () => { if (assessmentId) setSync(await elimuOffline.counts(assessmentId)); }, [assessmentId]);
+  const refreshSync = useCallback(async () => { if (tenantId && assessmentId) setSync(await elimuOffline.counts(tenantId, assessmentId)); }, [tenantId, assessmentId]);
 
   const load = useCallback(async () => {
-    if (!assessmentId) return;
+    if (!tenantId || !assessmentId) return;
     setState((s) => ({ ...s, loading: true, error: null }));
     let data = null; let fromCache = false;
-    try { data = await examService.getMarkSheet(assessmentId, { search: search || null, limit: PAGE, offset: page * PAGE }); if (!search && page === 0) await elimuOffline.cacheSheet(assessmentId, data); }
+    try { data = await examService.getMarkSheet(assessmentId, { search: search || null, limit: PAGE, offset: page * PAGE }); if (!search && page === 0) await elimuOffline.cacheSheet(tenantId, assessmentId, data); }
     catch (e) {
-      if (isNetworkFailure(e) || e?.isNetwork) { const c = await elimuOffline.getCachedSheet(assessmentId); if (c) { data = c.sheet; fromCache = true; } }
+      if (isNetworkFailure(e) || e?.isNetwork) { const c = await elimuOffline.getCachedSheet(tenantId, assessmentId); if (c) { data = c.sheet; fromCache = true; } }
       if (!data) { setState({ loading: false, error: e.message, saving: false, fromCache: false }); return; }
     }
-    const pending = await elimuOffline.list(assessmentId);
+    const pending = await elimuOffline.list(tenantId, assessmentId);
     setSheet({ assessment: data.assessment, total: data.total, summary: data.summary });
     setRows(overlayPending(data.rows, pending).map((r) => ({ ...toRow(r), dirty: !!r.pendingId })));
     setState({ loading: false, error: null, saving: false, fromCache }); await refreshSync();
-  }, [assessmentId, search, page, refreshSync]);
+  }, [tenantId, assessmentId, search, page, refreshSync]);
   useEffect(() => { load(); }, [load]);
 
   const edit = useCallback((enrollmentId, patch) => setRows((rs) => rs.map((r) => {
@@ -68,13 +70,13 @@ export function useMarkSheet(assessmentId) {
         return res;
       } catch (e) {
         if (!(isNetworkFailure(e) || e?.isNetwork)) { setNotice({ tone: 'bad', text: e.message }); return null; }
-        await elimuOffline.queueMany(assessmentId, entries);                       // offline: keep on the phone, say so honestly
+        await elimuOffline.queueMany(tenantId, assessmentId, entries);                       // offline: keep on the phone, say so honestly
         setRows((rs) => rs.map((r) => (entries.some((x) => x.enrollment_id === r.enrollment_id) ? { ...r, localState: 'PENDING', error: null } : r)));
         setNotice({ tone: 'warn', text: `No connection. ${entries.length} change${entries.length === 1 ? '' : 's'} saved on this phone only — NOT yet sent. They will upload when you are back online.${submit ? ' Submitting needs a connection.' : ''}` });
         await refreshSync(); return { queued: entries.length };
       }
     } finally { busy.current = false; setState((s) => ({ ...s, saving: false })); }
-  }, [rows, sheet, assessmentId, applyResults, load, refreshSync]);
+  }, [tenantId, rows, sheet, assessmentId, applyResults, load, refreshSync]);
 
   /** Finalize: needs a connection. If students are still PENDING the server says so; pass markRemainingAs to decide for them explicitly. */
   const submit = useCallback(async (markRemainingAs = null) => {
@@ -88,15 +90,15 @@ export function useMarkSheet(assessmentId) {
   }, [online, rows, assessmentId, saveDraft, load]);
 
   const syncNow = useCallback(async () => {
-    const r = await elimuOffline.syncAll(examService.saveMarks);
+    const r = await elimuOffline.syncAll(tenantId, examService.saveMarks);
     if (r.authExpired) setNotice({ tone: 'bad', text: 'Your sign-in expired. Sign in again; nothing was lost.' });
     else if (r.offline) setNotice({ tone: 'warn', text: 'Still offline. Your changes are kept on this phone.' });
     else setNotice({ tone: r.attention ? 'warn' : 'good', text: `${r.synced} uploaded${r.attention ? `, ${r.attention} need attention` : ''}.` });
     await load(); return r;
-  }, [load]);
-  useEffect(() => { if (online) elimuOffline.counts().then((c) => { if (c.waiting) syncNow(); }); }, [online]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tenantId, load]);
+  useEffect(() => { if (online) elimuOffline.counts(tenantId).then((c) => { if (c.waiting) syncNow(); }); }, [online, tenantId, syncNow]);
 
-  const resolveConflict = useCallback(async (pendingId, choice) => { await elimuOffline.resolve(pendingId, choice); if (choice === 'keepMine') await syncNow(); else await load(); }, [syncNow, load]);
+  const resolveConflict = useCallback(async (pendingId, choice) => { await elimuOffline.resolve(tenantId, pendingId, choice); if (choice === 'keepMine') await syncNow(); else await load(); }, [tenantId, syncNow, load]);
 
   const dirtyCount = useMemo(() => rows.filter((r) => r.dirty).length, [rows]);
   return { online, sheet, rows, ...state, search, setSearch: (v) => { setPage(0); setSearch(v); }, page, setPage, pageSize: PAGE, edit, saveDraft, submit, syncNow, resolveConflict, reload: load, sync, dirtyCount, notice, setNotice };

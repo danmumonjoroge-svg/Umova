@@ -17,7 +17,8 @@ const STATUS_TONE = { PAID: 'good', PARTIALLY_PAID: 'warn', ISSUED: 'neutral', C
 
 export default function ElimuStudentAccountPage({ studentId: propId }) {
   const ctx = useElimuFinance(); const { api, businessId, tenantId, can } = ctx;
-  const studentId = propId || useParams().studentId;
+  const routeParams = useParams();
+  const studentId = propId || routeParams.studentId;
   const [v, setV] = useState(null); const [invoices, setInvoices] = useState([]); const [followups, setFollowups] = useState([]);
   const [err, setErr] = useState(null); const [note, setNote] = useState(''); const [reason, setReason] = useState(''); const [compose, setCompose] = useState(false);
 

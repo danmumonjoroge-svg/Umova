@@ -8,6 +8,8 @@
 // purpose into the enum column message_type. Academic rows use message_type 'OTHER' + purpose 'ELIMU_*' and are linked to the
 // student/guardian through elimu_message_links.
 import { posSupabase as supabase } from '../../../services/posSupabaseClient';
+import { communicationService } from '../ElimuCommunicationService';
+import { registerPurpose } from '../purposes';
 import { commEngineService } from '../../../services/commEngineService';
 import { rpc } from '../../academic/services/rpc';
 import { composeAcademic, buildAcademicVars, ACADEMIC_PURPOSES } from '../templates/academicTemplates';
@@ -15,6 +17,10 @@ import { checkFinal, contactFor, normalizeMsisdn, toFriendly, fromFriendly } fro
 import { ACADEMIC_VARIABLE_LABELS } from '../templates/academicTemplates';
 
 export { ACADEMIC_PURPOSES, buildAcademicVars, composeAcademic };
+
+for (const p of ACADEMIC_PURPOSES) {
+  try { registerPurpose({ key: p.key, label: p.label, fields: ['guardian_name', 'student_name', 'school_name'] }); } catch (e) { if (!String(e?.message || '').includes('already registered')) throw e; }
+}
 
 export const academicCommService = {
   /** The school's own wording overrides (existing table). */
@@ -32,18 +38,20 @@ export const academicCommService = {
 
   /** Write the prepared message to the existing outbox and link it to the student/guardian. `final` is what the user will actually send. */
   async record({ tenantId, businessId, userId, composed, final, guardian, student, reference }) {
-    const row = {
-      tenant_id: tenantId, business_id: businessId ?? null, channel: composed.channel, message_type: 'OTHER', purpose: composed.purpose,
-      recipient_kind: 'GUARDIAN', recipient_name: guardian?.full_name || null, recipient: final.to || composed.to || null, subject: final.subject || null,
-      generated_message: composed.body, rendered_message: final.body, was_edited: final.body !== composed.body || (final.subject || '') !== (composed.subject || ''),
-      template_source: composed.source || null, template_id: composed.templateId || null, status: 'QUEUED', initiated_by: 'USER',
-      reference_type: reference?.type ? `elimu_${String(reference.type).toLowerCase()}` : null, reference_id: reference?.id || null, reference_label: reference?.label || null, created_by: userId ?? null,
-    };
-    const { data, error } = await supabase.from('lb_communication_log').insert(row).select('*').single(); if (error) throw error;
+    const recorded = await communicationService.record({
+      tenantId, channel: composed.channel, purpose: composed.purpose,
+      guardianId: guardian?.guardian_id || guardian?.id,
+      studentId: student?.id || student?.student_id,
+      subject: final.subject, body: final.body, generated: composed.body,
+      templateId: composed.templateId, templateSource: composed.source || 'ELIMU',
+      referenceLabel: reference?.label || null, status: 'QUEUED',
+    });
+    const { data, error } = await communicationService.getLog(recorded.logId);
+    if (error) throw error;
     try {
       await rpc('elimu_link_message', { p_comm_log: data.id, p_student: student.id || student.student_id, p_guardian: guardian?.guardian_id || guardian?.id || null,
         p_enrollment: student.enrollment_id || null, p_purpose: composed.purpose, p_ref_type: reference?.type || null, p_ref_id: reference?.id || null });
-    } catch (e) { return { log: data, linkError: e.message }; }       // the message is recorded either way; history just lacks the student link
+    } catch (e) { return { log: data, linkError: e.message }; }
     return { log: data };
   },
 

@@ -32,14 +32,15 @@ function SignIn({ onDone }) {
   const verify = async (e) => { e.preventDefault(); setErr(''); setBusy(true);
     const { error } = await parentSupabase.auth.verifyOtp({ phone: e164, token: code.trim(), type: 'sms' });
     if (error) { setBusy(false); return setErr('That code is not right or has expired.'); }
-    try { await parentApi.link(); } catch (x) { setErr(x.message); setBusy(false); return; }
+    // OTP proves control of the phone number only. It must never create a guardian/student link.
+    // Existing, school-approved links are read by parentApi.children(); new links require a school-side process.
     setBusy(false); onDone(); };
   return (
     <div className="flex-1 min-h-0 overflow-y-auto flex items-center justify-center p-5">
       <form onSubmit={step === 'phone' ? send : verify} className="w-full max-w-sm">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#C9A227] text-[#12261F]"><GraduationCap size={28} /></div>
         <h1 className="text-center text-xl font-bold">Elimu for parents</h1>
-        <p className="text-center text-sm text-slate-600 mt-1 mb-5">{step === 'phone' ? 'Use the phone number your child’s school has on file.' : `Enter the 6-digit code sent to ${e164}.`}</p>
+        <p className="text-center text-sm text-slate-600 mt-1 mb-5">{step === 'phone' ? 'Use the phone number your child’s school has on file. The school must verify your family link before children appear.' : `Enter the 6-digit code sent to ${e164}.`}</p>
         {err && <p className="mb-3 rounded-xl bg-red-50 text-red-800 text-sm p-3">{err}</p>}
         {step === 'phone'
           ? <input autoFocus inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0722 111 222" className="w-full h-12 rounded-xl border border-[#DDD6B6] px-4 bg-white" />
@@ -65,13 +66,14 @@ const Attendance = ({ id }) => (
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${g[1]}`}>{g[0]}</span></Card>); })}
     </div>)}</Box>
 );
-const Results = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">Results are not shared with this phone number. Ask the school if you need access.</p> : (
+const ResultsBody = ({ id }) => (
   <Box s={useData(() => parentApi.results(id), [id])}>{(rows) => (
     <div className="p-3 space-y-3">{rows.length === 0 && <p className="text-sm text-slate-500">No report card has been published yet.</p>}
       {rows.map((r) => (<Card key={r.report_card_id}><div className="flex items-baseline justify-between"><div className="font-bold">{r.term} · {r.year}</div><div className="text-2xl font-bold text-[#1F6B45]">{r.grade || '—'}</div></div>
         <div className="text-sm text-slate-600 mt-1">Mean {r.mean_percentage != null ? `${Number(r.mean_percentage).toFixed(1)}%` : '—'}{r.class_position ? ` · Position ${r.class_position} of ${r.class_size}` : ''}</div>
         {r.class_teacher_remarks && <p className="text-sm mt-2"><b>Class teacher:</b> {r.class_teacher_remarks}</p>}{r.head_remarks && <p className="text-sm mt-1"><b>Head:</b> {r.head_remarks}</p>}</Card>))}</div>)}</Box>
 );
+const Results = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">Results are not shared with this phone number. Ask the school if you need access.</p> : <ResultsBody id={id} />;
 const Calendar = ({ id }) => (
   <Box s={useData(() => parentApi.calendar(id), [id])}>{(rows) => (
     <div className="p-3 space-y-2">{rows.length === 0 && <p className="text-sm text-slate-500">Nothing on the calendar.</p>}
@@ -80,13 +82,14 @@ const Calendar = ({ id }) => (
         {e.expected_amount > 0 && <div className="text-right shrink-0"><div className="text-sm font-bold text-[#8A6D0B]">{money(e.expected_amount)}</div><div className="text-[10px] text-slate-500">expected</div></div>}</div>
         {e.expected_note && <p className="text-xs text-slate-600 mt-1">{e.expected_note}</p>}</Card>))}</div>)}</Box>
 );
-const Fees = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">Fees are not shared with this phone number. Ask the school if you need access.</p> : (
+const FeesBody = ({ id }) => (
   <Box s={useData(() => parentApi.fees(id), [id])}>{(d) => (
     <div className="p-3 space-y-3"><Card className="text-center"><div className="text-xs text-slate-500">Balance to pay</div><div className="text-3xl font-bold text-[#1F6B45]">{money(d.outstanding_total)}</div>
       {d.pay_reference && <div className="mt-2 text-xs text-slate-600">Pay using reference <b className="tracking-wider text-sm">{d.pay_reference}</b></div>}</Card>
       {d.invoices.map((i) => (<Card key={i.invoice_no}><div className="flex justify-between text-sm"><b>{i.term ? `${i.term} · ` : ''}{i.academic_year || i.invoice_no}</b><span className="text-slate-500">Due {day(i.due_date)}</span></div>
         <div className="mt-1 text-xs text-slate-600">Total {money(i.total)} · Paid {money(i.paid)} · <b>Balance {money(i.outstanding)}</b></div></Card>))}</div>)}</Box>
 );
+const Fees = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">Fees are not shared with this phone number. Ask the school if you need access.</p> : <FeesBody id={id} />;
 
 const TABS = [['attendance', 'Attendance', CalendarCheck], ['results', 'Results', GraduationCap], ['calendar', 'Calendar', CalendarDays], ['fees', 'Fees', Wallet]];
 
@@ -102,7 +105,25 @@ function Portal({ onSignOut }) {
         <button type="button" onClick={() => nav('/')} aria-label="Umova home" className="h-10 w-10 flex items-center justify-center rounded-full active:bg-white/10"><HomeIcon size={19} /></button>
         <button type="button" onClick={onSignOut} aria-label="Sign out" className="h-10 w-10 flex items-center justify-center rounded-full active:bg-white/10"><LogOut size={19} /></button></div></header>
       {kids.loading ? <p className="p-6 text-sm text-slate-500">Loading…</p> : kids.error ? <p className="m-3 rounded-xl bg-red-50 text-red-800 text-sm p-3">{kids.error}</p> : !child ? (
-        <p className="m-4 text-sm text-slate-600">We could not find a child linked to this phone number. Ask the school to add it to your record, then sign in again.</p>
+        <section role="status" aria-live="polite" className="m-4 rounded-2xl border border-[#E3DBB8] bg-white p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E4F0E8] text-[#1F6B45]"><ShieldCheck size={21} /></span>
+            <div className="min-w-0">
+              <h2 className="font-bold text-[#12261F]">School approval required</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">Your phone number is verified, but no school-approved student link is available yet. Phone verification alone does not grant access to a child’s records.</p>
+            </div>
+          </div>
+          <div className="mt-4 rounded-xl bg-[#FBF8EA] p-3">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-[#6F5A17]">What to do next</h3>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-700">
+              <li>Contact the school office or class administrator.</li>
+              <li>Provide your name, the learner’s name and admission number.</li>
+              <li>Bring identification if the school requests it so staff can verify the relationship.</li>
+              <li>After the school confirms the link, sign out and sign in again.</li>
+            </ol>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Never share your one-time sign-in code with school staff or anyone claiming to approve your account.</p>
+        </section>
       ) : (<>
         <div className="shrink-0 px-3 pt-3"><div className="flex gap-2 overflow-x-auto pb-1">{list.map((c) => (
           <button key={c.student_id} type="button" onClick={() => setSel(c.student_id)} className={`shrink-0 rounded-2xl px-3 py-2 text-left border ${c.student_id === child.student_id ? 'bg-[#1F6B45] border-[#1F6B45] text-white' : 'bg-white border-[#E3DBB8]'}`}>

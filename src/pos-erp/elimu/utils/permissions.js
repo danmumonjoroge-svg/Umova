@@ -59,7 +59,7 @@ export const NAV_ITEMS = [
     anyOf: ['finance.view', 'finance.collect', 'finance.bill', 'finance.approve', 'finance.report', 'finance.configure'], also: ['/school-finance'] },
   { key: 'communication', label: 'Communication', to: '/communication', action: 'comms.history',  owned: true },
   { key: 'calendar',      label: 'Calendar',      to: '/calendar',      action: 'students.view',  owned: false },
-  { key: 'reports',       label: 'Reports',       to: '/reports',       action: 'students.view',  owned: false },
+  { key: 'reports',       label: 'Reports',       to: '/report-centre', action: 'students.view',  owned: false },
   { key: 'staff',         label: 'Staff',         to: '/staff',         action: 'students.view', owned: true, ownerOnly: true },
   { key: 'settings',      label: 'Settings',      to: '/settings',      action: 'settings.manage', owned: true },
 ];

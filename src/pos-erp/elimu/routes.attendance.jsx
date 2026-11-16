@@ -13,11 +13,10 @@ import TimetableChangesPage from './timetable/pages/TimetableChangesPage';
 import TimetableSetupPage from './timetable/pages/TimetableSetupPage';
 import CalendarPage from './calendar/pages/CalendarPage';
 import AccessPage from './shared/pages/AccessPage';
-
-const G = ({ any, children }) => <RequireElimu any={any}>{children}</RequireElimu>;
-
 import GatePage from './gate/pages/GatePage.jsx';
 import RoomsPage from './rooms/pages/RoomsPage.jsx';
+
+const G = ({ any, children }) => <RequireElimu any={any}>{children}</RequireElimu>;
 
 const ATT_ROUTES = (
   <>

@@ -6,7 +6,7 @@ export const usePosErpAuth = () => ({ tenant: { id: 't1', business_name: 'Sunris
 export const getRegisteredBusinessName = () => 'Sunrise Academy';
 export const BRAND = {};
 export const POSAuthProvider = ({ children }) => children;
-export const usePOSAuth = () => ({ authStage: 'authenticated', staff: { name: 'Tester' }, login: async () => ({ ok: true }), signup: async () => ({ ok: true }), logout() {} });
+export const usePOSAuth = () => ({ authStage: 'authenticated', staff: { id: 'u1', name: 'Tester', role: 'owner' }, tenant: { id: 't1', business_code: 'DEMOSCH', business_name: 'Sunrise Academy', business_id: 'b1' }, isOwner: true, login: async () => ({ ok: true }), signup: async () => ({ ok: true }), logout() {} });
 export const POSForcePasswordChange = () => <div>force</div>;
 const Box = ({ children }) => <div>{children}</div>;
 export const Pill = Box; export const FitPage = ({ title, children, toolbar, summary, action }) => <div><h1>{title}</h1>{action}{toolbar}{summary}{children}</div>;

@@ -27,14 +27,14 @@ export default function GuardianFormSheet({ studentId, onClose, onSaved }) {
       await linkTo(g.id); onSaved?.(g); onClose();
     } catch (e) { setTop(friendlyError(e)); } finally { setBusy(false); }
   };
-  const useExisting = async (id) => { setBusy(true); try { await linkTo(id); onSaved?.({ id }); onClose(); } catch (e) { setTop(friendlyError(e)); setBusy(false); } };
+  const linkExisting = async (id) => { setBusy(true); try { await linkTo(id); onSaved?.({ id }); onClose(); } catch (e) { setTop(friendlyError(e)); setBusy(false); } };
 
   return (
     <Sheet title="Add guardian" onClose={onClose}>
       {top && <Notice tone="bad">{top}</Notice>}
       {matches && (
         <Notice tone="warn"><b>Already on record?</b>
-          <ul className="mt-1">{matches.map((m) => <li key={m.guardian_id} className="flex items-center justify-between gap-2 py-1"><span>{m.first_name} {m.last_name} <span className="text-xs">(same {m.matched_on})</span></span>{studentId && <button type="button" className="underline" onClick={() => useExisting(m.guardian_id)}>Use this one</button>}</li>)}</ul>
+          <ul className="mt-1">{matches.map((m) => <li key={m.guardian_id} className="flex items-center justify-between gap-2 py-1"><span>{m.first_name} {m.last_name} <span className="text-xs">(same {m.matched_on})</span></span>{studentId && <button type="button" className="underline" onClick={() => linkExisting(m.guardian_id)}>Use this one</button>}</li>)}</ul>
           <button type="button" className="mt-2 underline" onClick={() => save(true)}>No, this is a different person — create new</button>
         </Notice>
       )}

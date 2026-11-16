@@ -22,7 +22,6 @@ async function rpc(name, args) {
   return data;
 }
 export const parentApi = {
-  link: () => rpc('elimu_parent_link'),
   children: () => rpc('elimu_parent_children'),
   attendance: (id) => rpc('elimu_parent_attendance', { p_student: id }),
   results: (id) => rpc('elimu_parent_results', { p_student: id }),

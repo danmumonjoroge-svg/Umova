@@ -1,3 +1,4 @@
+/* global BigInt */
 // Money helpers. Money is handled as INTEGER CENTS in JavaScript and numeric(15,2) in the database - never floating point.
 // Amounts arrive from PostgREST as strings ("15000.00") or numbers; parse once here.
 export class MoneyError extends Error {}

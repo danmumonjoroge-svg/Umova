@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { FitPage, DataCard, CardGrid, LoadingBlock, EmptyBlock, Notice, Sheet, fieldClass, saveBtnCls } from '../services/platform.js';
+import React, { useMemo, useState } from 'react';
+import { FitPage, SearchBox, FilterChips, DataCard, CardGrid, LoadingBlock, EmptyBlock, Notice, Sheet, fieldClass, saveBtnCls } from '../services/platform.js';
 import { setupService } from '../services/ElimuSetupService.js';
 import { enrollmentService } from '../services/ElimuEnrollmentService.js';
 import { useAsync } from '../hooks/useAsync.js';
@@ -11,12 +11,17 @@ import { friendlyError } from '../utils/validation.js';
 export default function ClassesPage({ basePath = '/elimu' }) {
   const { can } = useElimuAccess(); const { period } = useElimuSetup();
   const classes = useAsync(() => setupService.classes(), []); const [edit, setEdit] = useState(null); const [roster, setRoster] = useState(null);
+  const [search, setSearch] = useState(''); const [scope, setScope] = useState('ACTIVE');
+  const filtered = useMemo(() => (classes.data || []).filter((c) => (scope === 'ALL' || (scope === 'ACTIVE' ? c.is_active : !c.is_active)) && `${c.name} ${c.code || ''} ${(c.elimu_streams || []).map((x) => x.name).join(' ')}`.toLowerCase().includes(search.toLowerCase())), [classes.data, scope, search]);
+  const activeCount = (classes.data || []).filter((c) => c.is_active).length;
   return (
-    <FitPage title="Classes" subtitle={period ? `${period.academic_year_name}${period.term_name ? ` · ${period.term_name}` : ''}` : 'No current year'} action={can('structure.manage') && <button type="button" className="px-3 min-h-[40px] rounded-lg bg-[#1F6B45] text-white text-sm font-semibold" onClick={() => setEdit({})}>Add class</button>}>
+    <FitPage title="Classes & streams" subtitle={period ? `${period.academic_year_name}${period.term_name ? ` · ${period.term_name}` : ''}` : 'No current academic year'} action={can('structure.manage') && <button type="button" className="px-3 min-h-[40px] rounded-xl bg-[#1F6B45] text-white text-sm font-semibold shadow-sm" onClick={() => setEdit({})}>＋ Add class</button>}
+      summary={<div className="grid grid-cols-2 gap-2"><div className="rounded-xl border border-[#E3DBB8] bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-slate-500">Active classes</div><div className="text-lg font-bold text-[#1F6B45]">{classes.data ? activeCount : '—'}</div></div><div className="rounded-xl border border-[#E3DBB8] bg-[#FBF8EA] px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-slate-500">Total configured</div><div className="text-lg font-bold text-[#5C4A12]">{classes.data?.length ?? '—'}</div></div></div>}
+      toolbar={<div className="space-y-2"><SearchBox value={search} onChange={setSearch} placeholder="Find a class or stream" /><FilterChips options={[{key:'ACTIVE',label:'In use'},{key:'INACTIVE',label:'Archived'},{key:'ALL',label:'All'}]} value={scope} onChange={setScope} /></div>}>
       {classes.error && <Notice tone="bad">{classes.error}</Notice>}
-      {classes.loading && !classes.data ? <LoadingBlock /> : (classes.data || []).length === 0 ? <EmptyBlock>No classes yet. {can('structure.manage') && 'Add Grade 1, Form 1… with the button above.'}</EmptyBlock> :
-        <CardGrid>{classes.data.map((c) => (
-          <DataCard key={c.id} title={c.name} subtitle={c.elimu_streams?.length ? `Streams: ${c.elimu_streams.filter((s) => s.is_active).map((s) => s.name).join(', ')}` : 'No streams'} dim={!c.is_active}>
+      {classes.loading && !classes.data ? <LoadingBlock /> : (classes.data || []).length === 0 ? <EmptyBlock>No classes configured yet. {can('structure.manage') && 'Add the first class using the button above.'}</EmptyBlock> : filtered.length === 0 ? <EmptyBlock>No classes match this search or filter.</EmptyBlock> :
+        <CardGrid>{filtered.map((c) => (
+          <DataCard key={c.id} title={c.name} subtitle={c.code || 'Class code not set'} pill={<span className={`text-[9px] font-bold uppercase rounded-full px-2 py-1 ${c.is_active ? 'bg-[#E3F1E7] text-[#1B5138]' : 'bg-[#EEEBDD] text-[#6B6A55]'}`}>{c.is_active ? 'In use' : 'Archived'}</span>} metrics={[{label:'Streams',value:(c.elimu_streams || []).filter((x) => x.is_active).length},{label:'Status',value:c.is_active ? 'Active' : 'Inactive'}]} dim={!c.is_active}>
             <div className="flex gap-3 text-sm font-semibold text-[#1F6B45]"><button type="button" className="underline" disabled={!period} onClick={() => setRoster(c)}>Class list</button>{can('structure.manage') && <button type="button" className="underline" onClick={() => setEdit(c)}>Edit</button>}</div>
           </DataCard>))}</CardGrid>}
       {edit && <ClassSheet row={edit} onClose={() => setEdit(null)} onSaved={() => classes.reload()} />}
