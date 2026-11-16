@@ -9,6 +9,8 @@ import { usePosErpAuth } from '../../auth/usePosErpAuth';
 import { getRegisteredBusinessName } from '../../services/businessIdentity';
 
 export { staffService, generateTempPassword } from '../../services/staffService';
+export { supplierService } from '../../services/supplierService.js';
+export { purchaseOrderService, goodsReceivedService, supplierReturnService } from '../../services/purchaseService.js';
 export const supabase = posSupabase;
 export { usePermissions, RequirePermission, usePosErpAuth };
 
@@ -24,7 +26,7 @@ export { BRAND } from '../../theme/brand';
 /** Current school context. The database stamps tenant_id/business_id itself; these are for display and cache keys only. */
 export function useSchool() {
   const a = usePosErpAuth();
-  return { tenantId: a.tenant?.id ?? null, userId: a.posStaffId ?? null, staffName: a.staffName ?? null, schoolName: getRegisteredBusinessName() || a.tenant?.business_name || '' };
+  return { tenantId: a.tenant?.id ?? null, businessId: a.tenant?.business_id ?? null, userId: a.posStaffId ?? null, staffName: a.staffName ?? null, schoolName: getRegisteredBusinessName() || a.tenant?.business_name || '' };
 }
 
 /** Throw a readable Error for a failed Supabase call. */

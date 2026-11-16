@@ -10,9 +10,8 @@ const AccessCtx = createContext(null);
 
 /** Fetches the caller's Elimu access once for a whole subtree. `value` (tests / hosts) skips the fetch. */
 export function ElimuAccessProvider({ value, children }) {
-  const parent = useContext(AccessCtx);               // already provided higher up (e.g. by the Elimu session): reuse it, do not fetch twice
-  const own = useAccessFetch(!value && !parent);
-  return <AccessCtx.Provider value={value || parent || own}>{children}</AccessCtx.Provider>;
+  const own = useAccessFetch(!value);
+  return <AccessCtx.Provider value={value || own}>{children}</AccessCtx.Provider>;
 }
 
 function useAccessFetch(enabled) {

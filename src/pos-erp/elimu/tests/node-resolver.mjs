@@ -10,6 +10,7 @@ export async function resolve(spec, ctx, next) {
   if ((spec.startsWith('.') || spec.startsWith('/')) && !path.extname(spec) && ctx.parentURL) {
     const base = path.resolve(path.dirname(fileURLToPath(ctx.parentURL)), spec);
     for (const e of ['.js', '.jsx']) if (existsSync(base + e)) return next(pathToFileURL(base + e).href, ctx);
+    for (const e of ['/index.js', '/index.jsx']) if (existsSync(base + e)) return next(pathToFileURL(base + e).href, ctx);
   }
   return next(spec, ctx);
 }`));

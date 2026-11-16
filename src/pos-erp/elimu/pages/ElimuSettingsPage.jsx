@@ -1,6 +1,5 @@
 // School setup: academic years & terms, the switches in elimu_settings, custom statuses, and a plain-language table of school roles.
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { FitPage, LoadingBlock, Notice, Sheet, fieldClass, saveBtnCls } from '../services/platform.js';
 import { setupService } from '../services/ElimuSetupService.js';
 import { enrollmentService } from '../services/ElimuEnrollmentService.js';
@@ -15,7 +14,7 @@ import { friendlyError } from '../utils/validation.js';
 
 const Card = ({ title, children, action }) => <section className="bg-white border border-[#E3DBB8] rounded-xl p-3 mb-3"><div className="flex items-center justify-between mb-2"><h2 className="text-sm font-semibold">{title}</h2>{action}</div>{children}</section>;
 
-export default function ElimuSettingsPage({ basePath = '/elimu' }) {
+export default function ElimuSettingsPage() {
   const { can } = useElimuAccess(); const setup = useElimuSetup(); const [err, setErr] = useState(null); const [sheet, setSheet] = useState(null);
   const years = useAsync(() => setupService.years(), []); const terms = useAsync(() => setupService.terms(), []);
   const sts = useAsync(() => setupService.studentStatuses(), []); const ads = useAsync(() => setupService.admissionStatuses(), []);
@@ -28,19 +27,6 @@ export default function ElimuSettingsPage({ basePath = '/elimu' }) {
   return (
     <FitPage title="School settings">
       {err && <Notice tone="bad">{err}</Notice>}
-      <Card title="Settings workspace">
-        <p className="text-sm text-slate-600 mb-3">School-wide settings live here. Some specialist modules retain their own configuration screens; use these shortcuts to reach them without changing where their settings are stored.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <Link to={`${basePath}/attendance/settings`} className="rounded-xl border border-[#E3DBB8] bg-[#FBF8EA] p-3 hover:border-[#1F6B45]">
-            <span className="block text-sm font-semibold text-[#1F6B45]">Attendance settings</span>
-            <span className="block text-xs text-slate-500 mt-1">Attendance rules, registers and operational defaults</span>
-          </Link>
-          <Link to={`${basePath}/timetable/setup`} className="rounded-xl border border-[#E3DBB8] bg-[#FBF8EA] p-3 hover:border-[#1F6B45]">
-            <span className="block text-sm font-semibold text-[#1F6B45]">Timetable setup</span>
-            <span className="block text-xs text-slate-500 mt-1">Timetable structure and scheduling configuration</span>
-          </Link>
-        </div>
-      </Card>
       <Card title="School code">
         <p className="text-2xl font-bold tracking-widest text-[#1F6B45]">{school.data?.school_code || '------'}</p>
         <p className="text-sm text-slate-500 mt-1">Permanent and unique to your school. Parents and payers quote <b>{school.data?.school_code || 'CODE'}-ADMNO</b> (for example {school.data?.school_code || 'E7K3QX'}-S100) so a payment can never land on another school's student, even when admission numbers match.</p>

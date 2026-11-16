@@ -1,19 +1,13 @@
-// ELIMU as its own app inside Umova:  <Route path="/school/*" element={<ElimuApp />} />   (see App.js; pass base="/elimu" if you mount it there)
-//
-//   POSAuthProvider                shared identity state machine (no UI)                         <- reused infrastructure
-//     ElimuAuthProvider            builds the ElimuSession: school, user, role, permissions       (app/auth)
-//       ElimuAuthGate              Elimu's own login / register / waiting / new-password screens  (auth/)
-//         ElimuLock                inactivity PIN lock (shared security component)
-//           ElimuAppRoutes         shell (app bar, menu, bell, account menu) + settings hub + notifications + every module   (app/)
-//
-// There is NO POS login or POS dashboard in this path. Every module registers itself once (below); later modules do the same via registerModule().
-import React, { lazy } from 'react';
-import { Route, Navigate } from 'react-router-dom';
-import { POSAuthProvider, AppLock, supabase } from './services/platform.js';
+// ELIMU as its own app inside Umova:  <Route path="/school/*" element={<ElimuApp />} />   (see App.js)
+// Same sign-in as "My Business" (POSAuthProvider -> POSAuthGate -> app lock), so a school signs in with its business account.
+// Phone-first shell: fixed top app bar, ONE scrolling area, bottom tab bar (in ElimuLayout). Registers every Elimu module once.
+import React, { Suspense, useEffect } from 'react';
+import { Route, Navigate, useNavigate } from 'react-router-dom';
+import { GraduationCap, LogOut, Home as HomeIcon } from 'lucide-react';
+import { POSAuthProvider, AppLock, supabase, usePosErpAuth } from './services/platform.js';
 import ElimuAuthGate from './auth/ElimuAuthGate.jsx';
-import { ElimuAuthProvider, useElimuSession } from './app/auth/ElimuAuthContext.jsx';
-import ElimuAppRoutes from './app/routes/ElimuAppRoutes.jsx';
-import { ElimuProvider } from './shared/hooks/ElimuContext';
+import { seedDemoSchoolIfEmpty } from './auth/demo.js';
+import ElimuRoutes from './routes.jsx';
 import { registerModule } from './registry.js';
 import { elimuAcademicNested } from './routes.academic.jsx';
 import { attendanceLayoutRoute } from './routes.attendance.jsx';
@@ -21,21 +15,10 @@ import { elimuFinanceRoutes, FinanceHub } from './finance/ElimuFinanceRoutes.jsx
 
 export const ELIMU_BASE = '/school';
 
-// Existing setup pages become SECTIONS of the ONE Settings hub (they keep their own deep links too: nothing is removed).
-const SchoolSettings = lazy(() => import('./pages/ElimuSettingsPage.jsx'));
-const AcademicSetup = lazy(() => import('./academic/pages/AcademicSetupPage'));
-const AttendanceSettings = lazy(() => import('./attendance/pages/AttendanceSettingsPage'));
-const TimetableSetup = lazy(() => import('./timetable/pages/TimetableSetupPage'));
-const AccessPage = lazy(() => import('./shared/pages/AccessPage'));
-const FeeSetup = lazy(() => import('./finance/pages/ElimuFeeSetupPage'));
-const inAttendanceContext = (el) => <ElimuProvider>{el}</ElimuProvider>;     // these pages read the attendance-group context
-
-// One registration per module. `key` decides which menu entries show; routes are mounted under the shell.
-registerModule({ key: 'foundation', routes: [], settingsSections: [{ key: 'school', element: ({ base }) => <SchoolSettings basePath={base} />, action: 'settings.manage' }] });
-registerModule({ key: 'academics', routes: [React.cloneElement(elimuAcademicNested, { key: 'academics' })], settingsSections: [{ key: 'academic', element: <AcademicSetup />, action: 'settings.manage' }] });
-registerModule({ key: 'attendance', routes: [React.cloneElement(attendanceLayoutRoute, { key: 'attendance' })],
-  settingsSections: [{ key: 'attendance', element: inAttendanceContext(<AttendanceSettings />), action: 'settings.manage' }, { key: 'users_roles', element: inAttendanceContext(<AccessPage />), action: 'settings.manage' }] });
-registerModule({ key: 'timetable', routes: [], settingsSections: [{ key: 'timetable', element: inAttendanceContext(<TimetableSetup />), action: 'settings.manage' }] });   // pages ship with the attendance group
+// One registration per module. `key` decides which school tab shows; routes are mounted under the school shell.
+registerModule({ key: 'academics', routes: [React.cloneElement(elimuAcademicNested, { key: 'academics' })] });
+registerModule({ key: 'attendance', routes: [React.cloneElement(attendanceLayoutRoute, { key: 'attendance' })] });
+registerModule({ key: 'timetable', routes: [] });      // pages ship with the attendance group above
 registerModule({ key: 'calendar', routes: [] });
 registerModule({ key: 'rooms', routes: [] });      // pages ship with the attendance group above
 registerModule({ key: 'gate', routes: [] });
@@ -44,22 +27,45 @@ registerModule({ key: 'fees', routes: [
   React.cloneElement(elimuFinanceRoutes(), { key: 'finance' }),
   <Route key="finance-hub" path="finance/*" element={<FinanceHub basePath={ELIMU_BASE} />} />,
   <Route key="fees" path="fees" element={<Navigate to="../finance" replace />} />,
-], settingsSections: [{ key: 'finance', element: <FeeSetup />, action: 'finance.configure' }] });
+] });
 
-/** Inactivity PIN lock is kept: it is shared security infrastructure, not POS UI. Signing out from it ends the Elimu session. */
+const CSS = `
+.elimu-app{-webkit-tap-highlight-color:transparent;touch-action:manipulation;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+.elimu-app input,.elimu-app select,.elimu-app textarea{font-size:16px}           /* stops the phone zooming in on every field */
+.elimu-app button,.elimu-app a{-webkit-user-select:none;user-select:none}
+.elimu-app *{scrollbar-width:thin}
+`;
+
 function ElimuLock({ children }) {
-  const { signOut } = useElimuSession();
-  return <AppLock service="business" client={supabase} onSignOut={signOut}>{children}</AppLock>;
+  const { logout } = usePosErpAuth();
+  return <AppLock service="business" client={supabase} onSignOut={logout}>{children}</AppLock>;
 }
 
-/** props: base (mount path, default '/school'), adapter (auth adapter; default = shared Umova identity), accessOverride (tests: skips the permissions fetch),
- *        homeHref (link back to the Umova home in the account menu; null hides it) */
-export default function ElimuApp({ base = ELIMU_BASE, adapter, accessOverride, homeHref = '/' }) {
+function Shell() {
+  const { tenant, staffName, logout } = usePosErpAuth(); const nav = useNavigate();
+  useEffect(() => { seedDemoSchoolIfEmpty(tenant).then((r) => { if (r?.seeded) window.location.reload(); }); }, [tenant?.id]);   // demo school only; the database refuses any other school
+  return (
+    <div className="elimu-app fixed inset-0 flex flex-col bg-[#FBF8EA] text-[#23382B]" style={{ height: '100dvh' }}>
+      <style>{CSS}</style>
+      <header className="shrink-0 bg-[#12261F] text-white pt-[env(safe-area-inset-top)]">
+        <div className="flex items-center gap-3 px-3 h-14">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#C9A227] text-[#12261F]"><GraduationCap size={20} /></span>
+          <div className="min-w-0 flex-1 leading-tight"><div className="font-bold text-[15px]">Elimu</div><div className="text-[11.5px] text-white/70 truncate">{tenant?.business_name || staffName || ''}</div></div>
+          <button type="button" onClick={() => nav('/')} aria-label="Umova home" className="h-10 w-10 flex items-center justify-center rounded-full active:bg-white/10"><HomeIcon size={19} /></button>
+          <button type="button" onClick={logout} aria-label="Sign out" className="h-10 w-10 flex items-center justify-center rounded-full active:bg-white/10"><LogOut size={19} /></button>
+        </div>
+      </header>
+      <div className="flex-1 min-h-0">
+        <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading…</div>}><ElimuRoutes basePath={ELIMU_BASE} /></Suspense>
+      </div>
+    </div>
+  );
+}
+
+export default function ElimuApp() {
   return (
     <POSAuthProvider>
-      <ElimuAuthProvider adapter={adapter} accessOverride={accessOverride}>
-        <ElimuAuthGate><ElimuLock><ElimuAppRoutes base={base} homeHref={homeHref} /></ElimuLock></ElimuAuthGate>
-      </ElimuAuthProvider>
+      <ElimuAuthGate><ElimuLock><Shell /></ElimuLock></ElimuAuthGate>
     </POSAuthProvider>
   );
 }

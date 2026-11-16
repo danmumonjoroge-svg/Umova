@@ -6,22 +6,12 @@
 //   open-in-phone   -> commEngineService.deepLink / setStatus ; provider send -> commEngineService.sendViaProvider
 //   honest status   -> QUEUED = prepared, OPENED = app opened, SENT = staff confirmed, SUBMITTED/DELIVERED/READ/FAILED = provider only
 // Elimu adds only the link row (elimu_attendance_notices) tying a message to student / guardian / attendance record / purpose.
-import { communicationService } from '../ElimuCommunicationService';
-import { registerPurpose } from '../purposes';
+import { posSupabase } from '../../../services/posSupabaseClient';
 import { commEngineService } from '../../../services/commEngineService';
 import { absenceService } from '../../attendance/services/absenceService';
 import { ATTENDANCE_PURPOSES, PURPOSE_LABELS } from '../templates/attendanceTemplates';
 import { buildDraft } from './contactPlan';
 import { getOfflineAttendance } from '../../attendance/services/offlineAttendance';
-
-for (const [key, label] of Object.entries(PURPOSE_LABELS)) {
-  try { registerPurpose({ key: ATTENDANCE_PURPOSES[key], label, fields: ['guardian_name', 'student_name', 'school_name'] }); } catch (e) { if (!String(e?.message || '').includes('already registered')) throw e; }
-}
-
-const communicationServiceLog = async (id) => {
-  const { data, error } = await communicationService.getLog(id);
-  return { data, error };
-};
 
 export const guardianComms = {
   draft: buildDraft,
@@ -47,13 +37,13 @@ export const guardianComms = {
       const dup = history.find((h) => !h.superseded_at && h.purpose === message.purpose && h.channel === message.channel && (h.guardian_id || null) === (message.guardianId || null));
       if (dup) return { status: 'DUPLICATE', notice: dup };
     }
-    const recorded = await communicationService.record({
-      tenantId, channel: message.channel, purpose: ATTENDANCE_PURPOSES[message.purpose],
-      guardianId: message.guardianId, studentId: message.studentId,
-      subject: message.subject, body: message.body, generated: message.generated,
-      templateSource: 'ELIMU', referenceLabel: message.label, status: 'QUEUED',
-    });
-    const { data: log, error } = await communicationServiceLog(recorded.logId);
+    const row = {
+      tenant_id: tenantId, business_id: businessId ?? null, channel: message.channel, message_type: 'OTHER', purpose: ATTENDANCE_PURPOSES[message.purpose],
+      recipient_kind: 'GUARDIAN', recipient_name: message.guardianName, recipient: message.to, subject: message.subject, generated_message: message.generated, rendered_message: message.body,
+      was_edited: message.body !== message.generated, template_source: 'ELIMU', status: 'QUEUED', initiated_by: 'USER',
+      reference_type: 'elimu_attendance_record', reference_id: message.recordId, reference_label: message.label, created_by: userId ?? null,
+    };
+    const { data: log, error } = await posSupabase.from('lb_communication_log').insert(row).select('*').single();
     if (error) throw error;
     const res = await absenceService.recordContact({ recordId: message.recordId, purpose: message.purpose, guardianId: message.guardianId, guardianName: message.guardianName, channel: message.channel, commLogId: log.id, note: null, resend: message.resend });
     return { status: res.duplicate ? 'DUPLICATE' : 'RECORDED', log, notice: res };

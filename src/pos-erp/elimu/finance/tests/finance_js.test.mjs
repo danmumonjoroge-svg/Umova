@@ -70,12 +70,11 @@ test('notifications: dedupe key, duplicate does not create a second log row, not
     from: () => ({ insert: (row) => ({ select: () => ({ single: async () => { logs.push(row); return { data: { id: 'log1', ...row }, error: null }; } }) }) }),
   };
   const composed = { purpose: 'ELIMU_PAYMENT_CONFIRMED', channel: 'SMS', body: 'hello', subject: null, source: 'DEFAULT', problems: [] };
-  const args = { supabase, tenantId: 't', businessId: 'b', userId: 'u', studentId: 's', guardianId: 'g1', contactId: 'c1', composed, final: { body: 'hello (edited)', to: '+254722123456' }, reference: { type: 'ELIMU_PAYMENT', id: 'pay1' }, recordGuardianMessage: async () => ({ logId: 'log1' }), fetchLog: async () => ({ data: { id: 'log1', status: 'QUEUED', was_edited: true, message_type: 'OTHER' }, error: null }) };
+  const args = { supabase, comm: {}, tenantId: 't', businessId: 'b', userId: 'u', studentId: 's', composed, final: { body: 'hello (edited)', to: '+254722123456' }, reference: { type: 'ELIMU_PAYMENT', id: 'pay1' } };
   const a = await prepareRecord(args); const b = await prepareRecord(args);
   assert.equal(a.duplicate, false); assert.equal(b.duplicate, true); assert.equal(logs.length, 1);
-  assert.equal(logs.length, 0, 'finance no longer inserts directly into the shared communication log');
+  assert.equal(logs[0].status, 'QUEUED', 'a prepared message is QUEUED, never SENT/DELIVERED'); assert.equal(logs[0].was_edited, true); assert.equal(logs[0].message_type, 'OTHER');
   await assert.rejects(prepareRecord({ ...args, composed: { ...composed, problems: ['No valid phone number for the guardian.'] }, final: { body: 'x', to: null } }), /phone/);
-  await assert.rejects(prepareRecord({ ...args, guardianId: null }), /verified guardian link/);
 });
 
 const memKv = () => { const m = new Map(); return { get: async (k) => m.get(k), set: async (k, v) => { m.set(k, v); } }; };

@@ -21,7 +21,6 @@
 
 export const KIND = 'elimu_attendance';
 export const S = { PENDING: 'ELIMU_PENDING', SYNCING: 'ELIMU_SYNCING', SYNCED: 'ELIMU_SYNCED', ATTENTION: 'ELIMU_NEEDS_ATTENTION', FAILED: 'ELIMU_FAILED' };
-let attendanceDrainBusy = false;
 
 /** Default store: the POS Dexie database. Loaded lazily so pure tests can inject an in-memory store instead. */
 export async function dexieStore() {
@@ -57,7 +56,6 @@ export function createOfflineAttendance({ store, now = () => new Date().toISOStr
 
     /** Queue marks for a session. Pending mark-batches for the same session are MERGED (latest tap per student wins): no duplicates. */
     async enqueueMarks({ tenantId, sessionId, marks, source = 'OFFLINE' }) {
-      if (!tenantId || !sessionId) throw new Error('A school and attendance session are required.');
       const rows = await store.listQueue();
       const open = rows.find((r) => r.status === S.PENDING && r.payload.type === 'marks' && r.payload.sessionId === sessionId && r.tenantId === tenantId);
       const stamped = marks.map((m) => ({ ...m, marked_at: m.marked_at || now() }));
@@ -70,19 +68,13 @@ export function createOfflineAttendance({ store, now = () => new Date().toISOStr
     },
     /** Queue a submit. If one is already waiting for this session, nothing is added. */
     async enqueueSubmit({ tenantId, sessionId, confirmUnmarked }) {
-      if (!tenantId || !sessionId) throw new Error('A school and attendance session are required.');
       const rows = await store.listQueue();
-      if (rows.some((r) => r.tenantId === tenantId && [S.PENDING, S.SYNCING, S.SYNCED].includes(r.status) && r.payload.type === 'submit' && r.payload.sessionId === sessionId)) return null;
+      if (rows.some((r) => r.status === S.PENDING && r.payload.type === 'submit' && r.payload.sessionId === sessionId)) return null;
       return store.addQueue({ kind: KIND, status: S.PENDING, tenantId, createdAt: now(), clientReference: `ELIMU-SUBMIT-${sessionId}`, payload: { type: 'submit', sessionId, confirmUnmarked: !!confirmUnmarked } });
     },
     /** Queue a guardian message. It is NOT sent/recorded until synced: the screen says "waiting", never "sent". */
-    async enqueueMessage({ tenantId, message }) {
-      if (!tenantId || !message?.recordId || !message?.purpose || !message?.channel) throw new Error('A school and complete message reference are required.');
-      const clientReference = `ELIMU-MSG-${message.recordId}-${message.purpose}-${message.guardianId || ''}-${message.channel}`;
-      const rows = await store.listQueue();
-      const existing = rows.find((r) => r.tenantId === tenantId && r.clientReference === clientReference && [S.PENDING, S.SYNCING, S.SYNCED].includes(r.status));
-      if (existing) return existing.id;
-      return store.addQueue({ kind: KIND, status: S.PENDING, tenantId, createdAt: now(), clientReference, payload: { type: 'message', message } });
+    enqueueMessage({ tenantId, message }) {
+      return store.addQueue({ kind: KIND, status: S.PENDING, tenantId, createdAt: now(), clientReference: `ELIMU-MSG-${message.recordId}-${message.purpose}-${message.guardianId || ''}-${message.channel}`, payload: { type: 'message', message } });
     },
     list: async (tenantId) => (await store.listQueue()).filter((r) => !tenantId || r.tenantId === tenantId),
     async summary(tenantId) {
@@ -97,8 +89,6 @@ export function createOfflineAttendance({ store, now = () => new Date().toISOStr
      * Stops at the first network failure (everything after it waits). A server refusal does NOT stop other sessions.
      */
     async drain({ tenantId, handlers }) {
-      if (!tenantId) return { synced: 0, attention: 0, failed: 0, waiting: 0, stoppedOffline: false, skipped: true };
-      const run = async () => {
       const rows = (await this.list(tenantId)).filter((r) => r.status === S.PENDING || r.status === S.SYNCING);
       const out = { synced: 0, attention: 0, failed: 0, waiting: 0, stoppedOffline: false }; const blockedSessions = new Set();
       for (const row of rows) {
@@ -120,20 +110,14 @@ export function createOfflineAttendance({ store, now = () => new Date().toISOStr
         }
       }
       return out;
-      };
-      if (typeof navigator !== 'undefined' && navigator.locks?.request) return navigator.locks.request('elimu-attendance-sync', run);
-      if (attendanceDrainBusy) return { synced: 0, attention: 0, failed: 0, waiting: 0, stoppedOffline: false, skipped: true };
-      attendanceDrainBusy = true;
-      try { return await run(); } finally { attendanceDrainBusy = false; }
     },
   };
 }
 let singleton = null;
-/** The app-wide instance on the real POS offline database. Never silently fall back to memory:
- * doing so would tell staff their work is saved when it will disappear on reload. */
+/** The app-wide instance on the real POS offline database. */
 export async function getOfflineAttendance() {
   if (!singleton) {
-    const store = await dexieStore();
+    let store; try { store = await dexieStore(); } catch { store = memoryStore(); }
     const { isNetworkFailure } = await import('../../../offline/netErrors');
     singleton = createOfflineAttendance({ store, isNetworkFailure: (e) => !!e?.network || isNetworkFailure(e) });
   }

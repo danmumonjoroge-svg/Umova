@@ -4,7 +4,7 @@
 export const ELIMU_ACTIONS = [
   'students.view','guardians.view','admissions.view','structure.view','enrollment.view','comms.history','comms.send',
   'students.manage','guardians.manage','admissions.manage','enrollment.manage','students.care',
-  'structure.manage','admissions.decide','settings.manage',
+  'structure.manage','admissions.decide','settings.manage','finance.view',
 ];
 // Route guards take a list of acceptable "keys"; for Elimu the key IS the action.
 export const ACTION_MAP = Object.fromEntries(ELIMU_ACTIONS.map(a => [a, [a]]));
@@ -57,9 +57,11 @@ export const NAV_ITEMS = [
   { key: 'gate',          label: 'Gate',          to: '/gate',          action: 'attendance.take_any', owned: false },
   { key: 'fees',          label: 'Finance',       to: '/finance',       action: 'finance.view',   owned: false,
     anyOf: ['finance.view', 'finance.collect', 'finance.bill', 'finance.approve', 'finance.report', 'finance.configure'], also: ['/school-finance'] },
+  { key: 'procurement',  label: 'Procurement',  to: '/procurement',   action: 'finance.view',   owned: true },
+  { key: 'aia',           label: 'AIA activities', to: '/aia',            action: 'finance.view',   owned: true },
   { key: 'communication', label: 'Communication', to: '/communication', action: 'comms.history',  owned: true },
   { key: 'calendar',      label: 'Calendar',      to: '/calendar',      action: 'students.view',  owned: false },
-  { key: 'reports',       label: 'Reports',       to: '/report-centre', action: 'students.view',  owned: false },
+  { key: 'reports',       label: 'Reports',       to: '/reports',       action: 'students.view',  owned: false },
   { key: 'staff',         label: 'Staff',         to: '/staff',         action: 'students.view', owned: true, ownerOnly: true },
   { key: 'settings',      label: 'Settings',      to: '/settings',      action: 'settings.manage', owned: true },
 ];

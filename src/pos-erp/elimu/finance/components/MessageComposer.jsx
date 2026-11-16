@@ -1,35 +1,16 @@
 // Review-and-edit-before-sending, for any finance notice. Uses the POS comm engine for everything except the finance wording.
 // HONESTY: "Prepare" only saves a QUEUED row. "Open in WhatsApp/SMS/email" records OPENED. Only "I sent it" (or a provider) marks SENT.
 // Nothing here ever says "delivered" - that word is the provider's, via describeStatus().
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MessageSquare, Phone, X } from 'lucide-react';
 import { commEngineService } from '../../../services/commEngineService';
 import { posSupabase as supabase } from '../../../services/posSupabaseClient';
 import { composeFinanceMessage, prepareRecord, statusLabel } from '../../communication/finance/financeComm';
 import { FINANCE_PURPOSE_BY_KEY } from '../../communication/templates/financeTemplates';
-import { guardianService } from '../../services/ElimuGuardianService';
-import { communicationService } from '../../communication/ElimuCommunicationService';
-import { eligibility } from '../../communication/consent';
 import { Notice, inputCls, saveBtnCls, formCard, Pill } from '../../../components/CardKit';
 
 export default function MessageComposer({ ctx, purpose, vars, contact, reference, studentId, templates = [], onClose, onDone }) {
   const [channel, setChannel] = useState(contact?.phone ? 'SMS' : contact?.email ? 'EMAIL' : 'SMS');
-  const [guardianMatch, setGuardianMatch] = useState({ loading: !!studentId, guardian: null, contact: null, error: null });
-  useEffect(() => {
-    let live = true;
-    if (!studentId) { setGuardianMatch({ loading: false, guardian: null, contact: null, error: 'Student link is missing.' }); return () => { live = false; }; }
-    setGuardianMatch({ loading: true, guardian: null, contact: null, error: null });
-    guardianService.forStudent(studentId).then((rows) => {
-      const wanted = channel === 'EMAIL' ? String(contact?.email || '').trim().toLowerCase() : String(contact?.phone || '').replace(/\D/g, '');
-      const matches = (rows || []).flatMap((g) => (g.contacts || []).filter((c) => {
-        if (channel === 'EMAIL') return c.kind === 'EMAIL' && String(c.value || '').trim().toLowerCase() === wanted;
-        return c.kind === 'PHONE' && String(c.value || '').replace(/\D/g, '') === wanted;
-      }).map((c) => ({ guardian: g, contact: c })));
-      if (!live) return;
-      setGuardianMatch(matches.length === 1 ? { loading: false, ...matches[0], error: null } : { loading: false, guardian: null, contact: null, error: matches.length ? 'This contact is linked to more than one guardian. Ask an administrator to resolve the link.' : 'This contact is not linked to a verified guardian record. Update the guardian record before preparing this message.' });
-    }).catch((e) => { if (live) setGuardianMatch({ loading: false, guardian: null, contact: null, error: e.message || 'Could not verify the guardian link.' }); });
-    return () => { live = false; };
-  }, [studentId, channel, contact?.phone, contact?.email]);
   const composed = useMemo(() => composeFinanceMessage({ purpose, channel, vars, contact, templates }), [purpose, channel, vars, contact, templates]);
   const [edit, setEdit] = useState({ key: '', body: null, subject: null });
   const key = `${purpose}|${channel}`;
@@ -37,12 +18,11 @@ export default function MessageComposer({ ctx, purpose, vars, contact, reference
   const subject = edit.key === key && edit.subject !== null ? edit.subject : composed.subject;
   const [busy, setBusy] = useState(false); const [msg, setMsg] = useState(null); const [row, setRow] = useState(null);
   const P = FINANCE_PURPOSE_BY_KEY[purpose];
-  const consentCheck = guardianMatch.guardian ? eligibility({ guardian: guardianMatch.guardian, channel, purpose, contactId: guardianMatch.contact?.id, settings: { require_explicit_consent: false } }) : null;
 
   const prepare = async () => {
     setBusy(true); setMsg(null);
     try {
-      const r = await prepareRecord({ supabase, tenantId: ctx.tenantId, businessId: ctx.businessId, userId: ctx.staffId, studentId, guardianId: guardianMatch.guardian?.id, contactId: guardianMatch.contact?.id, recordGuardianMessage: communicationService.record, fetchLog: communicationService.getLog, composed,
+      const r = await prepareRecord({ supabase, comm: commEngineService, tenantId: ctx.tenantId, businessId: ctx.businessId, userId: ctx.staffId, studentId, composed,
         final: { body, subject, to: composed.to, recipientName: vars.guardian_name }, reference });
       if (r.duplicate) setMsg({ tone: 'warn', text: 'This notice was already prepared for this guardian. Open the message history to resend it deliberately.' });
       else { setRow(r.log); onDone?.(r.log); }
@@ -66,15 +46,12 @@ export default function MessageComposer({ ctx, purpose, vars, contact, reference
         <button key={c} disabled={!!row} onClick={() => setChannel(c)} className={`px-3 py-1 rounded-full text-sm border ${channel === c ? 'bg-[#1F6B45] text-white' : 'bg-white'}`}>{c === 'WHATSAPP' ? 'WhatsApp' : c === 'SMS' ? 'SMS' : 'Email'}</button>))}</div>
       <div className="text-xs mb-1">To: <b>{composed.to || 'no valid contact'}</b> {contact?.phone && channel !== 'EMAIL' && <a href={`tel:${contact.phone}`} className="ml-2 underline"><Phone size={12} className="inline" /> Call</a>}</div>
       {composed.problems.map(p => <Notice key={p} tone="warn">{p}</Notice>)}
-      {guardianMatch.loading && <Notice tone="info">Verifying the guardian and contact link…</Notice>}
-      {!guardianMatch.loading && guardianMatch.error && <Notice tone="warn">{guardianMatch.error}</Notice>}
-      {consentCheck && !consentCheck.ok && <Notice tone="bad">{consentCheck.reason} The database also checks consent when the message is prepared.</Notice>}
       {channel === 'EMAIL' && <input className={inputCls + ' mb-2'} disabled={!!row} value={subject || ''} onChange={e => setEdit({ key, body: edit.key === key ? edit.body : null, subject: e.target.value })} aria-label="Subject" />}
       <textarea className={inputCls + ' min-h-[140px]'} disabled={!!row} value={body} onChange={e => setEdit({ key, body: e.target.value, subject: edit.key === key ? edit.subject : null })} aria-label="Message" />
       {composed.sms && channel === 'SMS' && <div className="text-xs text-[#68756D] mt-1">{composed.sms.length} characters, {composed.sms.segments} SMS</div>}
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       {!row ? (
-        <button className={saveBtnCls + ' mt-2 w-full'} disabled={busy || guardianMatch.loading || !guardianMatch.guardian || !consentCheck?.ok || !composed.to || composed.missing.length > 0} onClick={prepare}><MessageSquare size={16} className="inline mr-1" />Prepare message</button>
+        <button className={saveBtnCls + ' mt-2 w-full'} disabled={busy || !composed.to || composed.missing.length > 0} onClick={prepare}><MessageSquare size={16} className="inline mr-1" />Prepare message</button>
       ) : (
         <div className="mt-2 space-y-2">
           <div className="text-sm">Status: <Pill>{statusLabel(row)?.label || row.status}</Pill></div>

@@ -31,7 +31,6 @@ export default function MarkEntryPage() {
           <AccessGate need="marks.unlock">{() => submittedAll || m.rows.some((r) => r.entry_status === 'SUBMITTED') ? <button className={`${btn} bg-white text-[#6F5A12] border-[#E3DBB8]`} onClick={unlock}><Unlock size={15} />Unlock</button> : null}</AccessGate>
         </div>
         <OfflineBanner />
-        {m.sync.legacyUnscoped > 0 && <Note tone="warn">{m.sync.legacyUnscoped} older offline mark change(s) have no school identifier. They are being held back for safety and will not sync automatically. Ask an administrator to review this device's offline data before clearing browser storage.</Note>}
         {m.fromCache && <Note tone="warn"><WifiOff size={13} className="inline mr-1" />Showing the last copy saved on this phone. Marks you type are kept here and uploaded later.</Note>}
         {m.notice && <Note tone={m.notice.tone === 'good' ? 'good' : m.notice.tone === 'info' ? 'info' : m.notice.tone}>{m.notice.text}</Note>}
         {a && !open && <Note tone="warn">This assessment is {a.status.toLowerCase()}. {a.status === 'DRAFT' ? 'Open it to enter marks.' : 'Marks can no longer be entered.'}</Note>}

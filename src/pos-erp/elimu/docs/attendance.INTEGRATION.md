@@ -67,9 +67,3 @@ Parent/student portals are not built; any portal must use views with its own gua
 
 ## Permissions (Elimu actions)
 attendance.take_own/take_any/view_all/amend · absence.manage/approve · comms.send · reports.view · settings.manage · timetable.view/manage/override · calendar.view/manage · roles.view/manage. Role → action table: `elimu_role_actions()` in `001_core.sql` (mirrored in `shared/utils/access.js`).
-
-### Phase 8 offline safety note
-- Attendance queue submission dedupe is tenant-scoped and the queue drain uses a Web Locks / same-tab guard.
-- The attendance offline adapter no longer falls back to volatile in-memory storage if the POS Dexie database is unavailable; it fails visibly instead of claiming the register is safely queued.
-- Exam mark-sheet caches and pending edits are now tenant-scoped. Pre-v2 unscoped pending edits are held back and shown as a review warning; they are not automatically assigned to the current tenant.
-- See `elimu/docs/phase8_fk_diagnostics.sql` for read-only staging FK inventory and the documented attendance session orphan check. It is not a migration.
