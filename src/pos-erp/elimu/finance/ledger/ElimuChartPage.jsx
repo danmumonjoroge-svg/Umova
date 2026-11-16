@@ -30,7 +30,7 @@ function EditSheet({ ctx, account, onClose, onDone }) {
 export default function ElimuChartPage() {
   const { ctx, accounts, err, load, ready } = useLedger(); const [view, setView] = useState(null); const [edit, setEdit] = useState(null);
   if (!ready) return <LoadingBlock />;
-  if (!ctx.can('report')) return <FitPage title="Chart of accounts"><Notice tone="warn">You do not have access to the ledger.</Notice></FitPage>;
+  if (!ctx.can('report')) return <FitPage title="Chart of accounts"><Notice tone="gold">You do not have access to the ledger.</Notice></FitPage>;
   const canEdit = ctx.can('configure') || ctx.can('reconcile');
   return (
     <FitPage title="Chart of accounts" subtitle="The accounts every journal is posted to" action={canEdit && accounts?.length ? <button type="button" onClick={() => setEdit({})} className="h-10 px-3 rounded-xl bg-[#12261F] text-white text-sm font-semibold flex items-center gap-1.5"><Plus size={16} />Add</button> : null}>

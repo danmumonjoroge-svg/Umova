@@ -57,8 +57,6 @@ export const NAV_ITEMS = [
   { key: 'gate',          label: 'Gate',          to: '/gate',          action: 'attendance.take_any', owned: false },
   { key: 'fees',          label: 'Finance',       to: '/finance',       action: 'finance.view',   owned: false,
     anyOf: ['finance.view', 'finance.collect', 'finance.bill', 'finance.approve', 'finance.report', 'finance.configure'], also: ['/school-finance'] },
-  { key: 'procurement',  label: 'Procurement',  to: '/procurement',   action: 'finance.view',   owned: true },
-  { key: 'aia',           label: 'AIA activities', to: '/aia',            action: 'finance.view',   owned: true },
   { key: 'communication', label: 'Communication', to: '/communication', action: 'comms.history',  owned: true },
   { key: 'calendar',      label: 'Calendar',      to: '/calendar',      action: 'students.view',  owned: false },
   { key: 'reports',       label: 'Reports',       to: '/reports',       action: 'students.view',  owned: false },

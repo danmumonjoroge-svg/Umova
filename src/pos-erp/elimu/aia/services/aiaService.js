@@ -1,4 +1,4 @@
-import { posSupabase } from '../../../services/posSupabaseClient.js';
+import { supabase as posSupabase } from '../../services/platform.js';
 
 const fail = (error) => { if (error) throw new Error(error.message || 'AIA request failed'); };
 const rows = (data) => data || [];
@@ -18,10 +18,7 @@ export const aiaService = {
     const { data, error } = await posSupabase.from('elimu_aia_remittances').select('*, activity:elimu_aia_activities(name)').eq('business_id', businessId).order('remittance_date', { ascending: false }).limit(limit);
     fail(error); return rows(data);
   },
-  async accountingEvents(businessId, limit = 200) {
-    const { data, error } = await posSupabase.from('elimu_aia_accounting_events').select('id, source_type, source_id, event_date, description, amount, currency, journal_lines, status, external_journal_ref, adapter_note, created_at').eq('business_id', businessId).order('event_date', { ascending: false }).limit(limit);
-    fail(error); return rows(data);
-  },
+  async summary(businessId) { const { data, error } = await posSupabase.rpc('elimu_aia_summary', { p_business: businessId }); fail(error); return data; },
   async batches(businessId, limit = 300) {
     const { data, error } = await posSupabase.from('elimu_aia_batch_balances').select('*').eq('business_id', businessId).order('started_on', { ascending: false }).limit(limit);
     fail(error); return rows(data);
@@ -38,28 +35,15 @@ export const aiaService = {
     const { data, error } = await posSupabase.from('elimu_aia_inventory_movements').select('*, item:elimu_aia_inventory_items(item_name, unit), activity:elimu_aia_activities(name)').eq('business_id', businessId).order('movement_date', { ascending: false }).limit(limit);
     fail(error); return rows(data);
   },
-  async createBatch(row) {
-    const { data, error } = await posSupabase.from('elimu_aia_batches').insert(row).select().single(); fail(error); return data;
-  },
-  async recordProduction(row) {
-    const { data, error } = await posSupabase.from('elimu_aia_production_records').insert(row).select().single(); fail(error); return data;
-  },
-  async createInventoryItem(row) {
-    const { data, error } = await posSupabase.from('elimu_aia_inventory_items').insert(row).select().single(); fail(error); return data;
-  },
-  async recordInventoryMovement(row) {
-    const { data, error } = await posSupabase.from('elimu_aia_inventory_movements').insert(row).select().single(); fail(error); return data;
-  },
-  async saveActivity(row) {
-    const { data, error } = await posSupabase.from('elimu_aia_activities').insert(row).select().single(); fail(error); return data;
-  },
-  async recordTransaction(row) {
-    const { data, error } = await posSupabase.from('elimu_aia_transactions').insert(row).select().single(); fail(error); return data;
-  },
-  async recordRemittance(row) {
-    const { data, error } = await posSupabase.from('elimu_aia_remittances').insert(row).select().single(); fail(error); return data;
-  },
-  async updateRemittance(id, businessId, status, note = null, staffId = null) {
-    const { data, error } = await posSupabase.from('elimu_aia_remittances').update({ status, decision_note: note, decided_by: staffId }).eq('id', id).eq('business_id', businessId).select().single(); fail(error); return data;
-  },
+  // All writes go through database functions: they check the Elimu role, post the journal and keep the counters honest.
+  async _rpc(fn, args) { const { data, error } = await posSupabase.rpc(fn, args); fail(error); return data; },
+  createBatch(row) { return this._rpc('elimu_aia_save_batch', { p_business: row.business_id, p_batch: row }); },
+  recordProduction(row) { return this._rpc('elimu_aia_record_production', { p_business: row.business_id, p_rec: row }); },
+  createInventoryItem(row) { return this._rpc('elimu_aia_save_item', { p_business: row.business_id, p_item: row }); },
+  recordInventoryMovement(row) { return this._rpc('elimu_aia_record_stock', { p_business: row.business_id, p_mv: row }); },
+  saveActivity(row) { return this._rpc('elimu_aia_save_activity', { p_business: row.business_id, p_activity: row }); },
+  recordTransaction(row) { return this._rpc('elimu_aia_record_transaction', { p_business: row.business_id, p_tx: row }); },
+  voidTransaction(id, reason) { return this._rpc('elimu_aia_void_transaction', { p_tx: id, p_reason: reason }); },
+  recordRemittance(row) { return this._rpc('elimu_aia_save_remittance', { p_business: row.business_id, p_r: row }); },
+  decideRemittance(id, status, note = null) { return this._rpc('elimu_aia_decide_remittance', { p_id: id, p_status: status, p_note: note }); },
 };

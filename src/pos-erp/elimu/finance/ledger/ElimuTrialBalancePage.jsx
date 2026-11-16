@@ -9,13 +9,13 @@ export default function ElimuTrialBalancePage() {
   const run = useCallback(async () => { try { setErr(''); setTb(await ctx.api.trialBalance(ctx.businessId, asAt)); } catch (e) { setErr(e.message); } }, [ctx.api, ctx.businessId, asAt]);
   useEffect(() => { if (ready && ctx.can('report') && accounts?.length) run(); }, [ready, accounts, run, ctx]);
   if (!ready) return <LoadingBlock />;
-  if (!ctx.can('report')) return <FitPage title="Trial balance"><Notice tone="warn">You do not have access to the ledger.</Notice></FitPage>;
+  if (!ctx.can('report')) return <FitPage title="Trial balance"><Notice tone="gold">You do not have access to the ledger.</Notice></FitPage>;
   return (
     <FitPage title="Trial balance" subtitle="Every account balance. Debits must equal credits.">
       {(err || loadErr) && <Notice tone="bad">{err || loadErr}</Notice>}
       {accounts === null ? <LoadingBlock /> : !accounts.length ? <SetupCard ctx={ctx} onDone={load} /> : <>
         <div className="flex items-center gap-2 mb-3"><span className="text-sm text-[#6F7461]">As at</span><input type="date" className={inputCls} value={asAt} max={today()} onChange={(e) => setAsAt(e.target.value)} /></div>
-        {!tb ? <LoadingBlock /> : !tb.rows.length ? <Notice tone="warn">No journals up to this date yet.</Notice> : <>
+        {!tb ? <LoadingBlock /> : !tb.rows.length ? <Notice tone="gold">No journals up to this date yet.</Notice> : <>
           <div className={`rounded-xl p-2.5 text-sm font-semibold mb-3 text-center ${tb.balanced ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>{tb.balanced ? 'Balanced' : 'NOT BALANCED - contact support'}</div>
           {TYPE_ORDER.map((t) => { const rows = tb.rows.filter((r) => r.type === t); if (!rows.length) return null; return (
             <div key={t} className="mb-3"><h3 className="text-xs font-bold uppercase tracking-wide text-[#6F7461] mb-1">{TYPE_LABEL[t]}</h3>

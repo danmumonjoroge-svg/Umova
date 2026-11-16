@@ -13,8 +13,6 @@ import ClassesPage from './pages/ClassesPage.jsx';
 import CommunicationPage from './pages/CommunicationPage.jsx';
 import ElimuSettingsPage from './pages/ElimuSettingsPage.jsx';
 import ElimuStaffPage from './pages/ElimuStaffPage.jsx';
-import ElimuProcurementPage from './procurement/pages/ElimuProcurementPage.jsx';
-import ElimuAIAPage from './aia/pages/ElimuAIAPage.jsx';
 import { moduleRoutes } from './registry.js';
 import { ElimuAccessProvider } from './hooks/useElimu.js';
 import RequireElimuAction from './components/RequireElimuAction.jsx';
@@ -36,8 +34,6 @@ export default function ElimuRoutes({ basePath = '/elimu', accessOverride }) {
         <Route path="classes" element={guard('structure.view', <ClassesPage basePath={basePath} />)} />
         <Route path="communication" element={guard('comms.history', <CommunicationPage basePath={basePath} />)} />
         <Route path="staff" element={<ElimuStaffPage />} />
-        <Route path="procurement" element={guard('finance.view', <ElimuProcurementPage />)} />
-        <Route path="aia" element={guard('finance.view', <ElimuAIAPage />)} />
         <Route path="settings" element={guard('settings.manage', <ElimuSettingsPage />)} />
         {moduleRoutes()}
         <Route path="*" element={<Navigate to={basePath} replace />} />

@@ -44,3 +44,7 @@ node --check elimu/aia/services/aiaService.js
 ```
 
 The SQL migration still needs execution and scenario testing on staging PostgreSQL/Supabase. Do not point the project's scratch schema test runner at a live school database.
+
+
+## Superseded outbox
+sql/002 (the accounting outbox) is replaced by ../../../elimu_999_aia.sql, which posts to the school ledger directly. Apply 001, 003, then elimu_999_aia.sql. 002 and its test are kept only for reference.

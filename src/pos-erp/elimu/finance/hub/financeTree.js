@@ -8,7 +8,7 @@ export const FINANCE_TREE = {
     { key: 'fees', label: 'Fees', icon: 'Wallet', desc: 'Billing, collection, bursaries and fee balances', children: [
       { key: 'collect', label: 'Collect fees', desc: 'Cash, M-Pesa, bank and cheque payments', to: `${P}/collect`, anyOf: ['finance.collect'] },
       { key: 'billing', label: 'Fee structure & billing', desc: 'Fee items, invoices and payment plans', to: `${P}/fees`, anyOf: ['finance.bill', 'finance.configure'] },
-      { key: 'bursary', label: 'Bursaries & scholarships', desc: 'Discounts, bursaries, scholarships and write-offs', soon: true, anyOf: ['finance.view'] },
+      { key: 'bursary', label: 'Bursaries & scholarships', desc: 'Discounts, bursaries, scholarships and write-offs', to: `${P}/bursaries`, anyOf: ['finance.view'] },
       { key: 'debtors', label: 'Fee balances', desc: 'Who owes what, and follow-ups', to: `${P}/debtors`, anyOf: ['finance.view'] },
       { key: 'approvals', label: 'Approvals', desc: 'Payments and adjustments waiting for approval', to: `${P}/approvals`, anyOf: ['finance.approve'] },
     ] },
@@ -19,12 +19,16 @@ export const FINANCE_TREE = {
     ] },
     { key: 'payables', label: 'Payables & expenses', icon: 'Receipt', desc: 'Money the school owes and spends', children: [
       { key: 'expenses', label: 'Expenses', desc: 'Record and approve school expenses', to: `${P}/expenses`, anyOf: ['finance.view', 'finance.expense'] },
+      { key: 'procurement', label: 'Purchasing', desc: 'Suppliers, purchase orders and goods received', to: `${P}/procurement`, anyOf: ['finance.view'] },
       { key: 'p-suppliers', label: 'Suppliers', desc: 'Balances owed to suppliers', to: `${P}/ledger/payables`, anyOf: ['finance.report'] },
       { key: 'p-staff', label: 'Staff & payroll', desc: 'Salaries and amounts owed to staff', to: `${P}/ledger/payables`, anyOf: ['finance.report'] },
       { key: 'budgets', label: 'Budgets', desc: 'Budget against actual', to: `${P}/budgets`, anyOf: ['finance.view'] },
     ] },
     { key: 'bank', label: 'Bank & cash', icon: 'Landmark', desc: 'Bank accounts and reconciliation', children: [
-      { key: 'recon', label: 'Reconciliation', desc: 'Match bank and M-Pesa to the books', soon: true, anyOf: ['finance.view'] },
+      { key: 'recon', label: 'Reconciliation', desc: 'Match bank and M-Pesa to the books', to: `${P}/reconciliation`, anyOf: ['finance.view'] },
+    ] },
+    { key: 'enterprises', label: 'School enterprises (AIA)', icon: 'Sprout', desc: 'Poultry, farming and other income-generating activities', children: [
+      { key: 'aia', label: 'Activities & remittances', desc: 'Sales, costs, production and money sent to the school', to: `${P}/aia`, anyOf: ['finance.view'] },
     ] },
     { key: 'accounting', label: 'Accounting', icon: 'BookOpen', desc: 'Chart of accounts, journals and trial balance', children: [
       { key: 'chart', label: 'Chart of accounts', desc: 'The accounts every journal is posted to', to: `${P}/ledger/accounts`, anyOf: ['finance.report'] },
@@ -32,8 +36,8 @@ export const FINANCE_TREE = {
       { key: 'trial-b', label: 'Trial balance', desc: 'All account balances as at a date', to: `${P}/ledger/trial`, anyOf: ['finance.report'] },
     ] },
     { key: 'assets', label: 'Assets & inventory', icon: 'Boxes', desc: 'Fixed assets and school stores', children: [
-      { key: 'fixed', label: 'Fixed assets', desc: 'Buildings, vehicles, equipment, depreciation', soon: true, anyOf: ['finance.view'] },
-      { key: 'stores', label: 'Stores & inventory', desc: 'Food, stationery, uniforms, supplies', soon: true, anyOf: ['finance.view'] },
+      { key: 'fixed', label: 'Fixed assets', desc: 'Buildings, vehicles, equipment, depreciation', to: `${P}/assets`, anyOf: ['finance.view'] },
+      { key: 'stores', label: 'Stores & inventory', desc: 'Food, stationery, uniforms, supplies', to: `${P}/stores`, anyOf: ['finance.view'] },
     ] },
     { key: 'reports', label: 'Reports & statements', icon: 'BarChart3', desc: 'Statements and finance reports', children: [
       { key: 'fin-reports', label: 'Finance reports', desc: 'Collections, debtors and summaries', to: `${P}/reports`, anyOf: ['finance.view', 'finance.report'] },

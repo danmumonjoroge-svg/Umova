@@ -45,7 +45,7 @@ export default function ElimuStudentAccountPage({ studentId: propId }) {
 
   return (
     <FitPage title={s.name} subtitle={`${s.admission_no} - ${s.class_name || ''} ${s.stream_name || ''}`}>
-      {v.fromCache && <Notice tone="warn">Saved copy{v.savedAt ? ` from ${new Date(v.savedAt).toLocaleString('en-KE')}` : ''}. Editing is disabled until you are online.</Notice>}
+      {v.fromCache && <Notice tone="gold">Saved copy{v.savedAt ? ` from ${new Date(v.savedAt).toLocaleString('en-KE')}` : ''}. Editing is disabled until you are online.</Notice>}
       {err && <Notice tone="bad">{err}</Notice>}
       <MiniStats items={[{ label: bal > 0 ? 'Balance owed' : bal < 0 ? 'Credit held' : 'Balance', value: formatMoney(Math.abs(bal)) }, { label: 'Billed', value: formatMoney(fromDb(a.billed)) }, { label: 'Paid', value: formatMoney(fromDb(a.payments)) },
         { label: 'Outstanding', value: formatMoney(fromDb(a.outstanding)) }, { label: 'Arrears (past due)', value: formatMoney(fromDb(a.arrears)) }, { label: 'Credit available', value: formatMoney(fromDb(a.credit_available)) }]} />

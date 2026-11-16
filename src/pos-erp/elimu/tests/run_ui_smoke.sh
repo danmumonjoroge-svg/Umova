@@ -13,7 +13,7 @@ export default {
   setup(b) {
     const map = { 'services/posSupabaseClient': 'posSupabaseClient.js', 'navigation/PermissionsContext': 'host.jsx', 'auth/usePosErpAuth': 'host.jsx', 'services/businessIdentity': 'host.jsx', 'components/CardKit': 'host.jsx', 'components/workspace/Sheet': 'host.jsx', 'theme/brand': 'host.jsx', 'context/POSAuthContext': 'host.jsx', 'auth/POSAuthGate': 'host.jsx', 'auth/POSForcePasswordChange': 'host.jsx', 'security/AppLock': 'host.jsx' };
     b.onResolve({ filter: /^(dexie|@supabase\/supabase-js|jspdf|@capacitor\/.*)$/ }, () => ({ path: path.join(stubs, 'thirdparty.js') }));
-    b.onResolve({ filter: /posSupabaseClient$/ }, () => ({ path: path.join(stubs, 'posSupabaseClient.js') }));
+    b.onResolve({ filter: /posSupabaseClient(\.js)?$/ }, () => ({ path: path.join(stubs, 'posSupabaseClient.js') }));
     b.onResolve({ filter: /^\.\.\/\.\.\// }, (a) => {
       const k = Object.keys(map).find((m) => a.path.endsWith(m)); if (k) return { path: path.join(stubs, map[k]) };
       // Host files that sit OUTSIDE the elimu folder (e.g. ../../../components/network/networkKit): resolve them against the real host

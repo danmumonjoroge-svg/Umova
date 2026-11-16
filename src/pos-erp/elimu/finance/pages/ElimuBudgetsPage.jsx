@@ -49,7 +49,7 @@ function ReportSheet({ ctx, budget, cats, onClose, onChanged }) {
     <Sheet title={budget.name} onClose={onClose}>
       {err && <Notice tone="bad">{err}</Notice>}
       <p className="text-xs text-[#6F7461] mb-2">{budget.academic_year} · {budget.status === 'DRAFT' ? 'Draft' : budget.status === 'APPROVED' ? 'Approved' : 'Closed'}</p>
-      {!ctx.can('report') ? <Notice tone="warn">You can edit drafts, but the budget-against-actual view needs the finance report permission.</Notice> : !rep ? <LoadingBlock /> : <>
+      {!ctx.can('report') ? <Notice tone="gold">You can edit drafts, but the budget-against-actual view needs the finance report permission.</Notice> : !rep ? <LoadingBlock /> : <>
         <div className="grid grid-cols-3 gap-2 text-center mb-3">{[['Budget', rep.total_budget], ['Spent', rep.total_actual], ['Left', rep.total_variance]].map(([l, v]) => (
           <div key={l} className="rounded-xl bg-[#F4EFD3] p-2"><div className="text-[11px] text-[#6F7461]">{l}</div><div className={`text-sm font-bold ${l === 'Left' && fromDb(v) < 0 ? 'text-[#B3402A]' : ''}`}>{M(v)}</div></div>))}</div>
         <div className="space-y-1.5">{(rep.lines || []).map((l, i) => (
@@ -68,7 +68,7 @@ export default function ElimuBudgetsPage() {
   const load = useCallback(async () => { try { setErr(null); const [b, c] = await Promise.all([api.budgets(businessId), api.expenseCategories()]); setRows(b); setCats(c); } catch (e) { setErr(e.message); setRows([]); } }, [api, businessId]);
   useEffect(() => { if (ready && can('view')) load(); }, [ready, can, load]);
   if (!ready) return <LoadingBlock />;
-  if (!can('view')) return <FitPage title="Budgets"><Notice tone="warn">You do not have access to budgets.</Notice></FitPage>;
+  if (!can('view')) return <FitPage title="Budgets"><Notice tone="gold">You do not have access to budgets.</Notice></FitPage>;
   return (
     <FitPage title="Budgets" subtitle="Plan, then compare with what was spent" action={(can('expense') || can('configure')) ? <button type="button" onClick={() => setAdd(true)} className="h-10 px-3 rounded-xl bg-[#12261F] text-white text-sm font-semibold flex items-center gap-1.5"><Plus size={16} />New</button> : null}>
       {err && <Notice tone="bad">{err}</Notice>}

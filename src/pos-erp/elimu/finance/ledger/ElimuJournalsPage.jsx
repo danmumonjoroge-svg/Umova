@@ -64,7 +64,7 @@ export default function ElimuJournalsPage() {
   const reload = useCallback(async () => { try { setErr(''); setRows(await ctx.api.glJournals(ctx.businessId)); await load(); } catch (e) { setErr(e.message); setRows([]); } }, [ctx.api, ctx.businessId, load]);
   useEffect(() => { if (ready && ctx.can('report') && accounts?.length) ctx.api.glJournals(ctx.businessId).then(setRows).catch((e) => { setErr(e.message); setRows([]); }); }, [ready, accounts, ctx]);
   if (!ready) return <LoadingBlock />;
-  if (!ctx.can('report')) return <FitPage title="Journals"><Notice tone="warn">You do not have access to the ledger.</Notice></FitPage>;
+  if (!ctx.can('report')) return <FitPage title="Journals"><Notice tone="gold">You do not have access to the ledger.</Notice></FitPage>;
   const post = async () => { setBusy(true); setMsg(''); try { const r = await ctx.api.glPostPending(ctx.businessId); setMsg(`${r.posted} entr${r.posted === 1 ? 'y' : 'ies'} posted${r.waiting ? `, ${r.waiting} still waiting for an account to be set` : ''}.`); await reload(); } catch (e) { setErr(e.message); } finally { setBusy(false); } };
   return (
     <FitPage title="Journals" subtitle="Every entry in the ledger" action={ctx.can('reconcile') && accounts?.length ? <button type="button" onClick={() => setAdd(true)} className="h-10 px-3 rounded-xl bg-[#12261F] text-white text-sm font-semibold flex items-center gap-1.5"><Plus size={16} />New</button> : null}>

@@ -7,7 +7,7 @@ import { fromDb } from '../utils/money';
 function Frame({ title, subtitle, children, L }) {
   const { ctx, accounts, err, load, ready } = L;
   if (!ready) return <LoadingBlock />;
-  if (!ctx.can('report')) return <FitPage title={title}><Notice tone="warn">You do not have access to financial statements.</Notice></FitPage>;
+  if (!ctx.can('report')) return <FitPage title={title}><Notice tone="gold">You do not have access to financial statements.</Notice></FitPage>;
   return (<FitPage title={title} subtitle={subtitle}>{err && <Notice tone="bad">{err}</Notice>}
     {accounts === null ? <LoadingBlock /> : !accounts.length ? <SetupCard ctx={ctx} onDone={load} /> : children}</FitPage>);
 }

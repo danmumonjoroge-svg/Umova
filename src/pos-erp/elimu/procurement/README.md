@@ -28,3 +28,10 @@ This module reuses the host POS procurement schema and service layer rather than
 ## Next work
 
 Add multi-line purchase orders, approval/decline UI, GRN correction/return flows, supplier payments and statements, supplier returns, procurement reports, and explicit school-ledger journal integration. Do not represent a draft PO as an approved commitment.
+
+
+## Update (merged build)
+
+- Purchasing now lives in the Finance hub: Finance > Payables & expenses > Purchasing (`/school-finance/procurement`).
+- Create/submit/receive need the Elimu `finance.expense` right; approving or declining an order needs `finance.approve` (a decline sets the POS status `CANCELLED`). View-only roles see the lists and a "waiting for approval" note. The database (POS RLS) remains authoritative.
+- Not done, on purpose: posting a received GRN to the school ledger. The scratch database used for testing has no `lb_goods_received_notes`, supplier-payment tables or `post_grn_to_supplier_balance`, so a bridge could not be tested. When written (against the live schema): an idempotent `elimu_proc_post_grn(p_business, p_grn)` that reads the GRN total and its payment, journals Dr 5000 (or 1200 if the school tracks that stock in Elimu stores) / Cr 2000 Accounts payable (credit part) or the cash/M-Pesa/bank account (paid part), keyed on source ('GRN', grn id), and a matching supplier-payment posting Dr 2000 / Cr bank. Until then, purchases from suppliers need a manual journal or the Expenses page.

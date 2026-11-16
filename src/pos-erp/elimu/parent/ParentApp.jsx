@@ -32,15 +32,15 @@ function SignIn({ onDone }) {
   const verify = async (e) => { e.preventDefault(); setErr(''); setBusy(true);
     const { error } = await parentSupabase.auth.verifyOtp({ phone: e164, token: code.trim(), type: 'sms' });
     if (error) { setBusy(false); return setErr('That code is not right or has expired.'); }
-    // OTP proves control of the phone number only. It must never create a guardian/student link.
-    // Existing, school-approved links are read by parentApi.children(); new links require a school-side process.
+    // The server links only guardians whose phone number the SCHOOL recorded and that this sign-in has just proved is theirs.
+    try { await parentApi.link(); } catch (x) { setErr(x.message); setBusy(false); return; }
     setBusy(false); onDone(); };
   return (
     <div className="flex-1 min-h-0 overflow-y-auto flex items-center justify-center p-5">
       <form onSubmit={step === 'phone' ? send : verify} className="w-full max-w-sm">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#C9A227] text-[#12261F]"><GraduationCap size={28} /></div>
         <h1 className="text-center text-xl font-bold">Elimu for parents</h1>
-        <p className="text-center text-sm text-slate-600 mt-1 mb-5">{step === 'phone' ? 'Use the phone number your child’s school has on file. The school must verify your family link before children appear.' : `Enter the 6-digit code sent to ${e164}.`}</p>
+        <p className="text-center text-sm text-slate-600 mt-1 mb-5">{step === 'phone' ? 'Use the phone number your child’s school has on file.' : `Enter the 6-digit code sent to ${e164}.`}</p>
         {err && <p className="mb-3 rounded-xl bg-red-50 text-red-800 text-sm p-3">{err}</p>}
         {step === 'phone'
           ? <input autoFocus inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0722 111 222" className="w-full h-12 rounded-xl border border-[#DDD6B6] px-4 bg-white" />
@@ -109,8 +109,8 @@ function Portal({ onSignOut }) {
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E4F0E8] text-[#1F6B45]"><ShieldCheck size={21} /></span>
             <div className="min-w-0">
-              <h2 className="font-bold text-[#12261F]">School approval required</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">Your phone number is verified, but no school-approved student link is available yet. Phone verification alone does not grant access to a child’s records.</p>
+              <h2 className="font-bold text-[#12261F]">No child found for this number</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">Your number is verified, but the school has no child on record with this phone number. Ask the school to add it to your record, then sign in again.</p>
             </div>
           </div>
           <div className="mt-4 rounded-xl bg-[#FBF8EA] p-3">

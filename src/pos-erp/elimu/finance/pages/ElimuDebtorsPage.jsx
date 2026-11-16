@@ -25,7 +25,7 @@ export default function ElimuDebtorsPage() {
   useEffect(() => { if (ctx.ready) load(); }, [ctx.ready, load]);
 
   if (!ctx.ready) return <LoadingBlock />;
-  if (!(can('report') || can('bill'))) return <FitPage title="Debtors"><Notice tone="warn">You do not have permission to view debtors.</Notice></FitPage>;
+  if (!(can('report') || can('bill'))) return <FitPage title="Debtors"><Notice tone="gold">You do not have permission to view debtors.</Notice></FitPage>;
   const total = rows?.[0]?.total_count ? Number(rows[0].total_count) : 0;
   const exportPdf = () => { const r = debtorsReport(rows); savePdf(buildReportPdf(r, { business: ctx.school }), reportFileName(r), 'Fee debtors'); };
   const exportCsv = () => { const b = new Blob([reportToCsv(debtorsReport(rows))], { type: 'text/csv;charset=utf-8' }); const u = URL.createObjectURL(b); Object.assign(document.createElement('a'), { href: u, download: 'fee-debtors.csv' }).click(); URL.revokeObjectURL(u); };

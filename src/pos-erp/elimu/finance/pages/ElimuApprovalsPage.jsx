@@ -11,7 +11,7 @@ export default function ElimuApprovalsPage() {
   const load = useCallback(async () => { try { setErr(null); setQ(await api.approvalQueue(businessId)); } catch (e) { setErr(e.message); setQ({}); } }, [api, businessId]);
   useEffect(() => { if (ctx.ready && can('approve')) load(); }, [ctx.ready, can, load]);
   if (!ctx.ready) return <LoadingBlock />;
-  if (!can('approve')) return <FitPage title="Approvals"><Notice tone="warn">Only an authorised approver can open this page.</Notice></FitPage>;
+  if (!can('approve')) return <FitPage title="Approvals"><Notice tone="gold">Only an authorised approver can open this page.</Notice></FitPage>;
 
   const act = (id, fn, needsNote) => async () => {
     if (needsNote && note.trim().length < 3) return setErr('Type a reason first (at least 3 characters).');

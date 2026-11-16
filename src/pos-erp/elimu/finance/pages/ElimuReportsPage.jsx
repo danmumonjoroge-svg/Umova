@@ -14,7 +14,7 @@ export default function ElimuReportsPage() {
   const [from, setFrom] = useState(monthStart()); const [to, setTo] = useState(today()); const [group, setGroup] = useState('DAY');
   const [report, setReport] = useState(null); const [extra, setExtra] = useState(null); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
   if (!ctx.ready) return <LoadingBlock />;
-  if (!can('report')) return <FitPage title="Finance reports"><Notice tone="warn">You do not have permission to view finance reports.</Notice></FitPage>;
+  if (!can('report')) return <FitPage title="Finance reports"><Notice tone="gold">You do not have permission to view finance reports.</Notice></FitPage>;
 
   const go = (fn) => async () => { setBusy(true); setErr(null); setExtra(null); try { setReport(await fn()); } catch (e) { setErr(e.message); setReport(null); } finally { setBusy(false); } };
   const R = {

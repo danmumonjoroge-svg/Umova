@@ -48,7 +48,7 @@ export default function ElimuExpensesPage() {
   const load = useCallback(async () => { try { setErr(null); const [r, c] = await Promise.all([api.expenses(businessId), api.expenseCategories()]); setRows(r); setCats(c); } catch (e) { setErr(e.message); setRows([]); } }, [api, businessId]);
   useEffect(() => { if (ready && can('view')) load(); }, [ready, can, load]);
   if (!ready) return <LoadingBlock />;
-  if (!can('view') && !can('expense')) return <FitPage title="Expenses"><Notice tone="warn">You do not have access to expenses.</Notice></FitPage>;
+  if (!can('view') && !can('expense')) return <FitPage title="Expenses"><Notice tone="gold">You do not have access to expenses.</Notice></FitPage>;
   const catName = Object.fromEntries(cats.map((c) => [c.id, c.name]));
   const move = async (id, status, n) => { setBusy(id); try { setErr(null); await api.setExpenseStatus(id, status, n || null); setWhy(null); setNote(''); await load(); } catch (e) { setErr(e.message); } finally { setBusy(null); } };
   const shown = (rows || []).filter((r) => r.status === tab); const total = shown.reduce((s, r) => s + fromDb(r.amount), 0);

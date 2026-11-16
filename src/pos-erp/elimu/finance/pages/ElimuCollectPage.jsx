@@ -79,19 +79,19 @@ export default function ElimuCollectPage() {
 
   const acct = view?.account; const bal = acct ? fromDb(acct.current_balance) : 0;
   if (!ctx.ready) return <LoadingBlock />;
-  if (!can('collect')) return <FitPage title="Collect fees"><Notice tone="warn">You do not have permission to record payments. Ask the school owner or bursar.</Notice></FitPage>;
+  if (!can('collect')) return <FitPage title="Collect fees"><Notice tone="gold">You do not have permission to record payments. Ask the school owner or bursar.</Notice></FitPage>;
 
   return (
     <FitPage title="Collect fees" subtitle="Record a payment against a student's account">
       {!session && <div className={formCard}><div className="text-sm mb-2">Cash is counted against a cashier session so the till can be reconciled at the end of the shift.</div><button className={saveBtnCls} onClick={openSession}>Open my cashier session</button></div>}
       <SearchBox value={q} onChange={search} placeholder="Admission number or student name" />
-      {refMiss && <Notice tone="warn">No student of this school has that reference. Check the school code and admission number.</Notice>}
+      {refMiss && <Notice tone="gold">No student of this school has that reference. Check the school code and admission number.</Notice>}
       {results.map(s => (<button key={s.student_id} onClick={() => pick(s)} className="w-full text-left border rounded-lg p-2 my-1 bg-white"><Search size={14} className="inline mr-1" />{s.full_name} <span className="text-xs text-[#68756D]">({s.admission_no}, {s.class_name || 'no class'}){s.status !== 'ACTIVE' ? ` - ${s.status.toLowerCase()}` : ''}</span></button>))}
 
       {student && (<div className={formCard}>
         <div className="font-semibold">{student.full_name} <span className="text-xs">({student.admission_no})</span></div>
         {schoolCode && <div className="text-xs text-[#68756D]">Pay reference: <b className="tracking-wider">{schoolCode}-{student.admission_no}</b></div>}
-        {view?.fromCache && <Notice tone="warn">Showing a copy saved on this phone{view.savedAt ? ` at ${new Date(view.savedAt).toLocaleTimeString('en-KE')}` : ''}. Balances may have changed.</Notice>}
+        {view?.fromCache && <Notice tone="gold">Showing a copy saved on this phone{view.savedAt ? ` at ${new Date(view.savedAt).toLocaleTimeString('en-KE')}` : ''}. Balances may have changed.</Notice>}
         {acct && <MiniStats items={[{ label: bal > 0 ? 'Owes' : bal < 0 ? 'Credit' : 'Balance', value: formatMoney(Math.abs(bal)) }, { label: 'Arrears (past due)', value: formatMoney(fromDb(acct.arrears)) }, { label: 'Paid so far', value: formatMoney(fromDb(acct.payments)) }]} />}
         <div className="flex gap-2 my-2 flex-wrap">{METHODS.map(m => (<button key={m.key} onClick={() => setForm({ ...form, method: m.key })} className={`px-3 py-2 rounded-lg border text-sm ${form.method === m.key ? 'bg-[#1F6B45] text-white' : 'bg-white'}`}><m.icon size={14} className="inline mr-1" />{m.label}</button>))}</div>
         <input className={inputCls + ' mb-2'} inputMode="decimal" placeholder="Amount (KES)" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} aria-label="Amount" />
@@ -106,8 +106,8 @@ export default function ElimuCollectPage() {
 
       {done?.kind === 'CONFIRMED' && (<div className={formCard}><Notice tone="good">Received. Receipt {done.r.receipt_no}. {fromDb(done.r.unallocated) > 0 ? `${formatMoney(fromDb(done.r.unallocated))} is held as credit.` : ''}</Notice>
         <ReceiptActions ctx={ctx} receipt={done.receipt} guardian={{ name: student?.guardian_name, phone: student?.guardian_phone, email: student?.guardian_email }} studentId={student?.student_id} /></div>)}
-      {done?.kind === 'PENDING' && <Notice tone="warn">Saved, but <b>not yet received</b>: it needs confirmation by an approver before it counts. No receipt has been issued.</Notice>}
-      {done?.kind === 'DRAFT' && (<div className={formCard}><Notice tone="warn">No connection. Saved as a <b>draft on this phone</b> - it is not recorded and there is no receipt yet. Submit it when you are online.</Notice>
+      {done?.kind === 'PENDING' && <Notice tone="gold">Saved, but <b>not yet received</b>: it needs confirmation by an approver before it counts. No receipt has been issued.</Notice>}
+      {done?.kind === 'DRAFT' && (<div className={formCard}><Notice tone="gold">No connection. Saved as a <b>draft on this phone</b> - it is not recorded and there is no receipt yet. Submit it when you are online.</Notice>
         <pre className="text-xs whitespace-pre-wrap">{draftAcknowledgementText(done.draft, ctx.school?.name)}</pre></div>)}
 
       {drafts.length > 0 && (<div className={formCard}><div className="font-semibold mb-1">Drafts on this phone</div>

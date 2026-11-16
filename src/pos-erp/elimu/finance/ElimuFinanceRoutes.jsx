@@ -17,6 +17,12 @@ const Income = lazy(() => import('./ledger/ElimuStatementPages').then((m) => ({ 
 const Position = lazy(() => import('./ledger/ElimuStatementPages').then((m) => ({ default: m.FinancialPositionPage })));
 const CashFlow = lazy(() => import('./ledger/ElimuStatementPages').then((m) => ({ default: m.CashFlowPage })));
 const Party = lazy(() => import('./ledger/ElimuStatementPages').then((m) => ({ default: m.PartyBalancesPage })));
+const Bursaries = lazy(() => import('./pages/ElimuBursariesPage'));
+const Recon = lazy(() => import('./pages/ElimuReconciliationPage'));
+const Assets = lazy(() => import('./assets/ElimuAssetsPage'));
+const Stores = lazy(() => import('./assets/ElimuStoresPage'));
+const Procurement = lazy(() => import('../procurement/pages/ElimuProcurementPage'));
+const AIA = lazy(() => import('../aia/pages/ElimuAIAPage'));
 const Reports = lazy(() => import('./pages/ElimuReportsPage'));
 
 export { default as FinanceHub } from './hub/FinanceHubPage';   // the Finance > module > submodule drill-down (route finance/*); small, so not lazy
@@ -40,6 +46,12 @@ export const elimuFinanceRoutes = () => (
     <Route path="ledger/cashflow" element={<CashFlow />} />
     <Route path="ledger/receivables" element={<Party kind="RECEIVABLES" />} />
     <Route path="ledger/payables" element={<Party kind="PAYABLES" />} />
+    <Route path="bursaries" element={<Bursaries />} />
+    <Route path="reconciliation" element={<Recon />} />
+    <Route path="assets" element={<Assets />} />
+    <Route path="stores" element={<Stores />} />
+    <Route path="procurement" element={<Procurement />} />
+    <Route path="aia" element={<AIA />} />
     <Route path="reports" element={<Reports />} />
   </Route>
 );
@@ -52,5 +64,6 @@ export const ELIMU_FINANCE_NAV = [
   { key: 'expenses', label: 'Expenses', to: `${ELIMU_FINANCE_BASE}/expenses`, anyOf: ['finance.view', 'finance.expense'] },
   { key: 'budgets', label: 'Budgets', to: `${ELIMU_FINANCE_BASE}/budgets`, anyOf: ['finance.view'] },
   { key: 'ledger', label: 'Accounting', to: `${ELIMU_FINANCE_BASE}/ledger/journals`, anyOf: ['finance.report'], also: [`${ELIMU_FINANCE_BASE}/ledger`] },
+  { key: 'assets', label: 'Assets & stores', to: `${ELIMU_FINANCE_BASE}/assets`, anyOf: ['finance.view'], also: [`${ELIMU_FINANCE_BASE}/stores`] },
   { key: 'reports', label: 'Finance reports', to: `${ELIMU_FINANCE_BASE}/reports`, anyOf: ['finance.view', 'finance.report'] },
 ];

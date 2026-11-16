@@ -2,7 +2,7 @@
 // schema and services; tenant-scoped RLS remains authoritative on every query.
 import { supplierService } from '../../services/supplierService.js';
 import { purchaseOrderService, goodsReceivedService } from '../../services/purchaseService.js';
-import { posSupabase } from '../../services/posSupabaseClient.js';
+import { supabase as posSupabase } from './platform.js';
 
 export const elimuProcurementService = {
   suppliers: (options = {}) => supplierService.getAll({ ...options, limit: options.limit || 200 }),

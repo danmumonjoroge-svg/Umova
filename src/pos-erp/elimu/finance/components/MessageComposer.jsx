@@ -45,7 +45,7 @@ export default function MessageComposer({ ctx, purpose, vars, contact, reference
       <div className="flex gap-2 mb-2">{['SMS', 'WHATSAPP', 'EMAIL'].map(c => (
         <button key={c} disabled={!!row} onClick={() => setChannel(c)} className={`px-3 py-1 rounded-full text-sm border ${channel === c ? 'bg-[#1F6B45] text-white' : 'bg-white'}`}>{c === 'WHATSAPP' ? 'WhatsApp' : c === 'SMS' ? 'SMS' : 'Email'}</button>))}</div>
       <div className="text-xs mb-1">To: <b>{composed.to || 'no valid contact'}</b> {contact?.phone && channel !== 'EMAIL' && <a href={`tel:${contact.phone}`} className="ml-2 underline"><Phone size={12} className="inline" /> Call</a>}</div>
-      {composed.problems.map(p => <Notice key={p} tone="warn">{p}</Notice>)}
+      {composed.problems.map(p => <Notice key={p} tone="gold">{p}</Notice>)}
       {channel === 'EMAIL' && <input className={inputCls + ' mb-2'} disabled={!!row} value={subject || ''} onChange={e => setEdit({ key, body: edit.key === key ? edit.body : null, subject: e.target.value })} aria-label="Subject" />}
       <textarea className={inputCls + ' min-h-[140px]'} disabled={!!row} value={body} onChange={e => setEdit({ key, body: e.target.value, subject: edit.key === key ? edit.subject : null })} aria-label="Message" />
       {composed.sms && channel === 'SMS' && <div className="text-xs text-[#68756D] mt-1">{composed.sms.length} characters, {composed.sms.segments} SMS</div>}

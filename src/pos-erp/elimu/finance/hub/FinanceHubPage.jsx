@@ -1,12 +1,12 @@
 // Finance as a drill-down:  Finance > Fees > ...   Route:  finance/*   (the rest of the path picks the node)
 import React from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { Wallet, HandCoins, Receipt, Landmark, Boxes, BarChart3, BookOpen, ChevronRight, FolderOpen } from 'lucide-react';
+import { Wallet, HandCoins, Receipt, Landmark, Boxes, BarChart3, BookOpen, Sprout, ChevronRight, FolderOpen } from 'lucide-react';
 import { FitPage, EmptyBlock } from '../../shared/components/kit';
 import { useElimuAccess } from '../../hooks/useElimu.js';
 import { FINANCE_TREE, findNode, visibleChildren } from './financeTree';
 
-const ICONS = { Wallet, HandCoins, Receipt, Landmark, Boxes, BarChart3, BookOpen };
+const ICONS = { Wallet, HandCoins, Receipt, Landmark, Boxes, BarChart3, BookOpen, Sprout };
 
 export default function FinanceHubPage({ basePath = '/elimu' }) {
   const params = useParams(); const nav = useNavigate(); const { can } = useElimuAccess();
