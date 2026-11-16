@@ -10,6 +10,13 @@ const Approvals = lazy(() => import('./pages/ElimuApprovalsPage'));
 const FeeSetup = lazy(() => import('./pages/ElimuFeeSetupPage'));
 const Expenses = lazy(() => import('./pages/ElimuExpensesPage'));
 const Budgets = lazy(() => import('./pages/ElimuBudgetsPage'));
+const LedgerChart = lazy(() => import('./ledger/ElimuChartPage'));
+const LedgerJournals = lazy(() => import('./ledger/ElimuJournalsPage'));
+const LedgerTrial = lazy(() => import('./ledger/ElimuTrialBalancePage'));
+const Income = lazy(() => import('./ledger/ElimuStatementPages').then((m) => ({ default: m.IncomeStatementPage })));
+const Position = lazy(() => import('./ledger/ElimuStatementPages').then((m) => ({ default: m.FinancialPositionPage })));
+const CashFlow = lazy(() => import('./ledger/ElimuStatementPages').then((m) => ({ default: m.CashFlowPage })));
+const Party = lazy(() => import('./ledger/ElimuStatementPages').then((m) => ({ default: m.PartyBalancesPage })));
 const Reports = lazy(() => import('./pages/ElimuReportsPage'));
 
 export { default as FinanceHub } from './hub/FinanceHubPage';   // the Finance > module > submodule drill-down (route finance/*); small, so not lazy
@@ -25,6 +32,14 @@ export const elimuFinanceRoutes = () => (
     <Route path="fees" element={<FeeSetup />} />
     <Route path="expenses" element={<Expenses />} />
     <Route path="budgets" element={<Budgets />} />
+    <Route path="ledger/accounts" element={<LedgerChart />} />
+    <Route path="ledger/journals" element={<LedgerJournals />} />
+    <Route path="ledger/trial" element={<LedgerTrial />} />
+    <Route path="ledger/income" element={<Income />} />
+    <Route path="ledger/position" element={<Position />} />
+    <Route path="ledger/cashflow" element={<CashFlow />} />
+    <Route path="ledger/receivables" element={<Party kind="RECEIVABLES" />} />
+    <Route path="ledger/payables" element={<Party kind="PAYABLES" />} />
     <Route path="reports" element={<Reports />} />
   </Route>
 );
@@ -36,5 +51,6 @@ export const ELIMU_FINANCE_NAV = [
   { key: 'fees', label: 'Fees & billing', to: `${ELIMU_FINANCE_BASE}/fees`, anyOf: ['finance.bill', 'finance.configure'] },
   { key: 'expenses', label: 'Expenses', to: `${ELIMU_FINANCE_BASE}/expenses`, anyOf: ['finance.view', 'finance.expense'] },
   { key: 'budgets', label: 'Budgets', to: `${ELIMU_FINANCE_BASE}/budgets`, anyOf: ['finance.view'] },
+  { key: 'ledger', label: 'Accounting', to: `${ELIMU_FINANCE_BASE}/ledger/journals`, anyOf: ['finance.report'], also: [`${ELIMU_FINANCE_BASE}/ledger`] },
   { key: 'reports', label: 'Finance reports', to: `${ELIMU_FINANCE_BASE}/reports`, anyOf: ['finance.view', 'finance.report'] },
 ];

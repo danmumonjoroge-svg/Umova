@@ -42,7 +42,15 @@ function Routes2() { return <Suspense fallback={<i>loading-chunk</i>}><ElimuRout
   results.push(['Finance > Fees lists its pages and a breadcrumb', ['Collect fees', 'Bursaries &amp; scholarships', 'Fee balances', 'Where you are'].every((t) => fees.includes(t)), '']);
   results.push(['unbuilt pages are shown as SOON, not as links', fees.includes('SOON') && r('/school/finance/reports').includes('Trial balance'), '']);
   const pay = r('/school/finance/payables');
-  results.push(['Payables: Expenses and Budgets are built, only Suppliers and Staff are still SOON', ['Expenses', 'Budgets', 'Suppliers', 'Staff &amp; payroll'].every((t) => pay.includes(t)) && (pay.match(/SOON/g) || []).length === 2, String((pay.match(/SOON/g) || []).length)]);
+  results.push(['Payables: Expenses, Budgets, Suppliers and Staff are all built', ['Expenses', 'Budgets', 'Suppliers', 'Staff &amp; payroll'].every((t) => pay.includes(t)) && (pay.match(/SOON/g) || []).length === 0, String((pay.match(/SOON/g) || []).length)]);
+  const acc = r('/school/finance/accounting');
+  results.push(['Accounting group lists Chart of accounts, Journals and Trial balance, none SOON', ['Chart of accounts', 'Journals', 'Trial balance'].every((t) => acc.includes(t)) && !acc.includes('SOON'), '']);
+  const rep = r('/school/finance/reports');
+  results.push(['Reports: every statement is built', ['Statement of financial position', 'Income statement', 'Cash flow statement', 'Trial balance'].every((t) => rep.includes(t)) && (rep.match(/SOON/g) || []).length === 0, String((rep.match(/SOON/g) || []).length)]);
+  const recv = r('/school/finance/receivables');
+  results.push(['Receivables: students, government and other are all built', (recv.match(/SOON/g) || []).length === 0, '']);
+  const rest = r('/school/finance'); results.push(['Finance hub still marks only bursaries, reconciliation, fixed assets and stores as SOON (4 in total)', ['fees', 'bank', 'assets'].every((k) => (r('/school/finance/' + k).match(/SOON/g) || []).length >= 1), '']);
+  for (const pth of ['/school/school-finance/ledger/income', '/school/school-finance/ledger/position', '/school/school-finance/ledger/cashflow', '/school/school-finance/ledger/receivables', '/school/school-finance/ledger/payables', '/school/school-finance/ledger/accounts', '/school/school-finance/ledger/journals', '/school/school-finance/ledger/trial']) check('route ' + pth, () => renderToString(<MemoryRouter initialEntries={[pth]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>));
   for (const pth of ['/school/school-finance/expenses', '/school/school-finance/budgets']) check('route ' + pth, () => renderToString(<MemoryRouter initialEntries={[pth]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>));
   results.push(['unknown finance section says so', none.includes('does not exist'), '']);
   results.push(['school tab bar says Finance (not Fees)', hub.includes('>Finance<'), '']); }
