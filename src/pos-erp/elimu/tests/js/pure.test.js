@@ -102,3 +102,19 @@ test('notification items', () => {
   assert.equal(items.length, 3);
   assert.throws(() => registerEvent('bad', {}));
 });
+
+import { readStatement, matchStatement } from '../../finance/utils/statementImport.js';
+test('statement import: parse and match', () => {
+  const csv = 'Account,KCB\nDate,Narrative,Debit,Credit\n03/11/2026,"MPESA QWE123ABC, JOHN",,"15,000.00"\n04/11/2026,Bank charge,50.00,\n05/11/2026,Cheque dep,,8000\n05/11/2026,Cheque dep 2,,8000\n09/11/2026,Unknown,,999.50\n';
+  const { lines, problems } = readStatement(csv);
+  assert.equal(problems.length, 0); assert.equal(lines.length, 4); assert.equal(lines[0].cents, 1500000); assert.equal(lines[0].date, '2026-11-03');
+  const pay = [
+    { payment_id: 'a', amount: 1500000, transaction_ref: 'QWE123ABC', payment_date: '2026-11-03' },
+    { payment_id: 'b', amount: 800000, transaction_ref: null, payment_date: '2026-11-05' },
+    { payment_id: 'c', amount: 800000, transaction_ref: null, payment_date: '2026-11-05' },
+    { payment_id: 'd', amount: 123, transaction_ref: null, payment_date: '2026-11-05' }];
+  const m = matchStatement(lines, pay);
+  assert.equal(m.matches.a, 0); assert.ok(m.matches.b !== undefined && m.matches.c !== undefined && m.matches.b !== m.matches.c);
+  assert.equal(m.matches.d, undefined); assert.deepEqual(m.unmatchedLines, [3]); assert.equal(m.total, 1500000 + 800000 * 2 + 99950);
+  assert.equal(readStatement('foo,bar\n1,2').problems.length, 1);
+});

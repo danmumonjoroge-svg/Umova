@@ -5,6 +5,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarCheck, GraduationCap, CalendarDays, Wallet, LogOut, Home as HomeIcon, ShieldCheck } from 'lucide-react';
 import { parentSupabase, parentApi, toE164 } from './parentClient.js';
+import MenuTree from '../components/MenuTree.jsx';
+import { PARENT_TREE } from '../navigation/parentTree.js';
 
 const money = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { maximumFractionDigits: 2 })}`;
 const day = (d) => (d ? new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString('en-KE', { weekday: 'short', day: 'numeric', month: 'short' }) : '');
@@ -91,10 +93,10 @@ const FeesBody = ({ id }) => (
 );
 const Fees = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">Fees are not shared with this phone number. Ask the school if you need access.</p> : <FeesBody id={id} />;
 
-const TABS = [['attendance', 'Attendance', CalendarCheck], ['results', 'Results', GraduationCap], ['calendar', 'Calendar', CalendarDays], ['fees', 'Fees', Wallet]];
+const TABS = [['home', 'Home', HomeIcon], ['attendance', 'Attendance', CalendarCheck], ['results', 'Results', GraduationCap], ['calendar', 'Calendar', CalendarDays], ['fees', 'Fees', Wallet]];
 
 function Portal({ onSignOut }) {
-  const nav = useNavigate(); const [tab, setTab] = useState('attendance'); const [sel, setSel] = useState(null);
+  const nav = useNavigate(); const [tab, setTab] = useState('home'); const [sel, setSel] = useState(null); const [segs, setSegs] = useState([]);
   const kids = useData(() => parentApi.children(), []);
   const list = kids.data || []; const child = list.find((c) => c.student_id === sel) || list[0];
   return (
@@ -129,9 +131,9 @@ function Portal({ onSignOut }) {
           <button key={c.student_id} type="button" onClick={() => setSel(c.student_id)} className={`shrink-0 rounded-2xl px-3 py-2 text-left border ${c.student_id === child.student_id ? 'bg-[#1F6B45] border-[#1F6B45] text-white' : 'bg-white border-[#E3DBB8]'}`}>
             <div className="text-sm font-semibold">{c.name}</div><div className={`text-[11px] ${c.student_id === child.student_id ? 'text-white/80' : 'text-slate-500'}`}>{c.class_name || '—'} · {c.school_name}</div></button>))}</div></div>
         <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-          {tab === 'attendance' && <Attendance id={child.student_id} />}{tab === 'results' && <Results id={child.student_id} allowed={child.can_see_results} />}
+          {tab === 'home' && <div className="p-3"><MenuTree tree={PARENT_TREE} segs={segs} can={() => true} rootLabel="Home" searchable={false} onGo={setSegs} onOpen={(p) => setTab(p.tab)} /></div>}{tab === 'attendance' && <Attendance id={child.student_id} />}{tab === 'results' && <Results id={child.student_id} allowed={child.can_see_results} />}
           {tab === 'calendar' && <Calendar id={child.student_id} />}{tab === 'fees' && <Fees id={child.student_id} allowed={child.can_see_fees} />}</main>
-        <nav className="shrink-0 grid grid-cols-4 bg-white border-t border-[#E3DBB8] pb-[env(safe-area-inset-bottom)]">{TABS.map(([k, label, Icon]) => (
+        <nav className="shrink-0 grid grid-cols-5 bg-white border-t border-[#E3DBB8] pb-[env(safe-area-inset-bottom)]">{TABS.map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)} aria-current={tab === k ? 'page' : undefined} className={`flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-[11px] font-semibold ${tab === k ? 'text-[#1F6B45]' : 'text-[#6F7461]'}`}>
             <span className={`flex h-7 w-12 items-center justify-center rounded-full ${tab === k ? 'bg-[#E4F0E8]' : ''}`}><Icon size={20} /></span>{label}</button>))}</nav></>)}
     </>

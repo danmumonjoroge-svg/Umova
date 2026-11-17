@@ -17,6 +17,9 @@ import ElimuLogin from '../../auth/ElimuLogin.jsx';
 import ElimuRegister from '../../auth/ElimuRegister.jsx';
 import { isElimuDemo, ELIMU_DEMO_CODE } from '../../auth/demo.js';
 import { toE164 } from '../../parent/parentClient.js';
+import { SCHOOL_TREE } from '../../navigation/schoolTree.js';
+import { PARENT_TREE } from '../../navigation/parentTree.js';
+import { countPages, countSoon } from '../../navigation/menuKit.js';
 
 const guardian = { id: 'g1', first_name: 'Grace', last_name: 'Otieno', consent: [{ channel: 'EMAIL', status: 'OPTED_OUT' }],
   contacts: [{ id: 'c1', kind: 'PHONE', value: '0712345678', is_primary: true, is_whatsapp: true }, { id: 'c2', kind: 'EMAIL', value: 'g@x.co', is_primary: true }] };
@@ -52,7 +55,7 @@ function Routes2() { return <Suspense fallback={<i>loading-chunk</i>}><ElimuRout
   results.push(['No finance page is SOON any more (fees, bank, assets, payables, reports)', (r('/school/finance/fees').match(/SOON/g) || []).length === 0 && (r('/school/finance/bank').match(/SOON/g) || []).length === 0 && (r('/school/finance/assets').match(/SOON/g) || []).length === 0, '']);
   results.push(['Assets & inventory: fixed assets and stores are built, none SOON', ['Fixed assets', 'Stores &amp; inventory'].every((t) => r('/school/finance/assets').includes(t)), '']);
   results.push(['Finance hub lists School enterprises (AIA) and Purchasing is under Payables', hub.includes('School enterprises (AIA)') && r('/school/finance/payables').includes('Purchasing') && r('/school/finance/enterprises').includes('Activities &amp; remittances'), '']);
-  for (const pth of ['/school/school-finance/bursaries', '/school/school-finance/reconciliation', '/school/school-finance/assets', '/school/school-finance/stores', '/school/school-finance/procurement', '/school/school-finance/aia']) check('route ' + pth, () => renderToString(<MemoryRouter initialEntries={[pth]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>));
+  for (const pth of ['/school/school-finance/bursaries', '/school/school-finance/reconciliation', '/school/school-finance/suppliers', '/school/school-finance/payroll', '/school/school-finance/assets', '/school/school-finance/stores', '/school/school-finance/procurement', '/school/school-finance/aia']) check('route ' + pth, () => renderToString(<MemoryRouter initialEntries={[pth]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>));
   for (const pth of ['/school/school-finance/ledger/income', '/school/school-finance/ledger/position', '/school/school-finance/ledger/cashflow', '/school/school-finance/ledger/receivables', '/school/school-finance/ledger/payables', '/school/school-finance/ledger/accounts', '/school/school-finance/ledger/journals', '/school/school-finance/ledger/trial']) check('route ' + pth, () => renderToString(<MemoryRouter initialEntries={[pth]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>));
   for (const pth of ['/school/school-finance/expenses', '/school/school-finance/budgets']) check('route ' + pth, () => renderToString(<MemoryRouter initialEntries={[pth]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>));
   results.push(['unknown finance section says so', none.includes('does not exist'), '']);
@@ -76,6 +79,30 @@ results.push(['staff roles include the gate officer and keys are unique', STAFF_
 results.push(['Staff is an owner-only menu item', NAV_ITEMS.some((n) => n.key === 'staff' && n.ownerOnly), '']);
 const sheetHtml = check('AppSheet renders', () => renderToString(<AppSheet title="New academic year" onClose={() => {}}><input /></AppSheet>));
 results.push(['sheet is capped to the visible screen and its body scrolls', sheetHtml.includes('92dvh') && sheetHtml.includes('overflow-y-auto') && sheetHtml.includes('safe-area-inset-bottom'), '']);
+
+// ---- grouped menus (staff and parents) ----
+{
+  const menu = (path) => renderToString(<MemoryRouter initialEntries={[path]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>);
+  const top = menu('/school/menu');
+  results.push(['school menu shows the six groups you asked for plus Finance', ['Administration', 'Registration', 'Academics', 'Security', 'Settings', 'Parents portal', 'Finance'].every((t) => top.includes(t)), '']);
+  const ex = menu('/school/menu/academics/exams');
+  results.push(['three levels down: Academics > Exams & results > Exam setup / Marks / Results & reports', ['Exam setup', 'Marks', 'Results &amp; reports'].every((t) => ex.includes(t)), '']);
+  const rr = menu('/school/menu/academics/exams/ex-results');
+  results.push(['four levels down lists Term results, Report cards and Progress reports (SOON)', rr.includes('Term results') && rr.includes('Report cards') && rr.includes('Progress reports') && rr.includes('SOON'), '']);
+  results.push(['a menu path that does not exist says so', menu('/school/menu/nope').includes('does not exist'), '']);
+  const leaves = []; const dup = [];
+  const walk = (n, pathKeys) => { const seen = new Set(); for (const c of n.children || []) { if (seen.has(c.key)) dup.push(c.key); seen.add(c.key); if (c.children) walk(c, [...pathKeys, c.key]); else leaves.push(c); } };
+  walk(SCHOOL_TREE, []); walk(PARENT_TREE, []);
+  results.push(['every menu page is either a route or SOON, never both or neither', leaves.every((l) => !!l.to + !!l.soon + !!l.tab === 1), leaves.filter((l) => !!l.to + !!l.soon + !!l.tab !== 1).map((l) => l.key).join(',')]);
+  results.push(['sibling keys are unique in both menus', dup.length === 0, dup.join(',')]);
+  const KNOWN = ['staff', 'access', 'communication', 'calendar', 'reports', 'admissions', 'students', 'guardians', 'classes', 'academics', 'academics/subjects', 'academics/allocations', 'academics/setup', 'academics/assessments', 'academics/my-assessments', 'academics/grading', 'academics/results', 'academics/report-cards',
+    'timetable', 'timetable/changes', 'timetable/setup', 'rooms', 'attendance', 'attendance/take', 'absences', 'attendance/settings', 'gate', 'finance', 'settings'];
+  const bad = SCHOOL_TREE.children.flatMap(function flat(n) { return n.children ? n.children.flatMap(flat) : n.to && !KNOWN.includes(n.to) ? [n.to] : []; });
+  results.push(['every staff menu link points to a route that exists', bad.length === 0, bad.join(',')]);
+  results.push([`staff menu: ${countPages(SCHOOL_TREE)} pages, ${countSoon(SCHOOL_TREE)} planned`, countPages(SCHOOL_TREE) > 40 && countSoon(SCHOOL_TREE) > 10, '']);
+  results.push(['parent menu has Academics (exam timetable, results summary, report card, progress report), Learning, Gate pass', ['extimetable', 'summary', 'reportcard', 'progress', 'materials', 'assignments', 'passes'].every((k) => leaves.some((l) => l.key === k)), '']);
+  results.push(['parent menu: built pages open existing tabs', leaves.filter((l) => l.tab).every((l) => ['attendance', 'results', 'calendar', 'fees'].includes(l.tab)), '']);
+}
 const ACCESS = { can: () => true, loaded: true, isOwner: true, roles: [] };
 function Routes_() { return <Suspense fallback={<i>loading-chunk</i>}><ElimuRoutes accessOverride={ACCESS} /></Suspense>; }
 

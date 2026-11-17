@@ -150,4 +150,20 @@ export const financeApi = {
   stIssue: (b, item, qty, date, department, memo) => rpc('elimu_st_issue', { p_business: b, p_item: item, p_qty: String(qty), p_date: date, p_department: department || null, p_memo: memo || null }),
   stAdjust: (b, item, delta, date, reason) => rpc('elimu_st_adjust', { p_business: b, p_item: item, p_delta: String(delta), p_date: date, p_reason: reason }),
   stValuation: (b) => rpc('elimu_st_valuation', { p_business: b }),
+  // Suppliers, bills and payments (elimu_1000)
+  spSummary: (b) => rpc('elimu_sp_summary', { p_business: b }),
+  spSaveSupplier: (b, sup) => rpc('elimu_sp_save_supplier', { p_business: b, p_supplier: sup }),
+  spAddBill: (b, x) => rpc('elimu_sp_add_bill', { p_business: b, p_bill: { supplier_id: x.supplierId, bill_date: x.date, due_date: x.dueDate || null, amount: dec(x.cents), debit_code: x.code, supplier_ref: x.ref || null, description: x.description || null } }),
+  spPayBill: (bill, cents, date, paidFrom, reference) => rpc('elimu_sp_pay_bill', { p_bill: bill, p_amount: dec(cents), p_date: date, p_paid_from: paidFrom, p_reference: reference || null }),
+  spVoidBill: (bill, reason) => rpc('elimu_sp_void_bill', { p_bill: bill, p_reason: reason }),
+  spVoidPayment: (payment, reason) => rpc('elimu_sp_void_payment', { p_payment: payment, p_reason: reason }),
+  // Payroll (elimu_1001)
+  prRates: (b, on = null) => rpc('elimu_pr_get_rates', { p_business: b, p_on: on }),
+  prSaveEmployee: (b, e) => rpc('elimu_pr_save_employee', { p_business: b, p_emp: { id: e.id || undefined, name: e.name, job_title: e.jobTitle || undefined, kra_pin: e.kraPin || undefined, nssf_no: e.nssfNo || undefined, shif_no: e.shifNo || undefined, phone: e.phone || undefined,
+    basic: e.basicCents === undefined ? undefined : dec(e.basicCents), allowances: e.allowanceCents === undefined ? undefined : dec(e.allowanceCents), pays_paye: e.paysPaye, is_active: e.isActive } }),
+  prCreateRun: (b, month) => rpc('elimu_pr_create_run', { p_business: b, p_month: month }),
+  prApproveRun: (run) => rpc('elimu_pr_approve_run', { p_run: run }),
+  prPaySalaries: (run, date, from, ref) => rpc('elimu_pr_pay_salaries', { p_run: run, p_date: date, p_paid_from: from, p_reference: ref || null }),
+  prRemit: (run, date, from, ref) => rpc('elimu_pr_remit_statutory', { p_run: run, p_date: date, p_paid_from: from, p_reference: ref || null }),
+  prVoidRun: (run, reason) => rpc('elimu_pr_void_run', { p_run: run, p_reason: reason }),
 };

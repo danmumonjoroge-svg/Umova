@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
 import { FitPage, LoadingBlock, EmptyBlock, Notice, DataCard, inputCls } from '../../../components/CardKit';
-import { fromDb, formatMoney, toCents, MoneyError } from '../utils/money';
+import { fromDb, formatMoney, toCents, toDecimalString, MoneyError } from '../utils/money';
+import { readStatement, matchStatement } from '../utils/statementImport';
 
 const M = (v) => formatMoney(fromDb(v));
 const today = () => new Date().toISOString().slice(0, 10);
@@ -28,6 +29,17 @@ export default function ElimuReconciliationPage() {
     setErr(null); setNote(null); if (f.from > f.to) return setErr('The start date is after the end date.');
     setBusy(true); try { const r = await api.unreconciled(businessId, f.method, f.from, f.to); setRows(r); setPicked({}); } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
+  const importCsv = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ''; if (!file || !rows) return; setErr(null); setNote(null);
+    try {
+      const { lines, problems } = readStatement(await file.text()); if (problems.length) return setErr(problems[0]);
+      const inPeriod = lines.filter((l) => l.date >= f.from && l.date <= f.to);
+      const m = matchStatement(inPeriod, rows.map((r) => ({ ...r, amount: fromDb(r.amount) })));
+      setPicked(Object.fromEntries(Object.keys(m.matches).map((k) => [k, true])));
+      setF((x) => ({ ...x, statement: toDecimalString(m.total) }));
+      setNote(`Read ${inPeriod.length} credit line(s) in the period; ${Object.keys(m.matches).length} matched to payments and ticked.${m.unmatchedLines.length ? ` ${m.unmatchedLines.length} line(s) have no payment: ${m.unmatchedLines.slice(0, 5).map((i) => `${inPeriod[i].date} ${formatMoney(inPeriod[i].cents)}`).join(', ')}${m.unmatchedLines.length > 5 ? '…' : ''}. The difference below will show them.` : ' Everything matched.'} Check the ticks before saving.`);
+    } catch (x) { setErr(`Could not read the file: ${x.message}`); }
+  };
   const all = () => setPicked(Object.fromEntries((rows || []).map((r) => [r.payment_id, true])));
   const save = async () => {
     setErr(null); if (stmt === null || Number.isNaN(stmt)) return setErr('Enter the total shown on the statement.');
@@ -48,7 +60,7 @@ export default function ElimuReconciliationPage() {
           <div className="grid grid-cols-2 gap-2"><label className="text-xs text-[#6F7461]">From<input className={`${inputCls} mt-1`} type="date" value={f.from} onChange={set('from')} /></label><label className="text-xs text-[#6F7461]">To<input className={`${inputCls} mt-1`} type="date" max={today()} value={f.to} onChange={set('to')} /></label></div>
           <button type="button" disabled={busy} onClick={load} className="w-full h-11 rounded-xl border border-[#1F6B45] text-[#1F6B45] font-semibold disabled:opacity-50">{busy && rows === null ? 'Loading…' : 'Show payments not yet reconciled'}</button>
           {rows !== null && (!rows.length ? <EmptyBlock>No unreconciled {f.method.toLowerCase()} payments in this period.</EmptyBlock> : (<>
-            <div className="flex items-center justify-between text-sm"><span>{rows.length} payment(s)</span><button type="button" className="underline text-[#1F6B45]" onClick={all}>Tick all</button></div>
+            <div className="flex items-center justify-between text-sm"><span>{rows.length} payment(s)</span><span className="flex gap-3"><label className="underline text-[#1F6B45] cursor-pointer">Import statement (CSV)<input type="file" accept=".csv,text/csv" className="hidden" onChange={importCsv} /></label><button type="button" className="underline text-[#1F6B45]" onClick={all}>Tick all</button></span></div>
             <div className="rounded-xl border border-[#E3DBB8] bg-white divide-y divide-[#F0ECD9] max-h-[40vh] overflow-y-auto">{rows.map((r) => (
               <label key={r.payment_id} className="flex items-center gap-3 p-2 text-sm min-h-[44px]"><input type="checkbox" className="h-5 w-5" checked={!!picked[r.payment_id]} onChange={(e) => setPicked((p) => ({ ...p, [r.payment_id]: e.target.checked }))} />
                 <span className="flex-1"><b>{r.student_name || 'Payment'}</b> <span className="text-xs text-[#6F7461]">{r.receipt_no} · {r.payment_date}{r.transaction_ref ? ` · ${r.transaction_ref}` : ''}</span></span><b>{M(r.amount)}</b></label>))}</div>

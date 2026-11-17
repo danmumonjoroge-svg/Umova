@@ -13,6 +13,7 @@ import ClassesPage from './pages/ClassesPage.jsx';
 import CommunicationPage from './pages/CommunicationPage.jsx';
 import ElimuSettingsPage from './pages/ElimuSettingsPage.jsx';
 import ElimuStaffPage from './pages/ElimuStaffPage.jsx';
+import SchoolMenuPage from './pages/SchoolMenuPage.jsx';
 import { moduleRoutes } from './registry.js';
 import { ElimuAccessProvider } from './hooks/useElimu.js';
 import RequireElimuAction from './components/RequireElimuAction.jsx';
@@ -33,6 +34,7 @@ export default function ElimuRoutes({ basePath = '/elimu', accessOverride }) {
         <Route path="admissions" element={guard('admissions.view', <AdmissionsPage />)} />
         <Route path="classes" element={guard('structure.view', <ClassesPage basePath={basePath} />)} />
         <Route path="communication" element={guard('comms.history', <CommunicationPage basePath={basePath} />)} />
+        <Route path="menu/*" element={<SchoolMenuPage basePath={basePath} />} />
         <Route path="staff" element={<ElimuStaffPage />} />
         <Route path="settings" element={guard('settings.manage', <ElimuSettingsPage />)} />
         {moduleRoutes()}

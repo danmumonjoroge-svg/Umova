@@ -19,6 +19,8 @@ const CashFlow = lazy(() => import('./ledger/ElimuStatementPages').then((m) => (
 const Party = lazy(() => import('./ledger/ElimuStatementPages').then((m) => ({ default: m.PartyBalancesPage })));
 const Bursaries = lazy(() => import('./pages/ElimuBursariesPage'));
 const Recon = lazy(() => import('./pages/ElimuReconciliationPage'));
+const Suppliers = lazy(() => import('./pages/ElimuSuppliersPage'));
+const Payroll = lazy(() => import('./pages/ElimuPayrollPage'));
 const Assets = lazy(() => import('./assets/ElimuAssetsPage'));
 const Stores = lazy(() => import('./assets/ElimuStoresPage'));
 const Procurement = lazy(() => import('../procurement/pages/ElimuProcurementPage'));
@@ -48,6 +50,8 @@ export const elimuFinanceRoutes = () => (
     <Route path="ledger/payables" element={<Party kind="PAYABLES" />} />
     <Route path="bursaries" element={<Bursaries />} />
     <Route path="reconciliation" element={<Recon />} />
+    <Route path="suppliers" element={<Suppliers />} />
+    <Route path="payroll" element={<Payroll />} />
     <Route path="assets" element={<Assets />} />
     <Route path="stores" element={<Stores />} />
     <Route path="procurement" element={<Procurement />} />

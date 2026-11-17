@@ -20,8 +20,8 @@ export const FINANCE_TREE = {
     { key: 'payables', label: 'Payables & expenses', icon: 'Receipt', desc: 'Money the school owes and spends', children: [
       { key: 'expenses', label: 'Expenses', desc: 'Record and approve school expenses', to: `${P}/expenses`, anyOf: ['finance.view', 'finance.expense'] },
       { key: 'procurement', label: 'Purchasing', desc: 'Suppliers, purchase orders and goods received', to: `${P}/procurement`, anyOf: ['finance.view'] },
-      { key: 'p-suppliers', label: 'Suppliers', desc: 'Balances owed to suppliers', to: `${P}/ledger/payables`, anyOf: ['finance.report'] },
-      { key: 'p-staff', label: 'Staff & payroll', desc: 'Salaries and amounts owed to staff', to: `${P}/ledger/payables`, anyOf: ['finance.report'] },
+      { key: 'p-suppliers', label: 'Suppliers', desc: 'Bills, balances and payments', to: `${P}/suppliers`, anyOf: ['finance.view'] },
+      { key: 'p-staff', label: 'Staff & payroll', desc: 'Pay runs, payslips, PAYE and statutory deductions', to: `${P}/payroll`, anyOf: ['finance.approve'] },
       { key: 'budgets', label: 'Budgets', desc: 'Budget against actual', to: `${P}/budgets`, anyOf: ['finance.view'] },
     ] },
     { key: 'bank', label: 'Bank & cash', icon: 'Landmark', desc: 'Bank accounts and reconciliation', children: [
