@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { CalendarCheck, GraduationCap, CalendarDays, Wallet, LogOut, Home as HomeIcon, ShieldCheck } from 'lucide-react';
 import { parentSupabase, parentApi, toE164 } from './parentClient.js';
 import MenuTree from '../components/MenuTree.jsx';
+import ProgressView from '../shared/components/ProgressChart.jsx';
 import { PARENT_TREE } from '../navigation/parentTree.js';
 
 const money = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { maximumFractionDigits: 2 })}`;
@@ -16,10 +17,11 @@ const GROUP = { PRESENT: ['Present', 'bg-emerald-100 text-emerald-800'], ABSENT:
 
 function useData(fn, deps) {
   const [s, set] = useState({ loading: true, data: null, error: '' });
+  const [n, setN] = useState(0);
   useEffect(() => { let live = true; set({ loading: true, data: null, error: '' });
     fn().then((data) => live && set({ loading: false, data, error: '' })).catch((e) => live && set({ loading: false, data: null, error: e.message }));
-    return () => { live = false; }; /* eslint-disable-next-line */ }, deps);
-  return s;
+    return () => { live = false; }; /* eslint-disable-next-line */ }, [...deps, n]);
+  return { ...s, reload: () => setN((x) => x + 1) };
 }
 const Box = ({ s, children }) => (s.loading ? <p className="p-6 text-sm text-slate-500">Loading…</p> : s.error ? <p className="m-3 rounded-xl bg-red-50 text-red-800 text-sm p-3">{s.error}</p> : children(s.data));
 const Card = ({ children, className = '' }) => <div className={`rounded-2xl bg-white border border-[#E3DBB8] p-3 ${className}`}>{children}</div>;
@@ -93,6 +95,34 @@ const FeesBody = ({ id }) => (
 );
 const Fees = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">Fees are not shared with this phone number. Ask the school if you need access.</p> : <FeesBody id={id} />;
 
+const ExamTimetableBody = ({ id }) => (
+  <Box s={useData(() => parentApi.examTimetable(id), [id])}>{(rows) => (
+    <div className="p-3 space-y-2">{rows.length === 0 && <p className="text-sm text-slate-500">No exam dates have been published yet.</p>}
+      {rows.map((e, i) => (<Card key={i}><div className="flex justify-between gap-2"><div><div className="font-semibold text-sm">{e.subject} · {e.name}</div><div className="text-xs text-slate-500">{day(e.exam_date)} · {hhmm(e.start_time)}–{hhmm(e.end_time)}{e.venue ? ` · ${e.venue}` : ''}</div></div></div>{e.notes && <p className="text-xs text-slate-600 mt-1">{e.notes}</p>}</Card>))}</div>)}</Box>);
+const ExamTimetable = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">Exam dates are not shared with this phone number. Ask the school if you need access.</p> : <ExamTimetableBody id={id} />;
+const ProgressBody = ({ id }) => (
+  <Box s={useData(() => parentApi.progress(id), [id])}>{(d) => <div className="p-3"><ProgressView data={d} /></div>}</Box>);
+const Progress = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">Results are not shared with this phone number. Ask the school if you need access.</p> : <ProgressBody id={id} />;
+
+const PASS_LABEL = { REQUESTED: 'Waiting for your answer', PARENT_ACCEPTED: 'You accepted', PARENT_REFUSED: 'You refused', CANCELLED: 'Cancelled by the school', EXITED: 'Left school', EXPIRED: 'Expired' };
+function GatePassList({ id }) {
+  const s = useData(() => parentApi.gatePasses(id), [id]); const [busy, setBusy] = useState(null); const [msg, setMsg] = useState(null);
+  const answer = async (p, accept) => {
+    if (accept && !window.confirm(`Allow your child to leave school? Reason given: ${p.reason}`)) return;
+    const note = window.prompt(accept ? 'Optional note for the school (who will collect, when):' : 'Optional note for the school (why not):') || '';
+    setBusy(p.id); setMsg(null);
+    try { await parentApi.answerGatePass(p.id, accept, note.trim()); setMsg({ ok: true, text: accept ? 'You accepted. The gate officer can now let your child leave.' : 'You refused. Your child will stay at school.' }); s.reload && s.reload(); }
+    catch (e) { setMsg({ ok: false, text: e.message || 'Could not send your answer.' }); } finally { setBusy(null); }
+  };
+  return (<Box s={s}>{(rows) => (
+    <div className="p-3 space-y-2">{msg && <p className={`rounded-xl text-sm p-3 ${msg.ok ? 'bg-emerald-50 text-emerald-900' : 'bg-red-50 text-red-800'}`}>{msg.text}</p>}
+      {rows.length === 0 && <p className="text-sm text-slate-500">The school has not asked to let your child leave.</p>}
+      {rows.map((p) => (<Card key={p.id}><div className="flex justify-between gap-2"><div className="font-semibold text-sm">{p.reason}</div><span className="text-[11px] font-semibold text-slate-600 shrink-0">{PASS_LABEL[p.state] || p.state}</span></div>
+        <div className="text-xs text-slate-500 mt-0.5">From {p.requested_by_name || 'a teacher'} · {new Date(p.requested_at).toLocaleString('en-KE', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}{p.collector_name ? ` · collector: ${p.collector_name}` : ''}</div>
+        {p.state === 'REQUESTED' && <div className="flex gap-2 mt-2"><button type="button" disabled={busy === p.id} onClick={() => answer(p, true)} className="flex-1 min-h-[44px] rounded-xl bg-[#1F6B45] text-white font-bold disabled:opacity-50">Accept</button><button type="button" disabled={busy === p.id} onClick={() => answer(p, false)} className="flex-1 min-h-[44px] rounded-xl border border-[#8A3B2E] text-[#8A3B2E] font-bold disabled:opacity-50">Refuse</button></div>}</Card>))}</div>)}</Box>);
+}
+const GatePass = ({ id }) => <GatePassList id={id} />;
+
 const TABS = [['home', 'Home', HomeIcon], ['attendance', 'Attendance', CalendarCheck], ['results', 'Results', GraduationCap], ['calendar', 'Calendar', CalendarDays], ['fees', 'Fees', Wallet]];
 
 function Portal({ onSignOut }) {
@@ -132,7 +162,7 @@ function Portal({ onSignOut }) {
             <div className="text-sm font-semibold">{c.name}</div><div className={`text-[11px] ${c.student_id === child.student_id ? 'text-white/80' : 'text-slate-500'}`}>{c.class_name || '—'} · {c.school_name}</div></button>))}</div></div>
         <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
           {tab === 'home' && <div className="p-3"><MenuTree tree={PARENT_TREE} segs={segs} can={() => true} rootLabel="Home" searchable={false} onGo={setSegs} onOpen={(p) => setTab(p.tab)} /></div>}{tab === 'attendance' && <Attendance id={child.student_id} />}{tab === 'results' && <Results id={child.student_id} allowed={child.can_see_results} />}
-          {tab === 'calendar' && <Calendar id={child.student_id} />}{tab === 'fees' && <Fees id={child.student_id} allowed={child.can_see_fees} />}</main>
+          {tab === 'gatepass' && <GatePass id={child.student_id} />}{tab === 'extimetable' && <ExamTimetable id={child.student_id} allowed={child.can_see_results} />}{tab === 'progress' && <Progress id={child.student_id} allowed={child.can_see_results} />}{tab === 'calendar' && <Calendar id={child.student_id} />}{tab === 'fees' && <Fees id={child.student_id} allowed={child.can_see_fees} />}</main>
         <nav className="shrink-0 grid grid-cols-5 bg-white border-t border-[#E3DBB8] pb-[env(safe-area-inset-bottom)]">{TABS.map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)} aria-current={tab === k ? 'page' : undefined} className={`flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-[11px] font-semibold ${tab === k ? 'text-[#1F6B45]' : 'text-[#6F7461]'}`}>
             <span className={`flex h-7 w-12 items-center justify-center rounded-full ${tab === k ? 'bg-[#E4F0E8]' : ''}`}><Icon size={20} /></span>{label}</button>))}</nav></>)}

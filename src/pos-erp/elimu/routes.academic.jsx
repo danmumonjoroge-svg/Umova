@@ -13,6 +13,8 @@ import MarkEntryPage from './exams/pages/MarkEntryPage';
 import GradingSchemesPage from './grading/pages/GradingSchemesPage';
 import TermResultsPage from './report_cards/pages/TermResultsPage';
 import ReportCardsPage from './report_cards/pages/ReportCardsPage';
+import ExamTimetablePage from './exams/pages/ExamTimetablePage';
+import ProgressReportPage from './report_cards/pages/ProgressReportPage';
 
 export const elimuAcademicRoutes = (
   <>
@@ -26,6 +28,8 @@ export const elimuAcademicRoutes = (
     <Route path="elimu/grading" element={<GradingSchemesPage />} />
     <Route path="elimu/results" element={<TermResultsPage />} />
     <Route path="elimu/report-cards" element={<ReportCardsPage />} />
+    <Route path="elimu/exam-timetable" element={<ExamTimetablePage />} />
+    <Route path="elimu/progress" element={<ProgressReportPage />} />
   </>
 );
 
@@ -45,5 +49,7 @@ export const elimuAcademicNested = (
     <Route path="grading" element={<GradingSchemesPage />} />
     <Route path="results" element={<TermResultsPage />} />
     <Route path="report-cards" element={<ReportCardsPage />} />
+    <Route path="exam-timetable" element={<ExamTimetablePage />} />
+    <Route path="progress" element={<ProgressReportPage />} />
   </Route>
 );

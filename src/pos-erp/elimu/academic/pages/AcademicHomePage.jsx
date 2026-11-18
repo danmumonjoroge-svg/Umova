@@ -9,6 +9,8 @@ const TILES = [
   { to: 'assessments', icon: ClipboardList, title: 'Assessments', text: 'Create tests and exams, set marks and weights', need: 'assessment.create' },
   { to: 'results', icon: Award, title: 'Term results', text: 'Calculate, check and rank results', need: 'view.all', alt: 'is_class_teacher' },
   { to: 'report-cards', icon: FileText, title: 'Report cards', text: 'Review, approve, publish, print and notify', need: 'view.all', alt: 'is_class_teacher' },
+  { to: 'exam-timetable', icon: ClipboardList, title: 'Exam timetable', text: 'Set dates and venues, then publish to parents', need: 'view.all', alt: 'is_class_teacher' },
+  { to: 'progress', icon: Award, title: 'Progress report', text: 'Every exam a student has done, with a graph', need: 'view.all', alt: 'is_class_teacher' },
   { to: 'subjects', icon: BookOpen, title: 'Subjects', text: 'Subjects, codes and levels', need: 'config.manage' },
   { to: 'allocations', icon: Users, title: 'Teachers & classes', text: 'Who teaches what; class teachers', need: 'config.manage' },
   { to: 'grading', icon: PenLine, title: 'Grading schemes', text: 'Grade bands and points', need: 'config.manage' },

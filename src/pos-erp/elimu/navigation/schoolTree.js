@@ -27,8 +27,8 @@ export const SCHOOL_TREE = {
       ] },
       { key: 'students', label: 'Students', desc: 'The student register', children: [
         { key: 'register', label: 'Student register', desc: 'Find, add and edit students', to: 'students', anyOf: ['students.view'] },
-        { key: 'promotion', label: 'Promotion & class changes', desc: 'Move a class up at year end', soon: true },
-        { key: 'leavers', label: 'Transfers & leavers', desc: 'Withdrawals, transfers and graduation', soon: true },
+        { key: 'promotion', label: 'Promotion & class changes', desc: 'Move a class up at year end', to: 'promotion', anyOf: ['enrollment.manage'] },
+        { key: 'leavers', label: 'Transfers & leavers', desc: 'Withdrawals, transfers and graduation', to: 'leavers', anyOf: ['students.manage'] },
       ] },
       { key: 'guardians', label: 'Guardians', desc: 'Parents and guardians', children: [
         { key: 'guardian-register', label: 'Guardian register', desc: 'Contacts and what each guardian may see', to: 'guardians', anyOf: ['guardians.view'] },
@@ -38,17 +38,17 @@ export const SCHOOL_TREE = {
       ] },
       { key: 'migration', label: 'Bring in old data', desc: 'Move from your old system using Excel or CSV', children: [
         { key: 'mig-people', label: 'Students & guardians', desc: 'Admission numbers, names, classes, contacts', children: [
-          { key: 'imp-students', label: 'Import students', desc: 'Upload the student list from Excel', soon: true },
-          { key: 'imp-guardians', label: 'Import guardians', desc: 'Upload guardians and link them to students', soon: true },
+          { key: 'imp-students', label: 'Import students', desc: 'Upload the student list from Excel', to: 'import/students', anyOf: ['students.manage'] },
+          { key: 'imp-guardians', label: 'Import guardians', desc: 'Guardians come in the same file as students', to: 'import/students', anyOf: ['students.manage'] },
         ] },
         { key: 'mig-money', label: 'Fees & balances', desc: 'Opening balances from the old system', children: [
-          { key: 'imp-balances', label: 'Import fee balances', desc: 'Opening balance per student', soon: true },
+          { key: 'imp-balances', label: 'Import fee balances', desc: 'Opening balance per student', to: 'import/balances', anyOf: ['finance.bill'] },
         ] },
         { key: 'mig-results', label: 'Exam results', desc: 'Past marks and results', children: [
-          { key: 'imp-results', label: 'Import past results', desc: 'Marks per student, subject and exam', soon: true },
+          { key: 'imp-results', label: 'Import past results', desc: 'Marks per student, subject and exam', to: 'import/results', anyOf: ['marks.manage_all'] },
         ] },
         { key: 'mig-log', label: 'Import history', desc: 'What was uploaded, by whom, and any rows refused', children: [
-          { key: 'imp-log', label: 'Import log', desc: 'Every import with its result', soon: true },
+          { key: 'imp-log', label: 'Import log', desc: 'Every import with its result', to: 'import/log', anyOf: ['students.manage', 'finance.bill', 'marks.manage_all'] },
         ] },
       ] },
     ] },
@@ -75,7 +75,7 @@ export const SCHOOL_TREE = {
         { key: 'ex-setup', label: 'Exam setup', desc: 'Exams, grading and the exam timetable', children: [
           { key: 'assessments', label: 'Exams & assessments', desc: 'Create tests, CATs and exams', to: 'academics/assessments', anyOf: ['structure.view'] },
           { key: 'grading', label: 'Grading schemes', desc: 'Grade boundaries and points', to: 'academics/grading', anyOf: ['structure.view'] },
-          { key: 'ex-timetable', label: 'Exam timetable', desc: 'When and where each paper is sat (shown to parents)', soon: true },
+          { key: 'ex-timetable', label: 'Exam timetable', desc: 'When and where each paper is sat (shown to parents)', to: 'academics/exam-timetable', anyOf: ['structure.view'] },
         ] },
         { key: 'ex-marks', label: 'Marks', desc: 'Entering marks', children: [
           { key: 'my-assess', label: 'My assessments', desc: 'Enter marks for your subjects', to: 'academics/my-assessments', anyOf: ['structure.view'] },
@@ -83,7 +83,7 @@ export const SCHOOL_TREE = {
         { key: 'ex-results', label: 'Results & reports', desc: 'Term results, report cards and progress', children: [
           { key: 'term-results', label: 'Term results', desc: 'Class and subject results', to: 'academics/results', anyOf: ['structure.view'] },
           { key: 'report-cards', label: 'Report cards', desc: 'Current results per student; publish to parents', to: 'academics/report-cards', anyOf: ['structure.view'] },
-          { key: 'progress', label: 'Progress reports', desc: 'Every exam a student has done, with a progress graph', soon: true },
+          { key: 'progress', label: 'Progress reports', desc: 'Every exam a student has done, with a progress graph', to: 'academics/progress', anyOf: ['structure.view'] },
         ] },
       ] },
       { key: 'learning', label: 'Learning materials', desc: 'Study materials, assignments and revision', children: [
@@ -95,16 +95,16 @@ export const SCHOOL_TREE = {
     { key: 'security', label: 'Security', icon: 'ShieldCheck', desc: 'Gate, gate passes, rooms and access', children: [
       { key: 'gate', label: 'Gate', desc: 'Arrivals and departures', children: [
         { key: 'gate-check', label: 'Gate check-in', desc: 'Register arrivals at the gate', to: 'gate', anyOf: ['attendance.take_any'] },
-        { key: 'gate-exit', label: 'Exit log', desc: 'Who left, when and who allowed it', soon: true },
+        { key: 'gate-exit', label: 'Exit log', desc: 'Who left, when and who allowed it', to: 'gate-exits' },
       ] },
       { key: 'passes', label: 'Gate passes', desc: 'Permission to leave school', children: [
-        { key: 'pass-new', label: 'Issue a gate pass', desc: 'Teacher writes a pass (for example a sick student)', soon: true },
-        { key: 'pass-parent', label: 'Waiting for parent', desc: 'Passes the parent has not yet answered', soon: true },
-        { key: 'pass-gate', label: 'Cleared to leave', desc: 'Passes approved by teacher and parent, for the gate officer', soon: true },
+        { key: 'pass-new', label: 'Issue a gate pass', desc: 'Teacher writes a pass (for example a sick student)', to: 'gate-passes', anyOf: ['attendance.take_own', 'attendance.take_any'] },
+        { key: 'pass-parent', label: 'Waiting for parent', desc: 'Passes the parent has not yet answered', to: 'gate-passes?tab=all', anyOf: ['attendance.view_all', 'attendance.take_any'] },
+        { key: 'pass-gate', label: 'Cleared to leave', desc: 'Passes approved by teacher and parent, for the gate officer', to: 'gate-passes?tab=gate', anyOf: ['attendance.take_any'] },
       ] },
       { key: 'access', label: 'Access & audit', desc: 'Roles and activity', children: [
         { key: 'roles2', label: 'Roles & permissions', desc: 'What each role can see and do', to: 'access', anyOf: ['roles.view'] },
-        { key: 'audit', label: 'Activity log', desc: 'Who did what', soon: true },
+        { key: 'audit', label: 'Activity log', desc: 'Who did what', to: 'activity' },
       ] },
     ] },
     { key: 'finance', label: 'Finance', icon: 'Wallet', desc: 'Fees, payables, bank, assets, payroll and statements', children: [
@@ -113,11 +113,11 @@ export const SCHOOL_TREE = {
     { key: 'parents', label: 'Parents portal', icon: 'Users', desc: 'What parents see and send, controlled from here', children: [
       { key: 'pp-see', label: 'What parents see', desc: 'Results, timetable and fees shown to parents', children: [
         { key: 'pp-reports', label: 'Publish report cards', desc: 'Release current results to parents', to: 'academics/report-cards', anyOf: ['structure.view'] },
-        { key: 'pp-extimetable', label: 'Exam timetable', desc: 'Published exam dates for parents', soon: true },
+        { key: 'pp-extimetable', label: 'Exam timetable for parents', desc: 'Set and publish the dates parents see', to: 'academics/exam-timetable', anyOf: ['structure.view'] },
         { key: 'pp-access', label: 'Guardian access', desc: 'Which guardian may see results and fees', to: 'guardians', anyOf: ['guardians.view'] },
       ] },
       { key: 'pp-requests', label: 'Requests from parents', desc: 'Things parents answer or send', children: [
-        { key: 'pp-passes', label: 'Gate pass answers', desc: 'Parent accepted or refused a leave request', soon: true },
+        { key: 'pp-passes', label: 'Gate pass answers', desc: 'Parent accepted or refused a leave request', to: 'gate-passes?tab=all', anyOf: ['attendance.view_all', 'attendance.take_any'] },
         { key: 'pp-work', label: 'Assignment submissions', desc: 'Work uploaded through the portal', soon: true },
       ] },
       { key: 'pp-contact', label: 'Contacting parents', desc: 'Messages', children: [

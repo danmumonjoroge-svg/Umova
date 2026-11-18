@@ -28,4 +28,8 @@ export const parentApi = {
   results: (id) => rpc('elimu_parent_results', { p_student: id }),
   calendar: (id) => rpc('elimu_parent_calendar', { p_student: id }),
   fees: (id) => rpc('elimu_parent_fees', { p_student: id }),
+  examTimetable: (id) => rpc('elimu_parent_exam_timetable', { p_student: id }),
+  progress: (id) => rpc('elimu_parent_progress', { p_student: id }),
+  gatePasses: (id) => rpc('elimu_parent_gate_passes', { p_student: id }),
+  answerGatePass: (id, accept, note) => rpc('elimu_parent_gate_pass_decide', { p_pass: id, p_accept: accept, p_note: note || null }),
 };

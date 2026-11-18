@@ -14,6 +14,8 @@ import TimetableSetupPage from './timetable/pages/TimetableSetupPage';
 import CalendarPage from './calendar/pages/CalendarPage';
 import AccessPage from './shared/pages/AccessPage';
 import GatePage from './gate/pages/GatePage.jsx';
+import GatePassPage from './gate/pages/GatePassPage.jsx';
+import GateExitLogPage from './gate/pages/GateExitLogPage.jsx';
 import RoomsPage from './rooms/pages/RoomsPage.jsx';
 
 const G = ({ any, children }) => <RequireElimu any={any}>{children}</RequireElimu>;
@@ -30,6 +32,8 @@ const ATT_ROUTES = (
     <Route path="timetable/setup" element={<G any={['timetable.manage']}><TimetableSetupPage /></G>} />
     <Route path="calendar" element={<G any={['calendar.view']}><CalendarPage /></G>} />
     <Route path="gate" element={<G any={['attendance.take_any']}><GatePage /></G>} />
+    <Route path="gate-exits" element={<G any={['attendance.view_all', 'attendance.take_any']}><GateExitLogPage /></G>} />
+    <Route path="gate-passes" element={<G any={['attendance.take_own', 'attendance.take_any', 'attendance.view_all']}><GatePassPage /></G>} />
     <Route path="rooms" element={<G any={['timetable.view']}><RoomsPage /></G>} />
     <Route path="access" element={<G any={['roles.view']}><AccessPage /></G>} />
   </>
