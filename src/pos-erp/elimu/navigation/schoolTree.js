@@ -87,15 +87,15 @@ export const SCHOOL_TREE = {
         ] },
       ] },
       { key: 'learning', label: 'Learning materials', desc: 'Study materials, assignments and revision', children: [
-        { key: 'lm-materials', label: 'Study materials', desc: 'Upload notes and revision papers by class and subject', soon: true },
-        { key: 'lm-assign', label: 'Assignments', desc: 'Set work, receive submissions, mark', soon: true },
-        { key: 'lm-submissions', label: 'Student submissions', desc: 'Work handed in by students', soon: true },
+        { key: 'lm-materials', label: 'Study materials', desc: 'Upload notes and revision papers by class and subject', to: 'academics/materials', anyOf: ['academic.access', 'marks.manage_all'] },
+        { key: 'lm-assign', label: 'Assignments', desc: 'Set work, receive submissions, mark', to: 'academics/assignments', anyOf: ['academic.access', 'marks.manage_all'] },
+        { key: 'lm-submissions', label: 'Student submissions', desc: 'Work handed in by students', to: 'academics/assignments', anyOf: ['academic.access', 'marks.manage_all'] },
       ] },
     ] },
     { key: 'security', label: 'Security', icon: 'ShieldCheck', desc: 'Gate, gate passes, rooms and access', children: [
       { key: 'gate', label: 'Gate', desc: 'Arrivals and departures', children: [
         { key: 'gate-check', label: 'Gate check-in', desc: 'Register arrivals at the gate', to: 'gate', anyOf: ['attendance.take_any'] },
-        { key: 'gate-exit', label: 'Exit log', desc: 'Who left, when and who allowed it', to: 'gate-exits' },
+        { key: 'gate-exit', label: 'Exit log', desc: 'Who left, when and who allowed it', to: 'gate-exits', anyOf: ['attendance.view_all', 'attendance.take_any'] },
       ] },
       { key: 'passes', label: 'Gate passes', desc: 'Permission to leave school', children: [
         { key: 'pass-new', label: 'Issue a gate pass', desc: 'Teacher writes a pass (for example a sick student)', to: 'gate-passes', anyOf: ['attendance.take_own', 'attendance.take_any'] },
@@ -104,7 +104,7 @@ export const SCHOOL_TREE = {
       ] },
       { key: 'access', label: 'Access & audit', desc: 'Roles and activity', children: [
         { key: 'roles2', label: 'Roles & permissions', desc: 'What each role can see and do', to: 'access', anyOf: ['roles.view'] },
-        { key: 'audit', label: 'Activity log', desc: 'Who did what', to: 'activity' },
+        { key: 'audit', label: 'Activity log', desc: 'Who did what', to: 'activity', anyOf: ['settings.manage'] },
       ] },
     ] },
     { key: 'finance', label: 'Finance', icon: 'Wallet', desc: 'Fees, payables, bank, assets, payroll and statements', children: [
@@ -133,7 +133,7 @@ export const SCHOOL_TREE = {
         { key: 'set-grading', label: 'Grading schemes', desc: 'Grade boundaries and points', to: 'academics/grading', anyOf: ['structure.view'] },
       ] },
       { key: 'set-data', label: 'Data & storage', desc: 'Files and backups', children: [
-        { key: 'set-storage', label: 'File storage', desc: 'Space used by study materials and uploads', soon: true },
+        { key: 'set-storage', label: 'File storage', desc: 'Space used by study materials and uploads', to: 'file-storage', anyOf: ['settings.manage'] },
         { key: 'set-export', label: 'Export & backup', desc: 'Download your data', soon: true },
       ] },
     ] },

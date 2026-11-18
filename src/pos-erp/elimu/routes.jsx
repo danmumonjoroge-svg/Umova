@@ -20,6 +20,9 @@ import ImportBalancesPage from './import/pages/ImportBalancesPage.jsx';
 import ImportResultsPage from './import/pages/ImportResultsPage.jsx';
 import PromotionPage from './promotion/pages/PromotionPage.jsx';
 import LeaversPage from './leavers/pages/LeaversPage.jsx';
+import StudyMaterialsPage from './materials/pages/StudyMaterialsPage.jsx';
+import AssignmentsPage from './materials/pages/AssignmentsPage.jsx';
+import FileStoragePage from './storage/pages/FileStoragePage.jsx';
 import ActivityLogPage from './audit/pages/ActivityLogPage.jsx';
 import { useElimuAccess } from './hooks/useElimu.js';
 import { moduleRoutes } from './registry.js';
@@ -47,6 +50,9 @@ export default function ElimuRoutes({ basePath = '/elimu', accessOverride }) {
         <Route path="import/balances" element={guard('finance.bill', <ImportBalancesPage basePath={basePath} />)} />
         <Route path="import/results" element={guard('marks.manage_all', <ImportResultsPage basePath={basePath} />)} />
         <Route path="promotion" element={guard('enrollment.manage', <PromotionPage />)} />
+        <Route path="academics/materials" element={<AnyOf actions={['academic.access', 'marks.manage_all']}><StudyMaterialsPage /></AnyOf>} />
+        <Route path="academics/assignments" element={<AnyOf actions={['academic.access', 'marks.manage_all']}><AssignmentsPage /></AnyOf>} />
+        <Route path="file-storage" element={guard('settings.manage', <FileStoragePage />)} />
         <Route path="activity" element={guard('settings.manage', <ActivityLogPage />)} />
         <Route path="leavers" element={guard('students.manage', <LeaversPage />)} />
         <Route path="import/log" element={<AnyOf actions={['students.manage', 'finance.bill', 'marks.manage_all']}><ImportLogPage /></AnyOf>} />

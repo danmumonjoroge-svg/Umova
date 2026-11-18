@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarCheck, GraduationCap, CalendarDays, Wallet, LogOut, Home as HomeIcon, ShieldCheck } from 'lucide-react';
 import { parentSupabase, parentApi, toE164 } from './parentClient.js';
+import { openFile, fileSize } from '../shared/services/fileStorage.js';
 import MenuTree from '../components/MenuTree.jsx';
 import ProgressView from '../shared/components/ProgressChart.jsx';
 import { PARENT_TREE } from '../navigation/parentTree.js';
@@ -104,6 +105,39 @@ const ProgressBody = ({ id }) => (
   <Box s={useData(() => parentApi.progress(id), [id])}>{(d) => <div className="p-3"><ProgressView data={d} /></div>}</Box>);
 const Progress = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">Results are not shared with this phone number. Ask the school if you need access.</p> : <ProgressBody id={id} />;
 
+const MAT_LABEL = { NOTES: 'Notes', REVISION: 'Revision', PAST_PAPER: 'Past paper', OTHER: 'Other' };
+const MaterialsBody = ({ id }) => (
+  <Box s={useData(() => parentApi.materials(id), [id])}>{(rows) => (
+    <div className="p-3 space-y-2">{rows.length === 0 && <p className="text-sm text-slate-500">No study materials have been posted for this class yet.</p>}
+      {rows.map((m) => (<Card key={m.id}><div className="flex justify-between gap-2"><div className="font-semibold text-sm">{m.title}</div><div className="text-xs text-slate-500">{MAT_LABEL[m.category]}</div></div>
+        <div className="text-xs text-slate-500">{m.subject_name} · {m.posted_by || 'Teacher'}</div>{m.description && <div className="text-xs mt-1">{m.description}</div>}
+        <button type="button" className="mt-2 min-h-[44px] px-3 rounded-xl text-xs font-semibold border border-slate-300 bg-white" onClick={() => openFile(parentSupabase, m.path, m.file_name).catch((e) => window.alert(e.message))}>Open · {fileSize(m.size_bytes)}</button></Card>))}</div>)}</Box>);
+const Materials = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">School work is not shared with this phone number. Ask the school if you need access.</p> : <MaterialsBody id={id} />;
+
+const SUB_TEXT = { SUBMITTED: 'Handed in', MARKED: 'Marked' };
+function AssignmentList({ id }) {
+  const st = useData(() => parentApi.assignments(id), [id]); const [busy, setBusy] = useState(null); const [msg, setMsg] = useState('');
+  const pick = async (a, file) => {
+    if (!file) return; setBusy(a.id); setMsg('');
+    try { const r = await parentApi.handIn({ assignmentId: a.id, studentId: id, file, note: '' }); setMsg(r.late ? 'Handed in. It was after the deadline, so the teacher will see it as late.' : 'Handed in. Thank you.'); st.reload(); }
+    catch (e) { setMsg(e.message); } setBusy(null);
+  };
+  return (
+    <Box s={st}>{(rows) => (
+      <div className="p-3 space-y-2">{msg && <p className="text-sm rounded-xl bg-[#E4F0E8] p-2">{msg}</p>}
+        {rows.length === 0 && <p className="text-sm text-slate-500">No assignments have been set for this class yet.</p>}
+        {rows.map((a) => (<Card key={a.id}>
+          <div className="flex justify-between gap-2"><div className="font-semibold text-sm">{a.title}</div><div className="text-xs text-slate-500">{a.sub_status ? SUB_TEXT[a.sub_status] : a.closed ? 'Closed' : a.overdue ? 'Overdue' : 'To do'}</div></div>
+          <div className="text-xs text-slate-500">{a.subject_name} · due {new Date(a.due_at).toLocaleString('en-KE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}{a.max_marks ? ` · out of ${a.max_marks}` : ''}</div>
+          {a.instructions && <div className="text-xs mt-1">{a.instructions}</div>}
+          {a.attachment_path && <button type="button" className="mt-1 min-h-[40px] px-3 rounded-xl text-xs border border-slate-300 bg-white" onClick={() => openFile(parentSupabase, a.attachment_path, a.attachment_name).catch((e) => window.alert(e.message))}>Open: {a.attachment_name}</button>}
+          {a.sub_status && <div className="text-xs mt-1">Handed in {a.sub_file}{a.sub_late ? ' (late)' : ''}{a.marks != null ? ` · Mark ${a.marks}${a.max_marks ? `/${a.max_marks}` : ''}` : ''}{a.teacher_comment ? ` · Teacher: ${a.teacher_comment}` : ''}</div>}
+          {a.sub_status !== 'MARKED' && !a.closed && <label className="mt-2 flex min-h-[44px] items-center justify-center rounded-xl bg-[#1F6B45] text-white text-xs font-semibold px-3 cursor-pointer">{busy === a.id ? 'Uploading...' : a.sub_status ? 'Replace with new file' : 'Hand in work'}
+            <input type="file" className="hidden" disabled={busy === a.id} onChange={(e) => { pick(a, e.target.files?.[0]); e.target.value = ''; }} /></label>}
+        </Card>))}</div>)}</Box>);
+}
+const Assignments = ({ id, allowed }) => !allowed ? <p className="p-4 text-sm text-slate-500">School work is not shared with this phone number. Ask the school if you need access.</p> : <AssignmentList id={id} />;
+
 const PASS_LABEL = { REQUESTED: 'Waiting for your answer', PARENT_ACCEPTED: 'You accepted', PARENT_REFUSED: 'You refused', CANCELLED: 'Cancelled by the school', EXITED: 'Left school', EXPIRED: 'Expired' };
 function GatePassList({ id }) {
   const s = useData(() => parentApi.gatePasses(id), [id]); const [busy, setBusy] = useState(null); const [msg, setMsg] = useState(null);
@@ -162,7 +196,7 @@ function Portal({ onSignOut }) {
             <div className="text-sm font-semibold">{c.name}</div><div className={`text-[11px] ${c.student_id === child.student_id ? 'text-white/80' : 'text-slate-500'}`}>{c.class_name || '—'} · {c.school_name}</div></button>))}</div></div>
         <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
           {tab === 'home' && <div className="p-3"><MenuTree tree={PARENT_TREE} segs={segs} can={() => true} rootLabel="Home" searchable={false} onGo={setSegs} onOpen={(p) => setTab(p.tab)} /></div>}{tab === 'attendance' && <Attendance id={child.student_id} />}{tab === 'results' && <Results id={child.student_id} allowed={child.can_see_results} />}
-          {tab === 'gatepass' && <GatePass id={child.student_id} />}{tab === 'extimetable' && <ExamTimetable id={child.student_id} allowed={child.can_see_results} />}{tab === 'progress' && <Progress id={child.student_id} allowed={child.can_see_results} />}{tab === 'calendar' && <Calendar id={child.student_id} />}{tab === 'fees' && <Fees id={child.student_id} allowed={child.can_see_fees} />}</main>
+          {tab === 'gatepass' && <GatePass id={child.student_id} />}{tab === 'assignments' && <Assignments id={child.student_id} allowed={child.can_see_results} />}{tab === 'materials' && <Materials id={child.student_id} allowed={child.can_see_results} />}{tab === 'extimetable' && <ExamTimetable id={child.student_id} allowed={child.can_see_results} />}{tab === 'progress' && <Progress id={child.student_id} allowed={child.can_see_results} />}{tab === 'calendar' && <Calendar id={child.student_id} />}{tab === 'fees' && <Fees id={child.student_id} allowed={child.can_see_fees} />}</main>
         <nav className="shrink-0 grid grid-cols-5 bg-white border-t border-[#E3DBB8] pb-[env(safe-area-inset-bottom)]">{TABS.map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)} aria-current={tab === k ? 'page' : undefined} className={`flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-[11px] font-semibold ${tab === k ? 'text-[#1F6B45]' : 'text-[#6F7461]'}`}>
             <span className={`flex h-7 w-12 items-center justify-center rounded-full ${tab === k ? 'bg-[#E4F0E8]' : ''}`}><Icon size={20} /></span>{label}</button>))}</nav></>)}

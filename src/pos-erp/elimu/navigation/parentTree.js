@@ -8,8 +8,8 @@ export const PARENT_TREE = {
       { key: 'progress', label: 'Progress report', desc: 'Every exam so far, with a progress graph', tab: 'progress' },
     ] },
     { key: 'learning', label: 'Learning', icon: 'BookOpen', desc: 'Study materials and assignments', children: [
-      { key: 'materials', label: 'Study materials', desc: 'Notes and revision papers from teachers', soon: true },
-      { key: 'assignments', label: 'Assignments', desc: 'See work set; upload completed work', soon: true },
+      { key: 'materials', label: 'Study materials', desc: 'Notes and revision papers from teachers', tab: 'materials' },
+      { key: 'assignments', label: 'Assignments', desc: 'See work set; upload completed work', tab: 'assignments' },
     ] },
     { key: 'attendance', label: 'Attendance', icon: 'CalendarCheck', desc: 'Arrival and absences', children: [
       { key: 'att', label: 'Attendance record', desc: 'Present, late and absent, with arrival time', tab: 'attendance' },
