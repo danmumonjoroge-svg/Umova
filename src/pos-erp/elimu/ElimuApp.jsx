@@ -12,6 +12,8 @@ import { registerModule } from './registry.js';
 import { elimuAcademicNested } from './routes.academic.jsx';
 import { attendanceLayoutRoute } from './routes.attendance.jsx';
 import { elimuFinanceRoutes, FinanceHub } from './finance/ElimuFinanceRoutes.jsx';
+import ThemeSwitcher from './theme/ThemeSwitcher.jsx';
+import { ElimuThemeProvider, ElimuShellContext } from './theme/useElimuTheme.jsx';
 
 export const ELIMU_BASE = '/school';
 
@@ -45,12 +47,14 @@ function Shell() {
   const { tenant, staffName, logout } = usePosErpAuth(); const nav = useNavigate();
   useEffect(() => { seedDemoSchoolIfEmpty(tenant).then((r) => { if (r?.seeded) window.location.reload(); }); }, [tenant?.id]);   // demo school only; the database refuses any other school
   return (
+    <ElimuThemeProvider tenantId={tenant?.id}><ElimuShellContext.Provider value={true}>
     <div className="elimu-app fixed inset-0 flex flex-col bg-[#FBF8EA] text-[#23382B]" style={{ height: '100dvh' }}>
       <style>{CSS}</style>
       <header className="shrink-0 bg-[#12261F] text-white pt-[env(safe-area-inset-top)]">
         <div className="flex items-center gap-3 px-3 h-14">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#C9A227] text-[#12261F]"><GraduationCap size={20} /></span>
           <div className="min-w-0 flex-1 leading-tight"><div className="font-bold text-[15px]">Elimu</div><div className="text-[11.5px] text-white/70 truncate">{tenant?.business_name || staffName || ''}</div></div>
+          <ThemeSwitcher tone="dark" />
           <button type="button" onClick={() => nav('/')} aria-label="Umova home" className="h-10 w-10 flex items-center justify-center rounded-full active:bg-white/10"><HomeIcon size={19} /></button>
           <button type="button" onClick={logout} aria-label="Sign out" className="h-10 w-10 flex items-center justify-center rounded-full active:bg-white/10"><LogOut size={19} /></button>
         </div>
@@ -59,6 +63,7 @@ function Shell() {
         <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading…</div>}><ElimuRoutes basePath={ELIMU_BASE} /></Suspense>
       </div>
     </div>
+    </ElimuShellContext.Provider></ElimuThemeProvider>
   );
 }
 

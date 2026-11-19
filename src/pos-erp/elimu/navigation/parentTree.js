@@ -1,6 +1,8 @@
 // The parent portal menu. `tab` = an existing portal screen; soon = planned. Same node shape as the staff menu (menuKit.js).
 export const PARENT_TREE = {
   key: 'home', label: 'Home', children: [
+    { key: 'notices', label: 'Notices', icon: 'Megaphone', desc: 'Circulars and announcements from the school', tab: 'notices' },
+    { key: 'trips', label: 'Trips', icon: 'CalendarDays', desc: 'Trips and activities: give or refuse consent', tab: 'trips' },
     { key: 'academics', label: 'Academics', icon: 'GraduationCap', desc: 'Exams, results and progress', children: [
       { key: 'extimetable', label: 'Exam timetable', desc: 'When each paper is sat', tab: 'extimetable' },
       { key: 'summary', label: 'Exam results summary', desc: 'Latest exam results', tab: 'results' },
@@ -10,6 +12,8 @@ export const PARENT_TREE = {
     { key: 'learning', label: 'Learning', icon: 'BookOpen', desc: 'Study materials and assignments', children: [
       { key: 'materials', label: 'Study materials', desc: 'Notes and revision papers from teachers', tab: 'materials' },
       { key: 'assignments', label: 'Assignments', desc: 'See work set; upload completed work', tab: 'assignments' },
+      { key: 'library', label: 'Library', desc: 'Past papers, revision books and school documents', tab: 'library' },
+      { key: 'books', label: 'Borrowed books', desc: 'Books on loan, due dates and fines', tab: 'books' },
     ] },
     { key: 'attendance', label: 'Attendance', icon: 'CalendarCheck', desc: 'Arrival and absences', children: [
       { key: 'att', label: 'Attendance record', desc: 'Present, late and absent, with arrival time', tab: 'attendance' },

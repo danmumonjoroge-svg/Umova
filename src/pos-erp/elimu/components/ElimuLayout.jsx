@@ -3,7 +3,7 @@
 //   tablet+: the same items as a pill bar at the top
 // Items owned by other modules appear only when that module has registered itself (see registry.js), so there are no dead links.
 // Hidden entries never remove a route: a bookmark still works; the database decides access.
-import React, { Suspense } from 'react';
+import React, { Suspense, useContext } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Users, CalendarCheck, Wallet, LayoutGrid, GraduationCap, ClipboardList, Layers, UserRound, MessageSquare, CalendarDays, BarChart3, Settings, Clock, DoorOpen, ScanLine, UserCog } from 'lucide-react';
 import { NAV_ITEMS } from '../utils/permissions.js';
@@ -11,13 +11,15 @@ import { useElimuAccess } from '../hooks/useElimu.js';
 import { OfflineBanner } from './ui.jsx';
 import { useOnline } from '../hooks/useAsync.js';
 import { registeredModules } from '../registry.js';
+import ThemeSwitcher from '../theme/ThemeSwitcher.jsx';
+import { ElimuShellContext } from '../theme/useElimuTheme.jsx';
 
 const ICONS = { dashboard: Home, students: Users, admissions: ClipboardList, classes: Layers, guardians: UserRound, academics: GraduationCap, attendance: CalendarCheck,
   timetable: Clock, rooms: DoorOpen, gate: ScanLine, fees: Wallet, communication: MessageSquare, calendar: CalendarDays, reports: BarChart3, settings: Settings, staff: UserCog };
 const PRIMARY = ['dashboard', 'students', 'attendance', 'fees'];       // the four tabs; everything else lives under More
 
 export default function ElimuLayout({ basePath = '/elimu' }) {
-  const { can, isOwner } = useElimuAccess(); const online = useOnline(); const loc = useLocation(); const nav = useNavigate();
+  const inShell = useContext(ElimuShellContext); const { can, isOwner } = useElimuAccess(); const online = useOnline(); const loc = useLocation(); const nav = useNavigate();
   const mods = registeredModules();
   const items = NAV_ITEMS.filter((n) => (!n.ownerOnly || isOwner) && (n.owned || mods.has(n.key)) && (n.anyOf ? n.anyOf.some((a) => can(a)) : can(n.action)));
   const href = (n) => `${basePath}${n.to}`;
@@ -26,18 +28,31 @@ export default function ElimuLayout({ basePath = '/elimu' }) {
   const moreActive = rest.some(isOn);
   return (
     <div className="h-full min-h-0 flex flex-col bg-[#FBF8EA]">
-      {/* tablet / desktop: pills on top */}
-      <nav aria-label="School" className="hidden md:block shrink-0 bg-[#FBF8EA] px-3 py-2 overflow-x-auto whitespace-nowrap border-b border-[#E3DBB8]">
+      {/* inside the ERP there is no Elimu header, so the colour button lives in a slim top strip */}
+      {!inShell && <div className="shrink-0 flex items-center justify-between px-3 h-12 bg-[#12261F] text-white"><span className="font-bold text-sm">Elimu</span><ThemeSwitcher tone="dark" /></div>}
+      {/* tablet: pills on top */}
+      <nav aria-label="School" className="hidden md:block lg:hidden shrink-0 bg-[#FBF8EA] px-3 py-2 overflow-x-auto whitespace-nowrap border-b border-[#E3DBB8]">
         {items.map((n) => (
           <NavLink key={n.key} to={href(n)} end={n.to === ''} className={({ isActive }) => `inline-flex items-center px-3 min-h-[40px] mr-1 rounded-full text-sm font-medium ${isActive ? 'bg-[#1F6B45] text-white' : 'text-[#23382B] hover:bg-[#EFE8C8]'}`}>{n.label}</NavLink>
         ))}
         <NavLink to={`${basePath}/menu`} className={({ isActive }) => `inline-flex items-center px-3 min-h-[40px] mr-1 rounded-full text-sm font-medium ${isActive ? 'bg-[#1F6B45] text-white' : 'text-[#23382B] hover:bg-[#EFE8C8]'}`}>All menu</NavLink>
       </nav>
 
-      {/* the ONE scrolling area */}
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <div className="max-w-5xl mx-auto px-3 pt-3 pb-6 min-h-full"><OfflineBanner online={online} /><Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading…</div>}><Outlet /></Suspense></div>
-      </main>
+      <div className="flex-1 min-h-0 flex">
+        {/* laptop / desktop: sidebar */}
+        <nav aria-label="School sections" className="hidden lg:flex flex-col w-60 shrink-0 overflow-y-auto border-r border-[#E3DBB8] bg-white py-4 pl-3 pr-2">
+          {items.map((n) => { const Icon = ICONS[n.key] || Home; const on = isOn(n); return (
+            <NavLink key={n.key} to={href(n)} end={n.to === ''} aria-current={on ? 'page' : undefined} className={`relative flex items-center gap-3 pl-3 pr-3 min-h-[44px] mb-0.5 rounded-xl text-sm font-medium transition-colors ${on ? 'bg-[#E4F0E8] text-[#1F6B45] font-bold' : 'text-[#23382B] hover:bg-[#F4EFD3]'}`}>
+              {on && <span aria-hidden="true" className="absolute -left-2 top-2.5 bottom-2.5 w-1 rounded-r-full" style={{ background: 'var(--e-primary,#1F6B45)' }} />}
+              <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${on ? 'bg-white/70' : ''}`}><Icon size={17} strokeWidth={on ? 2.4 : 2} /></span>{n.label}</NavLink>); })}
+          <NavLink to={`${basePath}/menu`} className={({ isActive }) => `flex items-center gap-3 px-3 min-h-[42px] mt-1 rounded-xl text-sm font-medium ${isActive ? 'bg-[#E4F0E8] text-[#1F6B45] font-semibold' : 'text-[#23382B] hover:bg-[#F4EFD3]'}`}><LayoutGrid size={18} />All menu</NavLink>
+        </nav>
+
+        {/* the ONE scrolling area */}
+        <main className="flex-1 min-w-0 min-h-0 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="w-full max-w-[1500px] mx-auto px-3 md:px-5 lg:px-6 pt-3 md:pt-5 pb-6 min-h-full"><OfflineBanner online={online} /><Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading…</div>}><Outlet /></Suspense></div>
+        </main>
+      </div>
 
       {/* phone: bottom tab bar */}
       <nav aria-label="School tabs" className="md:hidden shrink-0 grid bg-white border-t border-[#E3DBB8] pb-[env(safe-area-inset-bottom)]" style={{ gridTemplateColumns: `repeat(${tabs.length + 1}, minmax(0, 1fr))` }}>

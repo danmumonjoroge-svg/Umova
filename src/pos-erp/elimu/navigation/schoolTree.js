@@ -9,21 +9,21 @@ export const SCHOOL_TREE = {
       ] },
       { key: 'communication', label: 'Communication', desc: 'Messages and notices', children: [
         { key: 'messages', label: 'Messages to parents', desc: 'SMS, email and message history', to: 'communication', anyOf: ['comms.history'] },
-        { key: 'notices', label: 'Notices & announcements', desc: 'Circulars to parents and staff', soon: true },
+        { key: 'notices', label: 'Notices & announcements', desc: 'Circulars to parents and staff', to: 'notices' },
       ] },
       { key: 'calendar', label: 'Calendar & events', desc: 'Term dates, events and trips', children: [
         { key: 'school-calendar', label: 'School calendar', desc: 'Terms, holidays, events and amounts expected', to: 'calendar', anyOf: ['calendar.view'] },
-        { key: 'trips', label: 'Trips & activities', desc: 'Consent and payments for trips', soon: true },
+        { key: 'trips', label: 'Trips & activities', desc: 'Plan trips and collect parent consent', to: 'trips', anyOf: ['calendar.view', 'calendar.manage'] },
       ] },
       { key: 'reports', label: 'Reports & analytics', desc: 'Summaries for management', children: [
         { key: 'att-reports', label: 'Attendance reports', desc: 'Attendance by class, day and student', to: 'reports', anyOf: ['reports.view'] },
-        { key: 'mgmt', label: 'Management dashboard', desc: 'Enrolment, attendance, fees and results at a glance', soon: true },
+        { key: 'mgmt', label: 'Management dashboard', desc: 'Enrolment, attendance, fees and results at a glance', to: 'dashboard', anyOf: ['settings.manage', 'marks.manage_all', 'finance.report', 'attendance.view_all', 'students.manage', 'library.manage'] },
       ] },
     ] },
     { key: 'registration', label: 'Registration', icon: 'ClipboardList', desc: 'Admissions, students, guardians, classes and old data', children: [
       { key: 'admissions', label: 'Admissions', desc: 'New applications', children: [
         { key: 'applications', label: 'Applications', desc: 'Receive, review and decide applications', to: 'admissions', anyOf: ['admissions.view'] },
-        { key: 'letters', label: 'Admission letters', desc: 'Offer letters and joining instructions', soon: true },
+        { key: 'letters', label: 'Admission letters', desc: 'Offer letters and joining instructions', to: 'admission-letters', anyOf: ['admissions.manage', 'admissions.decide'] },
       ] },
       { key: 'students', label: 'Students', desc: 'The student register', children: [
         { key: 'register', label: 'Student register', desc: 'Find, add and edit students', to: 'students', anyOf: ['students.view'] },
@@ -90,6 +90,8 @@ export const SCHOOL_TREE = {
         { key: 'lm-materials', label: 'Study materials', desc: 'Upload notes and revision papers by class and subject', to: 'academics/materials', anyOf: ['academic.access', 'marks.manage_all'] },
         { key: 'lm-assign', label: 'Assignments', desc: 'Set work, receive submissions, mark', to: 'academics/assignments', anyOf: ['academic.access', 'marks.manage_all'] },
         { key: 'lm-submissions', label: 'Student submissions', desc: 'Work handed in by students', to: 'academics/assignments', anyOf: ['academic.access', 'marks.manage_all'] },
+        { key: 'lm-library', label: 'E-library', desc: 'Past papers, revision books and school documents', to: 'academics/library', anyOf: ['academic.access', 'marks.manage_all'] },
+        { key: 'lm-books', label: 'Book lending', desc: 'Issue and return books, overdue and fines', to: 'academics/books', anyOf: ['library.manage'] },
       ] },
     ] },
     { key: 'security', label: 'Security', icon: 'ShieldCheck', desc: 'Gate, gate passes, rooms and access', children: [
@@ -118,7 +120,7 @@ export const SCHOOL_TREE = {
       ] },
       { key: 'pp-requests', label: 'Requests from parents', desc: 'Things parents answer or send', children: [
         { key: 'pp-passes', label: 'Gate pass answers', desc: 'Parent accepted or refused a leave request', to: 'gate-passes?tab=all', anyOf: ['attendance.view_all', 'attendance.take_any'] },
-        { key: 'pp-work', label: 'Assignment submissions', desc: 'Work uploaded through the portal', soon: true },
+        { key: 'pp-work', label: 'Assignment submissions', desc: 'Work uploaded through the portal', to: 'academics/assignments', anyOf: ['academic.access', 'marks.manage_all'] },
       ] },
       { key: 'pp-contact', label: 'Contacting parents', desc: 'Messages', children: [
         { key: 'pp-messages', label: 'Messages', desc: 'SMS, email and history', to: 'communication', anyOf: ['comms.history'] },

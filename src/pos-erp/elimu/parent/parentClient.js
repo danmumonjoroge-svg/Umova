@@ -31,6 +31,11 @@ export const parentApi = {
   examTimetable: (id) => rpc('elimu_parent_exam_timetable', { p_student: id }),
   progress: (id) => rpc('elimu_parent_progress', { p_student: id }),
   materials: (id) => rpc('elimu_parent_materials', { p_student: id }),
+  trips: (id) => rpc('elimu_parent_trips', { p_student: id }),
+  answerTrip: (tripId, studentId, consent, note) => rpc('elimu_parent_trip_respond', { p_trip: tripId, p_student: studentId, p_consent: consent, p_note: note || null }),
+  notices: (id) => rpc('elimu_parent_notices', { p_student: id }),
+  books: (id) => rpc('elimu_parent_books', { p_student: id }),
+  library: (id) => rpc('elimu_parent_library', { p_student: id }),
   assignments: (id) => rpc('elimu_parent_assignments', { p_student: id }),
   async handIn({ assignmentId, studentId, file, note }) {
     const r = await rpc('elimu_parent_submission_prepare', { p_assignment: assignmentId, p_student: studentId, p_file_name: file.name, p_mime: file.type || null, p_size: file.size, p_note: note || null });

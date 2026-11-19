@@ -1,10 +1,10 @@
 // A drill-down menu: shows the groups under `segs`, with a breadcrumb and (at the top level) a search box. Router-agnostic:
 // the caller owns the position (`segs`) and decides what opening a page means (`onOpen(page)`).
 import React, { useState } from 'react';
-import { ChevronRight, FolderOpen, Search, Building2, ClipboardList, GraduationCap, ShieldCheck, Wallet, Users, Settings, BookOpen, CalendarCheck, DoorOpen, CalendarDays } from 'lucide-react';
+import { ChevronRight, FolderOpen, Search, Building2, ClipboardList, GraduationCap, ShieldCheck, Wallet, Users, Settings, BookOpen, CalendarCheck, DoorOpen, CalendarDays, Megaphone } from 'lucide-react';
 import { findNode, visibleChildren, searchPages, countSoon } from '../navigation/menuKit.js';
 
-const ICONS = { Building2, ClipboardList, GraduationCap, ShieldCheck, Wallet, Users, Settings, BookOpen, CalendarCheck, DoorOpen, CalendarDays };
+const ICONS = { Building2, ClipboardList, GraduationCap, ShieldCheck, Wallet, Users, Settings, BookOpen, CalendarCheck, DoorOpen, CalendarDays, Megaphone };
 
 export default function MenuTree({ tree, segs, onGo, onOpen, can, owner = true, rootLabel = 'Menu', searchable = true }) {
   const [q, setQ] = useState('');
