@@ -7,6 +7,7 @@ import { useElimuAccess } from '../../hooks/useElimu.js';
 import { setupService } from '../../services/ElimuSetupService.js';
 import { tripService, tripProblems, tripMoney, CONSENT_LABEL } from '../services/tripService.js';
 import { friendlyError } from '../../utils/validation.js';
+import { TripCard } from '../../ui/cards/index.js';
 
 const btnP = 'min-h-[44px] px-4 rounded-xl text-sm font-semibold bg-[#1F6B45] text-white disabled:opacity-50';
 const btnS = 'min-h-[40px] px-3 rounded-xl text-xs font-semibold border border-[#E3DBB8] bg-white text-[#23382B] disabled:opacity-50';
@@ -57,13 +58,12 @@ export default function TripsPage() {
       <div className="space-y-3">{msg && <Notice tone="good">{msg}</Notice>}{err && <Notice tone="bad">{err}</Notice>}
         <div className="flex items-center justify-between gap-2"><label className="text-xs flex items-center gap-1.5"><input type="checkbox" checked={past} onChange={(e) => setPast(e.target.checked)} /> Include past trips</label>{canManage && <button type="button" className={btnP} onClick={() => setOpen(true)}>Plan a trip</button>}</div>
         {list.loading ? <LoadingBlock /> : list.error ? <Notice tone="bad">{friendlyError(list.error)}</Notice> : rows.length === 0 ? <EmptyBlock title="No trips planned" /> : (
-          <ul className="space-y-2">{rows.map((t) => (
-            <li key={t.id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3 text-sm">
-              <div className="flex justify-between gap-2"><b>{t.title}</b><span className="text-xs text-[#6F7461] shrink-0">{t.status === 'CANCELLED' ? 'Cancelled' : day(t.trip_date)}</span></div>
-              <div className="text-xs text-[#6F7461]">{t.destination || 'School'} · {t.class_name || 'Whole school'} · {tripMoney(t.cost)}{t.consent_deadline ? ` · reply by ${day(t.consent_deadline)}` : ''}</div>
-              {t.status === 'CANCELLED' ? <div className="text-xs mt-1">Reason: {t.cancel_reason}</div> : <div className="text-xs mt-1">{t.yes} agreed · {t.no} declined · {t.waiting} not answered (of {t.eligible})</div>}
-              <div className="flex gap-2 mt-2"><button type="button" className={btnP} onClick={() => setRoster(t)}>Consent list</button>{canManage && t.status === 'OPEN' && <button type="button" className={btnS} onClick={() => cancel(t)}>Cancel trip</button>}</div>
-            </li>))}</ul>)}
+          <div className="space-y-3">{rows.map((t) => { const d = new Date(t.trip_date); const cancelled = t.status === 'CANCELLED';
+            return <TripCard key={t.id} title={t.title} day={d.getDate()} month={d.toLocaleDateString('en-KE', { month: 'short' })}
+              place={`${t.destination || 'School'} · ${t.class_name || 'Whole school'}`} time={`${tripMoney(t.cost)}${t.consent_deadline ? ` · reply by ${day(t.consent_deadline)}` : ''}`}
+              status={cancelled ? { label: 'Cancelled', tone: 'bad' } : t.waiting > 0 ? { label: `${t.waiting} waiting`, tone: 'warn' } : { label: 'All answered', tone: 'ok' }}
+              footer={<>{cancelled ? <div>Reason: {t.cancel_reason}</div> : <div>{t.yes} agreed · {t.no} declined · {t.waiting} not answered (of {t.eligible})</div>}
+                <div className="flex gap-2 mt-2"><button type="button" className={btnP} onClick={() => setRoster(t)}>Consent list</button>{canManage && t.status === 'OPEN' && <button type="button" className={btnS} onClick={() => cancel(t)}>Cancel trip</button>}</div></>} />; })}</div>)}
       </div>
       {open && <NewSheet classes={classes.data || []} onClose={() => setOpen(false)} onDone={() => { setOpen(false); setMsg('Trip created. Parents can answer in their portal.'); setTick((x) => x + 1); }} />}
       {roster && <Roster trip={roster} canManage={canManage} onClose={() => setRoster(null)} onChanged={() => setTick((x) => x + 1)} />}

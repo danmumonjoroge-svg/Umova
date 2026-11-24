@@ -11,6 +11,7 @@ import ConsentEditor from '../components/ConsentEditor.jsx';
 import ElimuContactActions from '../components/ElimuContactActions.jsx';
 import { CommunicationHistory } from '../components/ElimuCommunicationPanel.jsx';
 import { displayPhone } from '../utils/phone.js';
+import { PersonCard } from '../ui/cards/index.js';
 import { relationshipLabel, shortName } from '../utils/format.js';
 
 export function GuardiansPage({ basePath = '/elimu' }) {
@@ -21,11 +22,12 @@ export function GuardiansPage({ basePath = '/elimu' }) {
       action={can('guardians.manage') && <button type="button" className="px-3 min-h-[40px] rounded-lg bg-[#1F6B45] text-white text-sm font-semibold" onClick={() => setAdding(true)}>Add</button>}>
       {list.error && <Notice tone="bad">{list.error}</Notice>}
       {list.loading && !list.data ? <LoadingBlock /> : list.data?.rows.length === 0 ? <EmptyBlock>No guardians found.</EmptyBlock> :
-        <CardGrid>{list.data?.rows.map((g) => {
+        <div className="space-y-3 pl-6 sm:grid sm:grid-cols-2 sm:gap-x-4 sm:space-y-0 sm:gap-y-3">{list.data?.rows.map((g) => {
           const phone = g.elimu_guardian_contacts?.find((c) => c.kind === 'PHONE');
           const kids = (g.elimu_student_guardians || []).filter((l) => !l.ended_on).length;
-          return <DataCard key={g.id} title={`${g.first_name} ${g.last_name}`} subtitle={`${kids} student${kids === 1 ? '' : 's'}${phone ? ` · ${displayPhone(phone.value)}` : ' · no phone'}`}><Link to={`${basePath}/guardians/${g.id}`} className="text-sm font-semibold text-[#1F6B45] underline">Open</Link></DataCard>;
-        })}</CardGrid>}
+          return <PersonCard key={g.id} name={`${g.first_name} ${g.last_name}`} to={`${basePath}/guardians/${g.id}`} meta={phone ? displayPhone(phone.value) : 'No phone yet'}
+            status={{ label: `${kids} child${kids === 1 ? '' : 'ren'}`, tone: kids === 0 ? 'warn' : 'ok' }} />;
+        })}</div>}
       {list.data && <Pager page={page} total={list.data.total} pageSize={list.data.pageSize} onPage={setPage} />}
       {adding && <GuardianFormSheet onClose={() => setAdding(false)} onSaved={() => list.reload()} />}
     </FitPage>

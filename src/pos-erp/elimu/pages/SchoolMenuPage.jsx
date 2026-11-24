@@ -12,7 +12,7 @@ export default function SchoolMenuPage({ basePath = '/elimu' }) {
   const segs = (params['*'] || '').split('/').filter(Boolean); const here = `${basePath}/menu`;
   const node = findNode(SCHOOL_TREE, segs);
   return (
-    <FitPage title={segs.length ? node?.label || 'Menu' : 'Menu'} subtitle={segs.length ? node?.desc : 'Everything in Elimu, grouped'}>
+    <FitPage title={segs.length ? node?.label || 'Menu' : 'Menu'} subtitle={segs.length > 1 ? node?.desc : segs.length === 1 ? undefined : 'Everything in Elimu, grouped'}>
       <MenuTree tree={SCHOOL_TREE} segs={segs} can={can} owner={isOwner}
         onGo={(s) => nav(s.length ? `${here}/${s.join('/')}` : here)} onOpen={(page) => nav(`${basePath}/${page.to}`)} />
     </FitPage>);

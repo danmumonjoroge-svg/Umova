@@ -26,3 +26,17 @@ export function searchPages(tree, text, can, owner = true) {
 }
 export const countPages = (node) => (node.children ? node.children.reduce((t, c) => t + countPages(c), 0) : 1);
 export const countSoon = (node) => (node.children ? node.children.reduce((t, c) => t + countSoon(c), 0) : node.soon ? 1 : 0);
+
+/** Every page a person may open under a node, flattened, with its breadcrumb (relative to the node). Planned (soon) pages are left out. */
+export function leavesOf(node, can, owner = true) {
+  const out = [];
+  const walk = (n, trail) => { for (const c of visibleChildren(n, can, owner)) { if (c.children) walk(c, [...trail, c.label]); else if (!c.soon) out.push({ ...c, trail: trail.join(' › ') }); } };
+  walk(node, []);
+  return out;
+}
+/** When a whole module holds exactly ONE page a person may open (Finance -> "Open Finance"), that page: the module can open it directly. */
+export function soleLeaf(node, can, owner = true) {
+  const l = leavesOf(node, can, owner);
+  const anySoon = (n) => (n.children ? n.children.some(anySoon) : !!n.soon);
+  return l.length === 1 && !anySoon(node) ? l[0] : null;
+}

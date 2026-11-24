@@ -1,5 +1,6 @@
 // elimu/shared/services/elimuDb.js -- the ONE place Elimu talks to Supabase. Reuses the POS client (same session, same tenant).
 import { posSupabase } from '../../../services/posSupabaseClient';
+import { humanMessage } from '../../utils/humanError.js';
 
 const FRIENDLY = {
   '42501': 'You do not have permission to do that.',
@@ -15,11 +16,11 @@ export function toElimuError(error) {
   if (!error) return null;
   const msg = String(error.message || '');
   const network = /failed to fetch|networkerror|load failed|network request failed/i.test(msg) || error.name === 'TypeError';
-  if (network) return new ElimuError('No connection.', { code: 'OFFLINE', cause: error, network: true });
+  if (network) return new ElimuError(humanMessage(error), { code: 'OFFLINE', cause: error, network: true });
   if (msg.startsWith('FOUNDATION_NOT_CONNECTED')) return new ElimuError(FRIENDLY['55000'], { code: 'FOUNDATION_NOT_CONNECTED', cause: error });
   // database messages we wrote ourselves are already plain language: show them
   const own = error.code === '22023' || error.code === '42501' || error.code === 'P0002' || error.code === '23P01';
-  return new ElimuError(own && msg ? msg : (FRIENDLY[error.code] || msg || 'Something went wrong.'), { code: error.code, cause: error });
+  return new ElimuError(own && msg && humanMessage(error) === msg ? msg : (FRIENDLY[error.code] || humanMessage(error)), { code: error.code, cause: error });
 }
 export async function rpc(name, args = {}) {
   let res;

@@ -1,5 +1,6 @@
 // Elimu's own gate (replaces the shop sign-in screens): sign in / register / waiting for approval / set new password / the app.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { signinService } from './signinService.js';
 import { Loader2, Clock, XCircle, Ban, LogOut } from 'lucide-react';
 import { usePOSAuth, POSForcePasswordChange } from '../services/platform.js';
 import ElimuLogin, { AuthShell } from './ElimuLogin.jsx';
@@ -19,6 +20,8 @@ function Status({ stage }) {
 
 export default function ElimuAuthGate({ children }) {
   const { authStage, staff, logoutNotice } = usePOSAuth(); const [screen, setScreen] = useState('login');
+  // Once per browser tab session, write "signed in" to the activity log. Best effort: a failure here never blocks the person.
+  useEffect(() => { if (authStage === 'authenticated') signinService.record(); if (authStage === 'logged_out') signinService.reset(); }, [authStage]);
   switch (authStage) {
     case 'checking': return <div className="fixed inset-0 flex items-center justify-center bg-[#12261F]"><Loader2 className="animate-spin text-[#C9A227]" size={28} /></div>;
     case 'logged_out': return screen === 'register' ? <ElimuRegister onBackToLogin={() => setScreen('login')} /> : <ElimuLogin onGoToRegister={() => setScreen('register')} logoutNotice={logoutNotice} />;

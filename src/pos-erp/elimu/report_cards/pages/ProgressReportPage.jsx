@@ -21,7 +21,7 @@ export default function ProgressReportPage() {
             <SearchBox value={search} onChange={setSearch} placeholder="Search by name or admission number" />
             {search.trim().length < 2 ? <EmptyBlock>Type at least two letters of the student's name or their admission number.</EmptyBlock>
               : found.loading ? <LoadingBlock /> : (found.data?.rows || []).length === 0 ? <EmptyBlock>No student matches.</EmptyBlock> : (
-                <ul className="space-y-2">{found.data.rows.map((r) => (<li key={r.id}><button type="button" onClick={() => setPick(r)} className="w-full text-left rounded-2xl border border-[#E3DBB8] bg-white p-3 min-h-[56px]"><div className="font-semibold">{r.full_name}</div><div className="text-xs text-[#6F7461]">{r.admission_no || 'No admission no.'}{r.class_name ? ` · ${r.class_name}` : ''}</div></button></li>))}</ul>)}
+                <ul className="space-y-2">{found.data.rows.map((r) => (<li key={r.id}><button type="button" onClick={() => setPick(r)} className="w-full text-left rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 min-h-[56px]"><div className="font-semibold">{r.full_name}</div><div className="text-xs text-[#6F7461]">{r.admission_no || 'No admission no.'}{r.class_name ? ` · ${r.class_name}` : ''}</div></button></li>))}</ul>)}
           </>) : (<>
             <div className="flex items-center justify-between"><div><div className="font-bold">{pick.full_name}</div><div className="text-xs text-[#6F7461]">{pick.admission_no}</div></div>
               <button type="button" onClick={() => setPick(null)} className="px-3 min-h-[38px] rounded-lg border border-[#E3DBB8] text-sm">Change student</button></div>

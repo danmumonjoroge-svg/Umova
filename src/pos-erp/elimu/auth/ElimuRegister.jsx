@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Loader2, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { usePOSAuth } from '../services/platform.js';
 import { AuthShell } from './ElimuLogin.jsx';
+import { humanMessage } from '../utils/humanError.js';
 
 const field = 'w-full h-12 px-4 rounded-2xl border border-[#D9D2B4] bg-white text-[16px] outline-none focus:border-[#12261F]';
 const REASONS = { WEAK_PASSWORD: 'Password must be at least 8 characters.', BUSINESS_CODE_TAKEN: 'That school code is already registered. Pick another.', DUPLICATE: 'That school code or username is already taken.' };
@@ -23,7 +24,7 @@ export default function ElimuRegister({ onBackToLogin }) {
         p_business_code: f.business_code.trim(), p_username: f.username.trim(), p_password: f.password, p_business_type: 'school', p_address: f.address.trim() || null });
       if (!r.ok) return setError(REASONS[r.reason] || r.detail || 'Something went wrong. Please try again.');
       setDone(r.businessCode);
-    } catch (err) { setError(err.message || 'Something went wrong. Please try again.'); } finally { setBusy(false); }
+    } catch (err) { setError(humanMessage(err)); } finally { setBusy(false); }
   };
   if (done) return (
     <AuthShell title="Registration sent">

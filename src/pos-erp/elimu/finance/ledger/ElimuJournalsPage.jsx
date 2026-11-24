@@ -74,7 +74,7 @@ export default function ElimuJournalsPage() {
           {ctx.can('reconcile') && <button type="button" disabled={busy} onClick={post} className="ml-2 underline font-semibold">{busy ? 'Posting…' : 'Post now'}</button>}</div>}
         {msg && <Notice tone="good">{msg}</Notice>}
         {rows === null ? <LoadingBlock /> : !rows.length ? <EmptyBlock>No journals yet. They appear as fees, payments and expenses are recorded.</EmptyBlock> : rows.map((j) => { const [lab, cls] = TAG[j.source]; return (
-          <button key={j.id} type="button" onClick={() => setOpen(j)} className="w-full text-left rounded-2xl border border-[#E3DBB8] bg-white p-3 mb-2">
+          <button key={j.id} type="button" onClick={() => setOpen(j)} className="w-full text-left rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 mb-2">
             <div className="flex items-center justify-between gap-2"><b className="text-sm">J{j.journal_no} · {j.entry_date}</b><b className="text-sm">{M(j.total)}</b></div>
             <div className="text-xs text-[#6F7461] mt-0.5 flex items-center gap-1.5"><span className={`px-1.5 rounded text-[10px] font-bold ${cls}`}>{lab}</span>{j.reversed_by && <span className="px-1.5 rounded text-[10px] font-bold bg-red-100 text-red-700">Reversed</span>}<span className="truncate">{j.memo}</span></div></button>); })}</>}
       {add && <NewJournal ctx={ctx} accounts={accounts} onClose={() => setAdd(false)} onDone={reload} />}

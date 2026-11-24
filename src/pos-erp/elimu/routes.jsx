@@ -28,6 +28,10 @@ import BookLendingPage from './library/pages/BookLendingPage.jsx';
 import NoticesPage from './notices/pages/NoticesPage.jsx';
 import TripsPage from './trips/pages/TripsPage.jsx';
 import AdmissionLettersPage from './letters/pages/AdmissionLettersPage.jsx';
+import SetupCheckPage from './setup/pages/SetupCheckPage.jsx';
+import MySignInPage from './auth/MySignInPage.jsx';
+import ParentLoginsPage from './pages/ParentLoginsPage.jsx';
+import ExportPage from './export/pages/ExportPage.jsx';
 import DashboardPage from './dashboard/pages/DashboardPage.jsx';
 import FileStoragePage from './storage/pages/FileStoragePage.jsx';
 import ActivityLogPage from './audit/pages/ActivityLogPage.jsx';
@@ -35,6 +39,14 @@ import { useElimuAccess } from './hooks/useElimu.js';
 import { moduleRoutes } from './registry.js';
 import { ElimuAccessProvider } from './hooks/useElimu.js';
 import RequireElimuAction from './components/RequireElimuAction.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
+import NotFound from './components/NotFound.jsx';
+import HelpCentre from './help/HelpCentre.jsx';
+import TeachersPage from './teachers/pages/TeachersPage.jsx';
+import TeacherReportPage from './teachers/pages/TeacherReportPage.jsx';
+import ActivitiesPage from './teachers/pages/ActivitiesPage.jsx';
+import ElimuManagementPage from './owner/ElimuManagementPage.jsx';
+import { licenceService } from './services/ElimuLicenceService.js';
 
 // Route guard = the person's ELIMU role (elimu_my_access), not POS permission keys.
 const AnyOf = ({ actions, children }) => { const { can, loaded } = useElimuAccess(); if (!loaded) return <div className="p-4 text-sm text-slate-500">Loading...</div>; if (!actions.some((a) => can(a))) return <div className="p-4 text-sm text-slate-600">You do not have access to this page. Ask the school owner to give you an Elimu role.</div>; return children; };
@@ -49,6 +61,7 @@ export default function ElimuRoutes({ basePath = '/elimu', accessOverride }) {
   return (
     <ThemeScope>
     <ElimuAccessProvider value={accessOverride}>
+    <ErrorBoundary home={basePath} helpHref={`${basePath}/help`}>
     <Routes>
       <Route element={<ElimuLayout basePath={basePath} />}>
         <Route index element={guard('students.view', <ElimuDashboard basePath={basePath} />)} />
@@ -69,6 +82,10 @@ export default function ElimuRoutes({ basePath = '/elimu', accessOverride }) {
         <Route path="academics/books" element={guard('library.manage', <BookLendingPage />)} />
         <Route path="notices" element={<NoticesPage />} />
         <Route path="admission-letters" element={<AnyOf actions={['admissions.manage', 'admissions.decide']}><AdmissionLettersPage /></AnyOf>} />
+        <Route path="setup-check" element={<AnyOf actions={['settings.manage', 'students.manage']}><SetupCheckPage /></AnyOf>} />
+        <Route path="my-signin" element={<MySignInPage />} />
+        <Route path="parent-logins" element={<AnyOf actions={['guardians.view', 'guardians.manage']}><ParentLoginsPage /></AnyOf>} />
+        <Route path="export" element={guard('settings.manage', <ExportPage />)} />
         <Route path="trips" element={<AnyOf actions={['calendar.view', 'calendar.manage']}><TripsPage /></AnyOf>} />
         <Route path="dashboard" element={<AnyOf actions={['settings.manage', 'marks.manage_all', 'finance.report', 'attendance.view_all', 'students.manage', 'library.manage']}><DashboardPage basePath={basePath} /></AnyOf>} />
         <Route path="file-storage" element={guard('settings.manage', <FileStoragePage />)} />
@@ -79,9 +96,16 @@ export default function ElimuRoutes({ basePath = '/elimu', accessOverride }) {
         <Route path="staff" element={<ElimuStaffPage />} />
         <Route path="settings" element={guard('settings.manage', <ElimuSettingsPage />)} />
         {moduleRoutes()}
-        <Route path="*" element={<Navigate to={basePath} replace />} />
+        <Route path="teachers" element={<AnyOf actions={['settings.manage', 'marks.manage_all']}><TeachersPage basePath={basePath} /></AnyOf>} />
+        <Route path="teachers/:id" element={<AnyOf actions={['settings.manage', 'marks.manage_all']}><TeacherReportPage basePath={basePath} /></AnyOf>} />
+        <Route path="my-report" element={<AnyOf actions={['academic.access', 'attendance.take_own', 'marks.manage_all', 'settings.manage', 'timetable.manage']}><TeacherReportPage basePath={basePath} own /></AnyOf>} />
+        <Route path="activities" element={<AnyOf actions={['academic.access', 'attendance.take_own', 'marks.manage_all', 'settings.manage', 'timetable.manage']}><ActivitiesPage /></AnyOf>} />
+        <Route path="help" element={<HelpCentre audience="staff" onLog={(ch, m) => licenceService.helpLog(ch, m)} />} />
+        <Route path="owner" element={<ElimuManagementPage />} />
+        <Route path="*" element={<NotFound basePath={basePath} />} />
       </Route>
     </Routes>
+    </ErrorBoundary>
     </ElimuAccessProvider>
     </ThemeScope>
   );

@@ -1,7 +1,7 @@
 import {
   Home, Users, CreditCard, FileText, BarChart3, Settings as SettingsIcon,
   DollarSign, BookOpen, TrendingUp, Activity, Store, Building2, ClipboardList,
-  Lock, Package, Wallet, Landmark, MoreHorizontal,
+  Lock, Package, Wallet, Landmark, MoreHorizontal, GraduationCap, LifeBuoy,
 } from "lucide-react";
 
 // Single source of truth for Admin navigation. Every `to` is an existing
@@ -73,11 +73,21 @@ export const NAV = [
     ],
   },
   { key: "chama", label: "Chama", icon: Landmark, to: "chama", approverOnly: true, desc: "Chama oversight" },
+  {
+    key: "elimu", label: "Elimu", icon: GraduationCap, approverOnly: true, elimuOwnerOnly: true, blurb: "Schools, licences, payments and support",
+    children: [
+      { label: "Elimu Dashboard", to: "elimu", icon: BarChart3, desc: "Clients, students, payments at a glance", approverOnly: true },
+      { label: "Schools", to: "elimu/schools", icon: Building2, desc: "Every client: status, students, licence", approverOnly: true },
+      { label: "Payments", to: "elimu/payments", icon: Wallet, desc: "Record and review money received", approverOnly: true },
+      { label: "Support Inbox", to: "elimu/support", icon: LifeBuoy, desc: "Messages and help requests from users", approverOnly: true },
+      { label: "Elimu Team", to: "elimu/team", icon: Users, desc: "Who may use Elimu management", approverOnly: true },
+    ],
+  },
   { key: "settings", label: "Settings", icon: SettingsIcon, to: "settings", desc: "System settings" },
 ];
 
 // What the "More" tab lists.
-export const MORE_KEYS = ["members", "accounting", "reports", "pos", "chama", "settings"];
+export const MORE_KEYS = ["members", "accounting", "reports", "pos", "chama", "elimu", "settings"];
 
 export const MORE_MODULE = { key: "more", label: "More", icon: MoreHorizontal };
 
@@ -85,8 +95,9 @@ export const hubPath = (key) => `/admin/hub/${key}`;
 export const adminPath = (to) => `/admin/${to}`;
 
 // Hides approver-only modules AND approver-only children for everyone else.
-export const visibleNav = (isApprover) =>
-  NAV.filter((n) => !n.approverOnly || isApprover).map((n) =>
+// Elimu management is shown only to people on the Elimu owners list (not to every Finance admin): pass elimuOwner=true for them.
+export const visibleNav = (isApprover, elimuOwner = false) =>
+  NAV.filter((n) => (!n.approverOnly || isApprover) && (!n.elimuOwnerOnly || elimuOwner)).map((n) =>
     n.children ? { ...n, children: n.children.filter((c) => !c.approverOnly || isApprover) } : n
   );
 export const moduleByKey = (key) => NAV.find((n) => n.key === key);

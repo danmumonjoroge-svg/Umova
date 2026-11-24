@@ -6,6 +6,7 @@ import { useAsync, useDebounced } from '../../hooks/useAsync.js';
 import { studentService } from '../../services/ElimuStudentService.js';
 import { bookService, bookProblems, money, LOAN_VIEWS } from '../services/bookService.js';
 import { friendlyError } from '../../utils/validation.js';
+import { BookCard } from '../../ui/cards/index.js';
 
 const btnP = 'min-h-[44px] px-4 rounded-xl text-sm font-semibold bg-[#1F6B45] text-white disabled:opacity-50';
 const btnS = 'min-h-[40px] px-3 rounded-xl text-xs font-semibold border border-[#E3DBB8] bg-white text-[#23382B] disabled:opacity-50';
@@ -65,18 +66,19 @@ export default function BookLendingPage() {
         <div className="flex gap-1.5 overflow-x-auto">{LOAN_VIEWS.map(([k, l]) => <button key={k} type="button" onClick={() => setView(k)} className={`h-9 px-3 rounded-full text-xs font-semibold border shrink-0 ${view === k ? 'bg-[#12261F] text-white' : 'bg-white border-[#E3DBB8]'}`}>{l}</button>)}</div>
         <input className={fieldClass} placeholder={view === 'books' ? 'Search title, author, ISBN or accession number' : 'Search book, accession number or student'} value={q} onChange={(e) => setQ(e.target.value)} />
         {data.loading ? <LoadingBlock /> : data.error ? <Notice tone="bad">{friendlyError(data.error)}</Notice> : rows.length === 0 ? <EmptyBlock title={view === 'books' ? 'No books yet' : 'Nothing here'} /> : view === 'books' ? (
-          <ul className="space-y-2">{rows.map((b) => <li key={b.id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3 text-sm"><b>{b.title}</b><div className="text-xs text-[#6F7461]">{[b.author, b.isbn].filter(Boolean).join(' · ')}</div><div className="text-xs mt-1">{b.available} on the shelf · {b.on_loan} out · {b.copies} copies{b.lost ? ` · ${b.lost} lost` : ''}</div></li>)}</ul>
+          <ul className="space-y-2">{rows.map((b) => <li key={b.id} className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 text-sm"><b>{b.title}</b><div className="text-xs text-[#6F7461]">{[b.author, b.isbn].filter(Boolean).join(' · ')}</div><div className="text-xs mt-1">{b.available} on the shelf · {b.on_loan} out · {b.copies} copies{b.lost ? ` · ${b.lost} lost` : ''}</div></li>)}</ul>
         ) : (
-          <ul className="space-y-2">{rows.map((l) => (
-            <li key={l.id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3 text-sm">
-              <div className="flex justify-between gap-2"><b>{l.title}</b><span className={`text-xs ${l.overdue ? 'text-red-700 font-semibold' : 'text-[#6F7461]'}`}>{l.status === 'ON_LOAN' ? (l.overdue ? `${l.days_late} days late` : `Due ${day(l.due_on)}`) : l.status === 'LOST' ? 'Lost' : `Returned ${day(l.returned_on)}`}</span></div>
-              <div className="text-xs text-[#6F7461]">{l.student_name} · {l.admission_no} · {l.accession_no}</div>
+          <div className="space-y-3">{rows.map((l) => (
+            <BookCard key={l.id} title={l.title} author={`${l.student_name} · ${l.admission_no} · ${l.accession_no}`} overdue={!!l.overdue}
+              due={l.status === 'ON_LOAN' ? (l.overdue ? `${l.days_late} days late` : `Due ${day(l.due_on)}`) : l.status === 'LOST' ? 'Lost' : `Returned ${day(l.returned_on)}`}
+              status={l.status === 'ON_LOAN' ? (l.overdue ? { label: 'Overdue', tone: 'bad' } : { label: 'On loan', tone: 'ok' }) : l.status === 'LOST' ? { label: 'Lost', tone: 'bad' } : { label: 'Back', tone: 'quiet' }}
+              footer={<>
               {l.fine_amount > 0 && <div className="text-xs mt-1">Fine {money(l.fine_amount)} · {l.fine_status.toLowerCase()}</div>}
               <div className="flex gap-2 mt-2 flex-wrap">
                 {l.status === 'ON_LOAN' && <><button type="button" className={btnP} onClick={() => act(() => bookService.giveBack(l.id, false), (r) => (r.fine > 0 ? `Returned. Fine ${money(r.fine)} for ${r.days_late} days late.` : 'Returned.'))}>Returned</button>
                   <button type="button" className={btnS} onClick={() => window.confirm('Mark this book as lost? The student is charged its price.') && act(() => bookService.giveBack(l.id, true), (r) => `Marked lost. Charge ${money(r.fine)}.`)}>Lost</button></>}
                 {l.fine_status === 'UNPAID' && <><button type="button" className={btnS} onClick={() => act(() => bookService.settle(l.id, 'paid'), 'Marked paid.')}>Fine paid</button><button type="button" className={btnS} onClick={() => window.confirm('Waive this fine?') && act(() => bookService.settle(l.id, 'waived'), 'Fine waived.')}>Waive</button></>}
-              </div></li>))}</ul>)}
+              </div></>} />))}</div>)}
       </div>
       {sheet === 'issue' && <IssueSheet onClose={() => setSheet(null)} onDone={done} />}{sheet === 'add' && <AddSheet onClose={() => setSheet(null)} onDone={done} />}{sheet === 'rules' && <SettingsSheet onClose={() => setSheet(null)} onDone={done} />}
     </FitPage>

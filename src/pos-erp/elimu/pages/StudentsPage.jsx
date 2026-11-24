@@ -9,9 +9,10 @@ import { StatusPill, Pager, Avatar } from '../components/ui.jsx';
 import StudentFormSheet from '../components/StudentFormSheet.jsx';
 import ElimuContactActions from '../components/ElimuContactActions.jsx';
 import { fullName } from '../utils/format.js';
+import { PersonCard } from '../ui/cards/index.js';
 import { displayPhone } from '../utils/phone.js';
 
-const FILTERS = [{ value: '', label: 'All' }, { value: 'ACTIVE', label: 'Active' }, { value: 'APPLICANT', label: 'Applicants' }, { value: 'SUSPENDED', label: 'Suspended' }, { value: 'TRANSFERRED', label: 'Transferred' }, { value: 'ALUMNI', label: 'Alumni' }];
+const FILTERS = [{ key: '', label: 'All' }, { key: 'ACTIVE', label: 'Active' }, { key: 'APPLICANT', label: 'Applicants' }, { key: 'SUSPENDED', label: 'Suspended' }, { key: 'TRANSFERRED', label: 'Transferred' }, { key: 'ALUMNI', label: 'Alumni' }];
 
 export default function StudentsPage({ basePath = '/elimu' }) {
   const { can } = useElimuAccess(); const [sp] = useSearchParams();
@@ -24,14 +25,11 @@ export default function StudentsPage({ basePath = '/elimu' }) {
       toolbar={<><SearchBox value={search} onChange={(v) => { setSearch(v); setPage(0); }} placeholder="Name or admission number" /><FilterChips options={FILTERS} value={cat} onChange={(v) => { setCat(v); setPage(0); }} /></>}>
       {list.error && <Notice tone="bad">{list.error}</Notice>}
       {list.loading && !list.data ? <LoadingBlock /> : (list.data?.rows.length === 0 ? <EmptyBlock>No students match. {can('students.manage') && 'Add the first one with the button above.'}</EmptyBlock> :
-        <CardGrid>{list.data?.rows.map((s) => (
-          <DataCard key={s.student_id} thumb={<Avatar person={s} />} title={fullName(s)} subtitle={[s.admission_no, s.class_name && `${s.class_name}${s.stream_name ? ` ${s.stream_name}` : ''}`].filter(Boolean).join(' · ') || 'Not enrolled'}
-            pill={<StatusPill category={s.status_category} label={s.status_label} />} onClick={undefined}>
-            <div className="flex items-center justify-between gap-2 mt-1">
-              <Link to={`${basePath}/students/${s.student_id}`} className="text-sm font-semibold text-[#1F6B45] underline">Open</Link>
-              <span className="text-xs text-slate-500 truncate">{s.primary_guardian_name ? `${s.primary_guardian_name}${s.primary_guardian_phone ? ` · ${displayPhone(s.primary_guardian_phone)}` : ''}` : 'No guardian'}</span>
-            </div>
-          </DataCard>))}</CardGrid>)}
+        <div className="space-y-3 pl-6 sm:grid sm:grid-cols-2 sm:gap-x-4 sm:space-y-0 sm:gap-y-3">{list.data?.rows.map((s) => (
+          <PersonCard key={s.student_id} name={fullName(s)} to={`${basePath}/students/${s.student_id}`}
+            meta={[s.admission_no, s.class_name && `${s.class_name}${s.stream_name ? ` ${s.stream_name}` : ''}`].filter(Boolean).join(' · ') || 'Not enrolled'}
+            status={{ label: s.status_label || s.status_category, tone: { ACTIVE: 'ok', APPLICANT: 'warn', SUSPENDED: 'bad' }[s.status_category] || 'quiet' }}
+            aside={s.primary_guardian_name ? `${s.primary_guardian_name}${s.primary_guardian_phone ? ` · ${displayPhone(s.primary_guardian_phone)}` : ''}` : 'No guardian'} />))}</div>)}
       {list.data && <Pager page={page} total={list.data.total} pageSize={list.data.pageSize} onPage={setPage} />}
       {adding && <StudentFormSheet statuses={statuses.data || []} onClose={() => setAdding(false)} onSaved={() => list.reload()} />}
     </FitPage>

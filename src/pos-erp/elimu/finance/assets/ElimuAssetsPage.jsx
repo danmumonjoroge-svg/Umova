@@ -2,7 +2,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
-import { FitPage, LoadingBlock, EmptyBlock, Notice, DataCard, inputCls } from '../../../components/CardKit';
+import { FitPage, LoadingBlock, EmptyBlock, Notice, inputCls } from '../../../components/CardKit';
+import { AssetTag } from '../../ui/cards';
 import Sheet from '../../components/AppSheet.jsx';
 import { fromDb, formatMoney, toCents, MoneyError } from '../utils/money';
 
@@ -93,7 +94,7 @@ export default function ElimuAssetsPage() {
       {can('reconcile') && <button type="button" disabled={busy} onClick={runDep} className="w-full h-11 mb-3 rounded-xl border border-[#1F6B45] text-[#1F6B45] font-semibold disabled:opacity-50">{busy ? 'Working…' : 'Run depreciation up to last month end'}</button>}
       <div className="flex gap-1.5 mb-2">{[['ACTIVE', 'In use'], ['DISPOSED', 'Disposed'], ['VOIDED', 'Removed']].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`h-9 px-3 rounded-full text-sm font-semibold border ${tab === k ? 'bg-[#12261F] text-white border-[#12261F]' : 'bg-white border-[#E3DBB8]'}`}>{l}</button>)}</div>
       {rows === null ? <LoadingBlock /> : !shown.length ? <EmptyBlock>Nothing here.</EmptyBlock> : shown.map((r) => (
-        <DataCard key={r.id} onClick={() => setOpen(r)} title={`${r.asset_tag} · ${r.name}`} subtitle={`${CAT_LABEL[r.category]} · ${r.acquisition_date}${r.location ? ` · ${r.location}` : ''}`} big={formatMoney(fromDb(r.cost) - fromDb(r.accumulated))} />))}
+        <AssetTag key={r.id} onClick={() => setOpen(r)} tag={r.asset_tag} name={r.name} sub={`${CAT_LABEL[r.category]} · ${r.acquisition_date}${r.location ? ` · ${r.location}` : ''}`} valueText={formatMoney(fromDb(r.cost) - fromDb(r.accumulated))} />))}
       {add && <AddSheet ctx={ctx} onClose={() => setAdd(false)} onDone={done} />}
       {open && <DetailSheet ctx={ctx} asset={open} onClose={() => setOpen(null)} onDone={done} />}
     </FitPage>);

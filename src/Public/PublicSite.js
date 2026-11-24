@@ -1,229 +1,92 @@
 // src/Public/PublicSite.js
 //
-// Umova homepage. This is the platform-level overview: it introduces
-// Umova as one brand with four products (Financial, Chama, POS, Elimu school management) and
-// sends visitors into whichever one they want. It does NOT contain the
-// membership application, stats, or member stories anymore — those are
-// specific to the financial product and now live in
-// UmovaFinancialPage.js (route: /financial).
+// Umova homepage (route: /). One fixed screen, no scrolling: it gets people into
+// the product they use, and links to the products page.
+//
+//   /           this page (fixed to the screen)
+//   /products   PublicProducts.js  (scrolling page, opened by "See what each one does")
+//   /financial  UmovaFinancialPage.js
+//
+// Phones: logo bar on top, four-product bottom bar (replaces the footer).
+// Laptops / desktops: product buttons in the top bar, slim footer line.
+//
+// Styling: PublicSite.css (shared tokens, also used by UmovaFinancialPage.js)
+// plus PublicHome.css (homepage and products page, every class prefixed "uh-").
 
-import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import React from "react";
+import { Link } from "react-router-dom";
 import "./PublicSite.css";
+import "./PublicHome.css";
 
-import logo from "../asset/logo/umovalogo.png";
+import { Icon, PRODUCTS, TopBar, SlimFooter, BottomBar } from "./PublicShared";
 
-// ================= SCROLL REVEAL HOOK =================
-function useReveal() {
-  const ref = useRef(null);
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          io.disconnect();
-        }
-      },
-      { threshold: 0.15 }
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  return [ref, visible];
-}
+const TRUST = [
+  { icon: "check", text: "Familiar, not foreign" },
+  { icon: "switch", text: "One login, four homes" },
+  { icon: "shield", text: "Built on trust" },
+];
 
 export default function PublicSite() {
-  const navigate = useNavigate();
-
-  // ================= PRODUCT DATA =================
-  // Order matters here: this is the visual order of the pillar cards, and
-  // also the order of the quick-login buttons in the nav.
-  const products = [
-    {
-      key: "financial",
-      tag: "Financial services",
-      title: "Umova Financial",
-      description: "Savings, loans, and investment plans for individuals and SACCOs.",
-      image: "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e",
-      route: "/financial",
-      loginRoute: "/login",
-      navLabel: "Financial",
-    },
-    {
-      key: "chama",
-      tag: "Group savings",
-      title: "Umova Chama",
-      description: "Table banking and group savings management for chamas and welfare groups.",
-      image: "https://images.unsplash.com/photo-1521791136064-7986c2920216",
-      route: "/chama",
-      loginRoute: "/chama",
-      navLabel: "Chama",
-    },
-    {
-      key: "pos",
-      tag: "Point of sale",
-      title: "Umova POS",
-      description: "Point of sale, inventory, and supplier management for growing businesses.",
-      image: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d",
-      route: "/pos",
-      loginRoute: "/pos",
-      navLabel: "POS",
-    },
-    {
-      key: "school",
-      tag: "School management",
-      title: "Umova Elimu",
-      description: "Students, attendance, exams, fees and parent updates for schools.",
-      image: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b",
-      route: "/school",
-      loginRoute: "/school",
-      navLabel: "School",
-    },
-  ];
-
-  // ================= SCROLL SPY FOR NAV STYLE =================
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  const [productsRef, productsVisible] = useReveal();
-
   return (
-    <div className="public-root">
+    <div className="public-root uh-root uh-home">
+      <TopBar />
 
-      {/* ================= NAV =================
-          No hamburger here on purpose: most visitors are business owners
-          opening this on a phone to log in, often daily. Putting all four
-          logins directly in the sticky header — visible with zero taps,
-          at every screen width — beats a menu they'd otherwise have to
-          open every time. */}
-      <nav className={`nav-bar ${scrolled ? "nav-bar--scrolled" : ""}`}>
-        <div className="nav-inner nav-inner--quick">
-          <div className="brand" onClick={() => navigate("/")}>
-            <img src={logo} className="logo" alt="Umova" />
-            <h5>Umova</h5>
-          </div>
-
-          <div className="quick-access">
-            {products.map((p) => (
-              <button
-                key={p.key}
-                className="quick-btn"
-                onClick={() => navigate(p.loginRoute)}
-              >
-                {p.navLabel}
-              </button>
-            ))}
-          </div>
-        </div>
-      </nav>
-
-      {/* ================= HERO ================= */}
-      <header className="hero">
-        <div className="hero-glow" />
-        <div className="hero-content">
-          <span className="hero-eyebrow">Rooted in how Kenya already saves</span>
-          <h1>The way we already save, organize, and trade — now digital.</h1>
-          <p>
-            Umova brings your sacco, your chama, your shop, and your school together in one trusted
-            home, built around the systems communities have always relied on.
-          </p>
-
-          <div className="hero-actions">
-            <a href="#products" className="btn btn-primary">Explore products</a>
-          </div>
-        </div>
-      </header>
-
-      {/* ================= MISSION ================= */}
-      <section className="mission-section">
-        <div className="mission-inner">
-          <span className="section-eyebrow">Why Umova</span>
-          <p className="mission-statement">
-            Every sacco has a ledger. Every chama has a table. Every shop has a till book.
-            Umova doesn't replace how you already work — it just makes it easier to keep
-            track of, grow, and trust.
-          </p>
-
-          <div className="mission-features">
-            <div className="mission-feature">
-              <span className="mission-feature-icon" aria-hidden="true">✓</span>
-              <h6>Familiar, not foreign</h6>
-              <p>Same ledgers, same table banking, same till — just digitized.</p>
+      <main className="uh-home-main">
+        <section className="uh-hero">
+          <div className="uh-wrap uh-hero-grid">
+            <div className="uh-hero-copy">
+              <p className="uh-hero-note">Rooted in how Kenya already saves</p>
+              <h1>The way we already save, organize, and trade, now digital.</h1>
+              <p className="uh-hero-lead">
+                Umova brings your sacco, your chama, your shop, and your school together in one
+                trusted home, built around the systems communities have always relied on.
+              </p>
             </div>
-            <div className="mission-feature">
-              <span className="mission-feature-icon" aria-hidden="true">⟳</span>
-              <h6>One login, four homes</h6>
-              <p>Move between Financial, Chama, POS, and School without losing your place.</p>
+
+            {/* Sign-in panel: the fastest way in, no scrolling and no menu. */}
+            <div className="uh-launch" aria-labelledby="uh-launch-title">
+              <h2 id="uh-launch-title">Open your workspace</h2>
+              <ul className="uh-launch-list">
+                {PRODUCTS.map((p, i) => (
+                  <li key={p.key} style={{ "--i": i }}>
+                    <Link to={p.loginRoute} className="uh-door">
+                      <span className="uh-door-icon">
+                        <Icon name={p.icon} />
+                      </span>
+                      <span className="uh-door-text">
+                        <span className="uh-door-name">{p.title}</span>
+                        <span className="uh-door-sub">{p.short}</span>
+                      </span>
+                      <span className="uh-door-arrow">
+                        <Icon name="arrow" />
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <div className="mission-feature">
-              <span className="mission-feature-icon" aria-hidden="true">◆</span>
-              <h6>Built on trust</h6>
-              <p>Secure records, transparent tracking, real accountability.</p>
+
+            <div className="uh-hero-cta">
+              <Link to="/products" className="uh-btn uh-btn--gold">
+                See what each one does
+              </Link>
+              <ul className="uh-trust">
+                {TRUST.map((t) => (
+                  <li key={t.text}>
+                    <span className="uh-trust-icon">
+                      <Icon name={t.icon} />
+                    </span>
+                    {t.text}
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* ================= PRODUCTS (PILLARS) ================= */}
-      <section
-        id="products"
-        className={`section reveal ${productsVisible ? "reveal--visible" : ""}`}
-        ref={productsRef}
-      >
-        <div className="section-head">
-          <span className="section-eyebrow">Whichever door you walk through</span>
-          <h2 className="section-title">One family, four homes</h2>
-          <p className="section-sub">
-            Pick the one that fits what you're doing today.
-          </p>
-        </div>
-
-        <div className="pillar-grid">
-          {products.map((p) => (
-            <div
-              className="pillar-card"
-              key={p.key}
-              onClick={() => navigate(p.route)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === "Enter") navigate(p.route); }}
-            >
-              <div className="pillar-card-image">
-                <img src={p.image} alt={p.title} loading="lazy" />
-                <span className="pillar-card-tag">{p.tag}</span>
-              </div>
-              <div className="pillar-card-body">
-                <h5>{p.title}</h5>
-                <p>{p.description}</p>
-                <span className="pillar-card-cta">
-                  Explore {p.title.replace("Umova ", "")} <span aria-hidden="true">→</span>
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ================= FOOTER ================= */}
-      <footer className="footer">
-        <div className="footer-inner">
-          <div className="brand brand--footer">
-            <img src={logo} className="logo" alt="Umova" />
-            <h5>Umova</h5>
-          </div>
-          <p>© {new Date().getFullYear()} Umova. All rights reserved.</p>
-        </div>
-      </footer>
-
+      <SlimFooter />
+      <BottomBar />
     </div>
   );
 }

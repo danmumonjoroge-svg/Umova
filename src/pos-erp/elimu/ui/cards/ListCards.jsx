@@ -28,22 +28,22 @@ export function PersonCard({ name, meta, status, aside, photo, to, onClick }) {
 }
 
 /** Notice: a pin, the headline, and the date torn off on the right. */
-export function NoticeCard({ title, body, day, month, pinned, audience, to, onClick }) {
+export function NoticeCard({ title, body, day, month, pinned, audience, footer, full, to, onClick }) {
   return (
     <Wrap to={to} onClick={onClick} className="relative flex overflow-hidden" style={{ background: pinned ? V.accentTint : '#fff', border: `1px solid ${V.border}`, borderRadius: '8px 22px 8px 22px', boxShadow: lift }}>
       <div className="flex-1 min-w-0 p-4"><div className="flex items-center gap-1.5">{pinned && <Pin size={13} style={{ color: V.accentDeep }} />}{audience && <span className="text-[11px] font-bold uppercase tracking-[.08em]" style={{ color: V.muted }}>{audience}</span>}</div>
-        <h3 className="mt-0.5 font-extrabold text-[15px] leading-snug" style={{ color: V.dark }}>{title}</h3>{body && <p className="mt-1 text-[13px] line-clamp-3" style={{ color: V.text }}>{body}</p>}</div>
+        <h3 className="mt-0.5 font-extrabold text-[15px] leading-snug" style={{ color: V.dark }}>{title}</h3>{body && <p className={`mt-1 text-[13px] whitespace-pre-line ${full ? '' : 'line-clamp-3'}`} style={{ color: V.text }}>{body}</p>}{footer && <div className="mt-2 text-xs" style={{ color: V.muted }}>{footer}</div>}</div>
       {(day || month) && <div className="w-[62px] shrink-0 flex flex-col items-center justify-center border-l-2 border-dashed text-center" style={{ borderColor: pinned ? V.accent : V.border }}><div className="text-xl font-black leading-none tabular-nums" style={{ color: V.dark }}>{day}</div><div className="text-[11px] font-bold uppercase mt-0.5" style={{ color: V.muted }}>{month}</div></div>}
     </Wrap>);
 }
 
 /** Trip or event: a bold date block, then where and when. */
-export function TripCard({ title, day, month, place, time, status, to, onClick }) {
+export function TripCard({ title, day, month, place, time, status, footer, to, onClick }) {
   return (
     <Wrap to={to} onClick={onClick} className="flex items-stretch gap-0 overflow-hidden" style={{ background: '#fff', border: `1px solid ${V.border}`, borderRadius: '22px 8px 22px 8px', boxShadow: lift }}>
       <div className="w-[70px] shrink-0 flex flex-col items-center justify-center py-3 text-center" style={{ background: `linear-gradient(160deg,${V.primary},${V.primary2})`, color: '#fff' }}><div className="text-[26px] font-black leading-none tabular-nums">{day}</div><div className="text-[11px] font-bold uppercase tracking-wide mt-1 opacity-90">{month}</div></div>
       <div className="p-3.5 min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="font-extrabold text-[15px] leading-snug" style={{ color: V.dark }}>{title}</h3>{status && <Chip tone={status.tone}>{status.label}</Chip>}</div>
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs" style={{ color: V.muted }}>{place && <span className="inline-flex items-center gap-1"><MapPin size={12} />{place}</span>}{time && <span className="inline-flex items-center gap-1"><Clock size={12} />{time}</span>}</div></div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs" style={{ color: V.muted }}>{place && <span className="inline-flex items-center gap-1"><MapPin size={12} />{place}</span>}{time && <span className="inline-flex items-center gap-1"><Clock size={12} />{time}</span>}</div>{footer && <div className="mt-2 text-xs" style={{ color: V.text }}>{footer}</div>}</div>
     </Wrap>);
 }
 
@@ -59,13 +59,13 @@ export function DocCard({ tab, title, meta, footer, status, to, onClick }) {
 }
 
 /** Library book: coloured spine, title, author, due date. */
-export function BookCard({ title, author, due, overdue, status, to, onClick, spine }) {
+export function BookCard({ title, author, due, overdue, status, footer, to, onClick, spine }) {
   const c = spine || (overdue ? V.bad : V.primary);
   return (
     <Wrap to={to} onClick={onClick} className="flex overflow-hidden" style={{ background: '#fff', border: `1px solid ${V.border}`, borderRadius: SHAPE.spine, boxShadow: lift }}>
       <span aria-hidden="true" className="relative w-5 shrink-0" style={{ background: c }}><i className="absolute inset-x-0 top-3 h-[3px]" style={{ background: V.accent }} /><i className="absolute inset-x-0 top-[22px] h-px" style={{ background: V.accent }} /><i className="absolute inset-x-0 bottom-3 h-[3px]" style={{ background: V.accent }} /></span>
       <div className="p-3.5 min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="font-extrabold text-[15px] leading-snug" style={{ color: V.dark }}>{title}</h3>{status && <Chip tone={status.tone}>{status.label}</Chip>}</div>
-        {author && <p className="text-[13px] italic" style={{ color: V.muted }}>{author}</p>}{due && <p className="mt-1.5 text-xs font-semibold" style={{ color: overdue ? V.bad : V.text }}>{due}</p>}</div>
+        {author && <p className="text-[13px] italic" style={{ color: V.muted }}>{author}</p>}{due && <p className="mt-1.5 text-xs font-semibold" style={{ color: overdue ? V.bad : V.text }}>{due}</p>}{footer && <div className="mt-2">{footer}</div>}</div>
     </Wrap>);
 }
 

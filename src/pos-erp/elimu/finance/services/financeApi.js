@@ -3,11 +3,12 @@
 // Money in -> integer cents from the UI, converted to "123.45" strings here (never floats). Money out -> strings; convert with fromDb().
 import { posSupabase as supabase } from '../../../services/posSupabaseClient';
 import { toCents, toDecimalString } from '../utils/money';
+import { humanError } from '../../utils/humanError.js';
 
 const dec = (cents) => toDecimalString(cents);
 async function rpc(fn, args = {}) {
   const { data, error } = await supabase.rpc(fn, args);
-  if (error) { const e = new Error(error.message || 'Something went wrong.'); e.code = error.code; throw e; }
+  if (error) throw humanError(error);
   return data;
 }
 const money = (v) => (v === null || v === undefined || v === '' ? null : typeof v === 'number' && Number.isInteger(v) ? dec(v) : dec(toCents(v)));

@@ -1,6 +1,7 @@
 // elimu/attendance/pages/AttendanceDashboardPage.jsx -- today's picture: which registers are done, totals, open absence cases.
 // "Not marked" is shown as its own number and is never added to Absent.
 import React, { useCallback, useEffect, useState } from 'react';
+import { TallyStrip } from '../../ui/cards';
 import { Link } from 'react-router-dom';
 import { useElimu } from '../../shared/hooks/ElimuContext';
 import { FitPage, DateField, MiniStats, LoadingBlock, EmptyBlock, CompletionPill, Notice, ErrorLine, btn } from '../../shared/components/kit';
@@ -28,9 +29,9 @@ export default function AttendanceDashboardPage() {
       {notSchool && <Notice tone="good">{day.reason || 'This is not a school day.'} Registers are not expected.</Notice>}
       {loading ? <LoadingBlock /> : sum && (
         <>
-          <MiniStats items={[
-            { label: 'Present', value: sum.present }, { label: 'Absent', value: sum.absent }, { label: 'Late', value: sum.late },
-            { label: 'Excused', value: sum.excused }, { label: 'Left early', value: sum.left_early }, { label: 'Not marked', value: sum.not_marked },
+          <TallyStrip items={[
+            { label: 'Present', value: sum.present, tone: 'ok' }, { label: 'Absent', value: sum.absent, tone: 'bad' }, { label: 'Late', value: sum.late, tone: 'warn' },
+            { label: 'Excused', value: sum.excused, tone: 'quiet' }, { label: 'Left early', value: sum.left_early, tone: 'warn' }, { label: 'Not marked', value: sum.not_marked, tone: 'quiet' },
           ]} />
           <p className="text-xs text-[#6F7461] mb-2">Registers submitted: {sum.classes_submitted} of {sum.classes_total} ({sum.completion_pct}%). Deadline {String(sum.attendance_deadline || '').slice(0, 5)}. Students not yet marked are not counted as absent.</p>
           <div className="flex gap-2 mb-3 flex-wrap">

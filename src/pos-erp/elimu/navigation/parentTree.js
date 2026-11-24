@@ -1,12 +1,14 @@
 // The parent portal menu. `tab` = an existing portal screen; soon = planned. Same node shape as the staff menu (menuKit.js).
 export const PARENT_TREE = {
   key: 'home', label: 'Home', children: [
+    { key: 'child', label: 'My child', icon: 'GraduationCap', desc: 'Class, teachers, subjects and school leaders', tab: 'details' },
     { key: 'notices', label: 'Notices', icon: 'Megaphone', desc: 'Circulars and announcements from the school', tab: 'notices' },
     { key: 'trips', label: 'Trips', icon: 'CalendarDays', desc: 'Trips and activities: give or refuse consent', tab: 'trips' },
     { key: 'academics', label: 'Academics', icon: 'GraduationCap', desc: 'Exams, results and progress', children: [
       { key: 'extimetable', label: 'Exam timetable', desc: 'When each paper is sat', tab: 'extimetable' },
       { key: 'summary', label: 'Exam results summary', desc: 'Latest exam results', tab: 'results' },
       { key: 'reportcard', label: 'Report card', desc: 'Current results for this term', tab: 'results' },
+      { key: 'classperf', label: 'Class performance', desc: 'How your child sits in the class (no other children named)', tab: 'classperf' },
       { key: 'progress', label: 'Progress report', desc: 'Every exam so far, with a progress graph', tab: 'progress' },
     ] },
     { key: 'learning', label: 'Learning', icon: 'BookOpen', desc: 'Study materials and assignments', children: [
@@ -25,5 +27,6 @@ export const PARENT_TREE = {
       { key: 'cal', label: 'School calendar', desc: 'Events and money expected', tab: 'calendar' },
       { key: 'fees', label: 'Fees', desc: 'Invoices, payments and balance', tab: 'fees' },
     ] },
+    { key: 'help', label: 'Help', icon: 'LifeBuoy', desc: 'Guidance and how to contact us', tab: 'help' },
   ],
 };

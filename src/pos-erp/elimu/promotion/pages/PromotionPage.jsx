@@ -45,7 +45,7 @@ export default function PromotionPage() {
           {res.skipped.length > 0 && <ul className="mt-1 list-disc pl-4 text-xs">{res.skipped.map((s, i) => <li key={i}>{s.name || 'Student'}: {s.reason}</li>)}</ul>}</Notice>)}
 
         {!preview && (
-          <div className="rounded-2xl border border-[#E3DBB8] bg-white p-3 space-y-3">
+          <div className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 space-y-3">
             <div className="text-sm font-semibold">1. Choose the years</div>
             {years.loading && !years.data ? <LoadingBlock /> : (<div className="grid sm:grid-cols-2 gap-2">
               <label className="block text-xs text-[#6F7461]">Year that is ending<select className={`${fieldClass} mt-1`} value={fromId} onChange={(e) => setFrom(e.target.value)}><option value="">Choose…</option>{list.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}</select></label>
@@ -58,7 +58,7 @@ export default function PromotionPage() {
           <div className="text-sm"><b>{preview.from_year}</b> → <b>{preview.to_year}</b></div>
           {(preview.classes || []).length === 0 && <Notice tone="gold">No enrolled students were found in {preview.from_year}.</Notice>}
           {(preview.classes || []).map((c) => (
-            <section key={c.class_id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3 space-y-2">
+            <section key={c.class_id} className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold">{c.name} <span className="text-xs font-normal text-[#6F7461]">{c.students.length} students</span></div>
                 <label className="text-xs text-[#6F7461] flex items-center gap-1">Promote to<select className={`${fieldClass} !h-9 !py-0`} value={dec[c.students.find((s) => !s.placed)?.student_id]?.class_id || c.next_class_id || ''} onChange={(e) => setClassDest(c, e.target.value)}><option value="">—</option>{preview.class_options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label></div>
               <div className="flex flex-wrap gap-1.5">{ACTIONS.map(([k, l]) => <button key={k} type="button" className={btnS} onClick={() => setClassAll(c, k)}>All {l.toLowerCase()}</button>)}</div>

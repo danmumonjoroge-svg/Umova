@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useElimuFinance } from '../hooks/useElimuFinance';
+import { BalanceHero, InvoiceSlip } from '../../ui/cards/index.js';
 import { FitPage, LoadingBlock, Notice, MiniStats, DataCard, Pill, TextBtn, inputCls, saveBtnCls, formCard } from '../../../components/CardKit';
 import { buildReportPdf, savePdf, sharePdf, reportFileName } from '../../../utils/reportPdf';
 import { statementReport } from '../receipts/receiptReport';
@@ -47,9 +48,10 @@ export default function ElimuStudentAccountPage({ studentId: propId }) {
     <FitPage title={s.name} subtitle={`${s.admission_no} - ${s.class_name || ''} ${s.stream_name || ''}`}>
       {v.fromCache && <Notice tone="gold">Saved copy{v.savedAt ? ` from ${new Date(v.savedAt).toLocaleString('en-KE')}` : ''}. Editing is disabled until you are online.</Notice>}
       {err && <Notice tone="bad">{err}</Notice>}
-      <MiniStats items={[{ label: bal > 0 ? 'Balance owed' : bal < 0 ? 'Credit held' : 'Balance', value: formatMoney(Math.abs(bal)) }, { label: 'Billed', value: formatMoney(fromDb(a.billed)) }, { label: 'Paid', value: formatMoney(fromDb(a.payments)) },
-        { label: 'Outstanding', value: formatMoney(fromDb(a.outstanding)) }, { label: 'Arrears (past due)', value: formatMoney(fromDb(a.arrears)) }, { label: 'Credit available', value: formatMoney(fromDb(a.credit_available)) }]} />
-      <div className="text-xs text-[#68756D] mb-2">Discounts {formatMoney(fromDb(a.discounts))} - Scholarships {formatMoney(fromDb(a.scholarships))} - Bursaries {formatMoney(fromDb(a.bursaries))} - Refunds {formatMoney(fromDb(a.refunds))} - Reversals {formatMoney(fromDb(a.reversals))}. A credit balance is money the school holds for the family; it is not income.</div>
+      <BalanceHero state={bal > 0 ? 'owes' : bal < 0 ? 'credit' : 'clear'} mainText={formatMoney(Math.abs(bal))}
+        rows={[['Billed', formatMoney(fromDb(a.billed))], ['Paid', formatMoney(fromDb(a.payments))], ['Past due (arrears)', formatMoney(fromDb(a.arrears))], ['Credit available', formatMoney(fromDb(a.credit_available))],
+          ['Discounts', formatMoney(fromDb(a.discounts))], ['Scholarships', formatMoney(fromDb(a.scholarships))], ['Bursaries', formatMoney(fromDb(a.bursaries))], ['Refunds', formatMoney(fromDb(a.refunds))]]}
+        note="A credit balance is money the school holds for the family; it is not income." />
       {a.next_installment && <Notice tone="neutral">Next instalment: {formatMoney(fromDb(a.next_installment.remaining))} due {niceDate(a.next_installment.due_date)}.</Notice>}
       <div className="flex gap-2 flex-wrap mb-3">
         <TextBtn onClick={run(async () => savePdf(pdf(), reportFileName({ ...report, title: `statement-${s.admission_no}` }), 'Fee statement'))}>Statement PDF</TextBtn>
@@ -62,9 +64,10 @@ export default function ElimuStudentAccountPage({ studentId: propId }) {
 
       {!v.fromCache && <>
         <div className="font-semibold mt-2 mb-1">Invoices</div>
-        {invoices.map(i => (<DataCard key={i.id} title={`${i.invoice_no} - ${i.term || i.kind}`} subtitle={`${i.academic_year || ''} - due ${niceDate(i.due_date)}`} pill={<Pill tone={STATUS_TONE[i.status]}>{i.status.replace('_', ' ').toLowerCase()}</Pill>}
-          metrics={[{ label: 'Total', value: formatMoney(fromDb(i.total)) }, { label: 'Settled', value: formatMoney(fromDb(i.settled)) }, { label: 'Owing', value: formatMoney(fromDb(i.outstanding)) }]}
-          actions={can('bill') && i.status !== 'CANCELLED' ? [{ label: 'Cancel invoice', onClick: run(async () => { await api.cancelInvoice(i.id, needReason()); setReason(''); }) }] : []} />))}
+        <div className="space-y-3">{invoices.map(i => { const tot = fromDb(i.total); const set = fromDb(i.settled); const owing = fromDb(i.outstanding);
+          return <InvoiceSlip key={i.id} title={`${i.invoice_no} - ${i.term || i.kind}`} sub={`${i.academic_year || ''} - due ${niceDate(i.due_date)}`} totalText={formatMoney(tot)} settledText={formatMoney(set)} owingText={formatMoney(owing)}
+            ratio={tot > 0 ? set / tot : 1} paidInFull={i.status === 'PAID'} status={{ label: i.status.replace('_', ' ').toLowerCase(), tone: i.status === 'PAID' ? 'in' : i.status === 'CANCELLED' ? 'quiet' : owing > 0 && i.due_date && new Date(i.due_date) < new Date() ? 'owed' : 'wait' }}
+            footer={can('bill') && i.status !== 'CANCELLED' ? <TextBtn onClick={run(async () => { await api.cancelInvoice(i.id, needReason()); setReason(''); })}>Cancel invoice</TextBtn> : null} />; })}</div>
         {can('bill') && <input className={inputCls + ' my-2'} placeholder="Reason (needed to cancel or amend an invoice)" value={reason} onChange={e => setReason(e.target.value)} />}
         <div className="font-semibold mt-2 mb-1">Statement</div>
         {v.statement.slice().reverse().map(r => (<div key={r.seq} className="flex justify-between text-sm border-b py-1"><span>{niceDate(r.entry_date)} - {r.description || r.entry_type}</span>

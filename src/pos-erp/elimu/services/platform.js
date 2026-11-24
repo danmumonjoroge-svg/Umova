@@ -7,6 +7,7 @@ import { posSupabase } from '../../services/posSupabaseClient';
 import { usePermissions, RequirePermission } from '../../navigation/PermissionsContext';
 import { usePosErpAuth } from '../../auth/usePosErpAuth';
 import { getRegisteredBusinessName } from '../../services/businessIdentity';
+import { humanError } from '../utils/humanError.js';
 
 export { staffService, generateTempPassword } from '../../services/staffService';
 export { supplierService } from '../../services/supplierService.js';
@@ -20,6 +21,8 @@ export { fieldClass } from '../../components/workspace/Sheet';
 export { default as Sheet } from '../components/AppSheet.jsx';   // Elimu's own phone-friendly sheet (scrolls, keyboard- and notch-safe)
 export { POSAuthProvider, usePOSAuth } from '../../context/POSAuthContext';
 export { default as POSForcePasswordChange } from '../../auth/POSForcePasswordChange';
+export { posPasskeys } from '../../auth/posPasskeys';
+export { default as POSPasskeySettings } from '../../auth/POSPasskeySettings';
 export { default as AppLock } from '../../../security/AppLock';
 export { BRAND } from '../../theme/brand';
 
@@ -31,6 +34,6 @@ export function useSchool() {
 
 /** Throw a readable Error for a failed Supabase call. */
 export function unwrap({ data, error }) {
-  if (error) { const e = new Error(error.message || 'Request failed'); e.code = error.code; throw e; }
+  if (error) throw humanError(error);
   return data;
 }

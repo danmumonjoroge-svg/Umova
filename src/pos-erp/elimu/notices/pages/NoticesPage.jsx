@@ -8,6 +8,7 @@ import { setupService } from '../../services/ElimuSetupService.js';
 import { materialService } from '../../materials/services/materialService.js';
 import { noticeService, noticeProblems, AUDIENCES, AUDIENCE_LABEL } from '../services/noticeService.js';
 import { friendlyError } from '../../utils/validation.js';
+import { NoticeCard } from '../../ui/cards/index.js';
 
 const btnP = 'min-h-[44px] px-4 rounded-xl text-sm font-semibold bg-[#1F6B45] text-white disabled:opacity-50';
 const btnS = 'min-h-[40px] px-3 rounded-xl text-xs font-semibold border border-[#E3DBB8] bg-white text-[#23382B]';
@@ -44,13 +45,11 @@ export default function NoticesPage() {
         <div className="flex items-center justify-between gap-2"><label className="text-xs flex items-center gap-1.5"><input type="checkbox" checked={old} onChange={(e) => setOld(e.target.checked)} /> Show old and scheduled</label>
           {canPost && (mgmt || classList.length > 0) && <button type="button" className={btnP} onClick={() => setOpen(true)}>Post a notice</button>}</div>
         {board.loading ? <LoadingBlock /> : board.error ? <Notice tone="bad">{friendlyError(board.error)}</Notice> : rows.length === 0 ? <EmptyBlock title="No notices right now" /> : (
-          <ul className="space-y-2">{rows.map((n) => (
-            <li key={n.id} className={`rounded-2xl border bg-white p-3 text-sm ${n.important ? 'border-[#C98A1B]' : 'border-[#E3DBB8]'}`}>
-              <div className="flex justify-between gap-2"><b>{n.important ? '! ' : ''}{n.title}</b><span className="text-xs text-[#6F7461] shrink-0">{n.class_name || AUDIENCE_LABEL[n.audience]}</span></div>
-              <div className="text-xs whitespace-pre-line mt-1">{n.body}</div>
-              <div className="text-xs text-[#6F7461] mt-1">{n.posted_by || 'School'} · {day(n.publish_from)}{n.expires_on ? ` · until ${day(n.expires_on)}` : ''}{n.status === 'WITHDRAWN' ? ' · withdrawn' : !n.live ? ' · not live' : ''}</div>
-              {n.can_withdraw && <button type="button" className={`${btnS} mt-2`} onClick={() => withdraw(n)}>Withdraw</button>}
-            </li>))}</ul>)}
+          <div className="space-y-3">{rows.map((n) => { const d = n.publish_from ? new Date(n.publish_from) : null;
+            return <NoticeCard key={n.id} full title={`${n.title}`} body={n.body} pinned={!!n.important} audience={n.class_name || AUDIENCE_LABEL[n.audience]}
+              day={d ? d.getDate() : ''} month={d ? d.toLocaleDateString('en-KE', { month: 'short' }) : ''}
+              footer={<><div>{n.posted_by || 'School'}{n.expires_on ? ` · until ${day(n.expires_on)}` : ''}{n.status === 'WITHDRAWN' ? ' · withdrawn' : !n.live ? ' · not live' : ''}</div>
+                {n.can_withdraw && <button type="button" className={`${btnS} mt-2`} onClick={() => withdraw(n)}>Withdraw</button>}</>} />; })}</div>)}
       </div>
       {open && <PostSheet audiences={audiences} classes={classList} onClose={() => setOpen(false)} onDone={() => { setOpen(false); setMsg('Notice posted. Parents can see it in their portal.'); setTick((x) => x + 1); }} />}
     </FitPage>

@@ -49,7 +49,7 @@ export default function ImportResultsPage({ basePath = '/elimu' }) {
         {done && <Notice tone="good">Saved {done.imported} mark{done.imported === 1 ? '' : 's'} in {done.exams} exam{done.exams === 1 ? '' : 's'}.{done.skipped_no_mark > 0 ? ` ${done.skipped_no_mark} blank skipped.` : ''}{done.failed > 0 ? ` ${done.failed} could not be saved; see the import log.` : ''}{done.skipped_with_errors > 0 ? ` ${done.skipped_with_errors} row${done.skipped_with_errors === 1 ? '' : 's'} with errors left out.` : ''} <Link className="underline" to={`${basePath}/import/log`}>Import log</Link></Notice>}
 
         {!batch && (<>
-          <div className="rounded-2xl border border-[#E3DBB8] bg-white p-3 space-y-3">
+          <div className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 space-y-3">
             <div className="text-sm font-semibold">1. Choose the layout and the file</div>
             <div className="flex gap-1.5">{[['WIDE', 'One column per subject'], ['LONG', 'One row per mark']].map(([k, l]) => <button key={k} type="button" onClick={() => setLayout(k)} className={`h-10 px-3 rounded-full text-xs font-semibold border ${layout === k ? 'bg-[#12261F] text-white border-[#12261F]' : 'bg-white border-[#E3DBB8]'}`}>{l}</button>)}</div>
             <div className="flex flex-wrap items-center gap-2">
@@ -60,7 +60,7 @@ export default function ImportResultsPage({ basePath = '/elimu' }) {
           </div>
           {busy && !table && <LoadingBlock />}
           {table && (
-            <div className="rounded-2xl border border-[#E3DBB8] bg-white p-3 space-y-3">
+            <div className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 space-y-3">
               <div className="text-sm font-semibold">2. Match the columns <span className="font-normal text-[#6F7461]">({fileName}: {table.rows.length} rows)</span></div>
               {layout === 'LONG' ? (
                 <div className="grid sm:grid-cols-2 gap-2">{LONG_FIELDS.map((f) => (

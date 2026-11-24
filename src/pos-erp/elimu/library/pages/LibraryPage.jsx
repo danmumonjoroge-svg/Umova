@@ -8,6 +8,7 @@ import { materialService } from '../../materials/services/materialService.js';
 import { libraryService, LIB_CATEGORIES, LIB_LABEL } from '../services/libraryService.js';
 import { fileProblem, fileSize } from '../../shared/services/fileStorage.js';
 import { friendlyError } from '../../utils/validation.js';
+import { DocCard } from '../../ui/cards/index.js';
 
 const btnP = 'min-h-[44px] px-4 rounded-xl text-sm font-semibold bg-[#1F6B45] text-white disabled:opacity-50';
 const btnS = 'min-h-[40px] px-3 rounded-xl text-xs font-semibold border border-[#E3DBB8] bg-white text-[#23382B]';
@@ -47,13 +48,10 @@ export default function LibraryPage() {
         <div className="flex gap-1.5 overflow-x-auto"><button type="button" onClick={() => setCategory('')} className={`h-9 px-3 rounded-full text-xs font-semibold border shrink-0 ${!category ? 'bg-[#12261F] text-white' : 'bg-white border-[#E3DBB8]'}`}>All</button>
           {LIB_CATEGORIES.map(([k, l]) => <button key={k} type="button" onClick={() => setCategory(k)} className={`h-9 px-3 rounded-full text-xs font-semibold border shrink-0 ${category === k ? 'bg-[#12261F] text-white' : 'bg-white border-[#E3DBB8]'}`}>{l}</button>)}</div>
         {list.loading ? <LoadingBlock /> : rows.length === 0 ? <EmptyBlock title="Nothing in the library yet" /> : (
-          <ul className="space-y-2">{rows.map((r) => (
-            <li key={r.id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3 text-sm">
-              <div className="flex justify-between gap-2"><b>{r.title}</b><span className="text-xs text-[#6F7461]">{LIB_LABEL[r.category]}</span></div>
-              <div className="text-xs text-[#6F7461]">{r.class_name || 'Whole school'}{r.subject_name ? ` · ${r.subject_name}` : ''} · added by {r.added_by || 'staff'}</div>
-              {r.description && <div className="text-xs mt-1">{r.description}</div>}
-              <div className="flex gap-2 mt-2"><button type="button" className={btnS} onClick={() => view(r)}>Open · {fileSize(r.size_bytes)}</button>{r.can_remove && <button type="button" className={btnS} onClick={() => remove(r)}>Remove</button>}</div>
-            </li>))}</ul>)}
+          <div className="space-y-2">{rows.map((r) => (
+            <DocCard key={r.id} tab={LIB_LABEL[r.category]} title={r.title}
+              meta={`${r.class_name || 'Whole school'}${r.subject_name ? ` · ${r.subject_name}` : ''} · added by ${r.added_by || 'staff'}${r.description ? ` — ${r.description}` : ''}`}
+              footer={<div className="flex gap-2"><button type="button" className={btnS} onClick={() => view(r)}>Open · {fileSize(r.size_bytes)}</button>{r.can_remove && <button type="button" className={btnS} onClick={() => remove(r)}>Remove</button>}</div>} />))}</div>)}
       </div>
       {open && <AddSheet targets={targets} onClose={() => setOpen(false)} onDone={() => { setOpen(false); setMsg('Added to the library.'); setTick((x) => x + 1); }} />}
     </FitPage>

@@ -19,12 +19,12 @@ export default function FileStoragePage() {
       {s.loading ? <LoadingBlock /> : s.error ? <Notice tone="bad">{friendlyError(s.error)}</Notice> : (
         <div className="space-y-3">
           {msg && <Notice tone="good">{msg}</Notice>}{err && <Notice tone="bad">{err}</Notice>}
-          <div className="rounded-2xl border border-[#E3DBB8] bg-white p-3">
+          <div className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3">
             <div className="text-sm font-semibold">{fileSize(used)} of {fileSize(s.data.quota_mb * 1048576)} used ({pct}%)</div>
             <div className="h-2 rounded-full bg-[#EFE9CF] mt-2 overflow-hidden"><div className="h-2 bg-[#1F6B45]" style={{ width: `${pct}%` }} /></div>
             <ul className="text-xs text-[#6F7461] mt-2">{Object.entries(s.data.by_kind || {}).map(([k, v]) => <li key={k}>{KIND[k] || k}: {fileSize(v)}</li>)}</ul>
           </div>
-          <div className="rounded-2xl border border-[#E3DBB8] bg-white p-3 space-y-2">
+          <div className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 space-y-2">
             <label className="text-xs block">Largest file (MB, 1 to 50)<input type="number" className={fieldClass} value={mb} onChange={(e) => setMb(e.target.value)} /></label>
             <label className="text-xs block">School storage limit (MB)<input type="number" className={fieldClass} value={quota} onChange={(e) => setQuota(e.target.value)} /></label>
             <label className="text-xs block">Allowed file types<input className={fieldClass} value={ext} onChange={(e) => setExt(e.target.value)} /></label>

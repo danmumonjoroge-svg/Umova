@@ -2,6 +2,7 @@
 // The ONLY place the academic module talks to Supabase. Reuses the POS client (posSupabase) and its session/tenant claims.
 // All business rules live in the database functions; their error messages are written for people, so they are shown as-is.
 import { posSupabase as supabase } from '../../../services/posSupabaseClient';
+import { humanMessage } from '../../utils/humanError.js';
 
 export class ElimuError extends Error {
   constructor(message, { code, details } = {}) { super(message); this.name = 'ElimuError'; this.code = code; this.details = details; }
@@ -11,9 +12,9 @@ export class ElimuError extends Error {
 export async function rpc(fn, args = {}) {
   let res;
   try { res = await supabase.rpc(fn, args); }
-  catch (e) { const err = new ElimuError(e?.message || 'Network problem', { code: 'NETWORK' }); err.isNetwork = true; throw err; }
+  catch (e) { const err = new ElimuError(humanMessage(e), { code: 'NETWORK' }); err.isNetwork = true; throw err; }
   if (res.error) {
-    const e = new ElimuError(cleanMessage(res.error.message), { code: res.error.code, details: res.error.details });
+    const e = new ElimuError(humanMessage(res.error), { code: res.error.code, details: res.error.details });
     if (/failed to fetch|networkerror|load failed/i.test(res.error.message || '')) e.isNetwork = true;
     throw e;
   }

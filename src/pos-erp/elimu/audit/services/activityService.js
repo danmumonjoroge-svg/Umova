@@ -4,7 +4,7 @@ import { rpc } from '../../shared/services/elimuDb';
 export const ACTION_LABEL = {
   GATE_PASS_CREATED: 'Gate pass written', GATE_PASS_CANCELLED: 'Gate pass cancelled', GATE_PASS_EXIT: 'Student left through the gate',
   IMPORT_COMMITTED: 'Import saved', IMPORT_DISCARDED: 'Import discarded', PROMOTION_APPLIED: 'Promotion applied',
-  STUDENT_LEFT: 'Student left school', STUDENT_REINSTATED: 'Student reinstated', ELIMU_ROLE_CHANGED: 'Staff role changed',
+  STUDENT_LEFT: 'Student left school', STUDENT_REINSTATED: 'Student reinstated', ELIMU_ROLE_CHANGED: 'Staff role changed', ELIMU_SIGN_IN: 'Signed in',
 };
 export const actionLabel = (a) => ACTION_LABEL[a] || String(a || '').toLowerCase().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 export const activityService = {

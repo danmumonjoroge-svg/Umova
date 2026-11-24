@@ -13,6 +13,7 @@ import ElimuCommunicationPanel from '../components/ElimuCommunicationPanel.jsx';
 import { fullName, formatDate, ageFrom } from '../utils/format.js';
 import { friendlyError } from '../utils/validation.js';
 import { studentTabs } from '../registry.js';
+import StudyTab from './StudyTab.jsx';
 
 export default function StudentProfilePage({ basePath = '/elimu' }) {
   const { id } = useParams(); const { can } = useElimuAccess(); const { settings, period } = useElimuSetup();
@@ -23,7 +24,7 @@ export default function StudentProfilePage({ basePath = '/elimu' }) {
   if (r.loading && !r.data) return <LoadingBlock />;
   if (r.error && !r.data) return <Notice tone="bad">{r.error}</Notice>;
   const { student: s, directory: d, enrollments, statusHistory } = r.data;
-  const tabs = [['overview', 'Overview'], ['guardians', 'Guardians & contact'], ['history', 'History'], ...studentTabs().filter((t) => can(t.action || 'students.view')).map((t) => [t.key, t.label])];
+  const tabs = [['overview', 'Overview'], ['guardians', 'Guardians & contact'], ...(can('enrollment.manage') || can('config.manage') || can('marks.manage_all') ? [['study', 'Subjects & stream']] : []), ['history', 'History'], ...studentTabs().filter((t) => can(t.action || 'students.view')).map((t) => [t.key, t.label])];
   const extra = studentTabs().find((t) => t.key === tab);
   return (
     <FitPage title={fullName(s)} subtitle={[s.admission_no, d?.class_name && `${d.class_name}${d.stream_name ? ` ${d.stream_name}` : ''}`].filter(Boolean).join(' · ')}
@@ -41,6 +42,7 @@ export default function StudentProfilePage({ basePath = '/elimu' }) {
         </div>
       )}
       {tab === 'guardians' && (<div><ElimuCommunicationPanel student={{ ...s, class_name: d?.class_name }} klass={d ? { name: d.class_name } : null} settings={settings} />{can('guardians.manage') && <button type="button" className="mt-3 w-full min-h-[44px] rounded-xl border border-dashed border-[#C9A227] text-sm font-medium" onClick={() => setAddG(true)}>Add guardian</button>}</div>)}
+      {tab === 'study' && <StudyTab studentId={id} />}
       {tab === 'history' && (
         <div className="space-y-4">
           <section><h3 className="text-xs font-semibold uppercase text-slate-500 mb-1">Classes by year</h3>{enrollments.length === 0 ? <EmptyBlock>Not enrolled yet.</EmptyBlock> : <ul className="bg-white border border-[#E3DBB8] rounded-xl divide-y divide-[#EFE8C8]">{enrollments.map((e) => <li key={e.enrollment_id} className="px-3 py-2.5 text-sm flex justify-between"><span>{e.academic_year_name}{e.term_name ? ` · ${e.term_name}` : ''} — <b>{e.class_name}{e.stream_name ? ` ${e.stream_name}` : ''}</b></span><span className="text-xs text-slate-500">{e.status.toLowerCase().replace('_', ' ')}</span></li>)}</ul>}</section>

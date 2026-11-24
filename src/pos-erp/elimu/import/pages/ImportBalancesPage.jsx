@@ -47,7 +47,7 @@ export default function ImportBalancesPage({ basePath = '/elimu' }) {
         {done && <Notice tone="good">Posted {done.imported} balance{done.imported === 1 ? '' : 's'}: {kes(done.total_owed)} owed and {kes(done.total_credit)} credit.{done.skipped_zero > 0 ? ` ${done.skipped_zero} zero balance${done.skipped_zero === 1 ? '' : 's'} skipped.` : ''}{done.failed > 0 ? ` ${done.failed} could not be posted; see the import log.` : ''}{done.skipped_with_errors > 0 ? ` ${done.skipped_with_errors} row${done.skipped_with_errors === 1 ? '' : 's'} with errors left out.` : ''} <Link className="underline" to={`${basePath}/import/log`}>Import log</Link></Notice>}
 
         {!batch && (<>
-          <div className="rounded-2xl border border-[#E3DBB8] bg-white p-3 space-y-3">
+          <div className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 space-y-3">
             <div className="text-sm font-semibold">1. Choose the date and the file</div>
             <label className="block text-xs text-[#6F7461]">Balances are as at<input type="date" max={today()} className={`${fieldClass} mt-1`} value={asOf} onChange={(e) => setAsOf(e.target.value)} /></label>
             <div className="flex flex-wrap items-center gap-2">
@@ -58,7 +58,7 @@ export default function ImportBalancesPage({ basePath = '/elimu' }) {
           </div>
           {busy && !table && <LoadingBlock />}
           {table && (
-            <div className="rounded-2xl border border-[#E3DBB8] bg-white p-3 space-y-3">
+            <div className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 space-y-3">
               <div className="text-sm font-semibold">2. Match the columns <span className="font-normal text-[#6F7461]">({fileName}: {table.rows.length} rows)</span></div>
               <div className="grid sm:grid-cols-3 gap-2">{BALANCE_FIELDS.map((f) => (
                 <label key={f.key} className="block text-xs text-[#6F7461]">{f.label}{f.required ? ' *' : ''}

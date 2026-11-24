@@ -5,6 +5,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Banknote, Smartphone, Landmark, CircleEllipsis, Search } from 'lucide-react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
+import { BalanceHero, PaymentChit } from '../../ui/cards/index.js';
 import { FitPage, SearchBox, LoadingBlock, EmptyBlock, Notice, Pill, inputCls, saveBtnCls, formCard, MiniStats, TextBtn } from '../../../components/CardKit';
 import { toCents, toDecimalString, formatMoney, fromDb, MoneyError } from '../utils/money';
 import { isNetworkFailure, isOfflineNow } from '../../../offline/netErrors';
@@ -92,7 +93,7 @@ export default function ElimuCollectPage() {
         <div className="font-semibold">{student.full_name} <span className="text-xs">({student.admission_no})</span></div>
         {schoolCode && <div className="text-xs text-[#68756D]">Pay reference: <b className="tracking-wider">{schoolCode}-{student.admission_no}</b></div>}
         {view?.fromCache && <Notice tone="gold">Showing a copy saved on this phone{view.savedAt ? ` at ${new Date(view.savedAt).toLocaleTimeString('en-KE')}` : ''}. Balances may have changed.</Notice>}
-        {acct && <MiniStats items={[{ label: bal > 0 ? 'Owes' : bal < 0 ? 'Credit' : 'Balance', value: formatMoney(Math.abs(bal)) }, { label: 'Arrears (past due)', value: formatMoney(fromDb(acct.arrears)) }, { label: 'Paid so far', value: formatMoney(fromDb(acct.payments)) }]} />}
+        {acct && <BalanceHero state={bal > 0 ? 'owes' : bal < 0 ? 'credit' : 'clear'} mainText={formatMoney(Math.abs(bal))} rows={[['Arrears (past due)', formatMoney(fromDb(acct.arrears))], ['Paid so far', formatMoney(fromDb(acct.payments))]]} />}
         <div className="flex gap-2 my-2 flex-wrap">{METHODS.map(m => (<button key={m.key} onClick={() => setForm({ ...form, method: m.key })} className={`px-3 py-2 rounded-lg border text-sm ${form.method === m.key ? 'bg-[#1F6B45] text-white' : 'bg-white'}`}><m.icon size={14} className="inline mr-1" />{m.label}</button>))}</div>
         <input className={inputCls + ' mb-2'} inputMode="decimal" placeholder="Amount (KES)" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} aria-label="Amount" />
         {parsed.error && form.amount && <div className="text-xs text-red-700 mb-1">{parsed.error}</div>}
@@ -111,13 +112,13 @@ export default function ElimuCollectPage() {
         <pre className="text-xs whitespace-pre-wrap">{draftAcknowledgementText(done.draft, ctx.school?.name)}</pre></div>)}
 
       {drafts.length > 0 && (<div className={formCard}><div className="font-semibold mb-1">Drafts on this phone</div>
-        {drafts.map(d => { const l = draftLabel(d); return (<div key={d.id} className="flex justify-between text-sm border-b py-1"><span>{d.studentLabel} - {formatMoney(d.amountCents)} ({d.method})</span><Pill tone={l.tone}>{l.text}</Pill>
-          {['DRAFT', 'FAILED'].includes(d.state) && <TextBtn onClick={async () => { await queue.discard(d.id); loadDrafts(); }}>Discard</TextBtn>}</div>); })}
+        <div className="space-y-2.5">{drafts.map(d => { const l = draftLabel(d); return (<PaymentChit key={d.id} title={d.studentLabel} sub={d.method} amountText={formatMoney(d.amountCents)} tag={l.text} tone={l.tone === 'good' ? 'in' : l.tone === 'bad' ? 'owed' : 'wait'}>
+          {['DRAFT', 'FAILED'].includes(d.state) && <TextBtn onClick={async () => { await queue.discard(d.id); loadDrafts(); }}>Discard</TextBtn>}</PaymentChit>); })}</div>
         {drafts.some(d => d.state === 'DRAFT') && <button className={saveBtnCls + ' mt-2'} disabled={busy || isOfflineNow()} onClick={submitDrafts}>Submit drafts now</button>}</div>)}
 
       {inbox.length > 0 && (<div className={formCard}><div className="font-semibold mb-1">Paybill payments not yet applied</div>
-        {inbox.map(i => (<div key={i.c2b_id} className="text-sm border-b py-1 flex justify-between"><span>{i.trans_id} - {formatMoney(fromDb(i.left_amount))} left {i.payer_name ? `from ${i.payer_name}` : ''}</span>
-          {i.suggested_student_id ? <TextBtn onClick={() => { pick({ student_id: i.suggested_student_id, admission_no: i.suggested_admission_no, full_name: i.suggested_name }); setForm(f => ({ ...f, method: 'MPESA', ref: i.trans_id, amount: toDecimalString(fromDb(i.left_amount)) })); }}>Use for {i.suggested_admission_no}{i.match_kind === 'ADMISSION_ONLY' ? ' (check: no school code)' : ''}</TextBtn> : <span className="text-xs">no matching school reference</span>}</div>))}</div>)}
+        <div className="space-y-2.5">{inbox.map(i => (<PaymentChit key={i.c2b_id} title={`${i.trans_id}${i.payer_name ? ` · ${i.payer_name}` : ''}`} sub="Paybill payment not yet applied" amountText={formatMoney(fromDb(i.left_amount))} tag="left to apply" tone="wait">
+          {i.suggested_student_id ? <TextBtn onClick={() => { pick({ student_id: i.suggested_student_id, admission_no: i.suggested_admission_no, full_name: i.suggested_name }); setForm(f => ({ ...f, method: 'MPESA', ref: i.trans_id, amount: toDecimalString(fromDb(i.left_amount)) })); }}>Use for {i.suggested_admission_no}{i.match_kind === 'ADMISSION_ONLY' ? ' (check: no school code)' : ''}</TextBtn> : <span className="text-xs">no matching school reference</span>}</PaymentChit>))}</div></div>)}
       {!student && !drafts.length && !inbox.length && <EmptyBlock>Search for a student to begin.</EmptyBlock>}
     </FitPage>
   );

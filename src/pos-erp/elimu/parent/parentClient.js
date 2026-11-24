@@ -1,6 +1,7 @@
 // Parents sign in with their own Supabase client (same project, its own storage key), so a parent session can never mix with
 // the SACCO app's session or a school staff (POS) session in the same browser.
 import { createClient } from '@supabase/supabase-js';
+import { humanError } from '../utils/humanError.js';
 
 export const parentSupabase = createClient(process.env.REACT_APP_SUPABASE_URL, process.env.REACT_APP_SUPABASE_KEY, {
   auth: { storageKey: 'sb-elimu-parent-auth', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
@@ -16,12 +17,23 @@ export function toE164(raw) {
   return '';
 }
 
+/** Must match elimu_parent_email() in the database: school code + username -> the address the login is stored under. */
+export function parentEmail(code, username) {
+  const u = String(username || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'); const c = String(code || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return u && c ? `${u}.${c}@parents.elimu.app` : '';
+}
+
 async function rpc(name, args) {
   const { data, error } = await parentSupabase.rpc(name, args);
-  if (error) throw new Error(error.message || 'Something went wrong');
+  if (error) throw humanError(error);
   return data;
 }
 export const parentApi = {
+  session: () => rpc('elimu_parent_session'),
+  details: (id) => rpc('elimu_parent_child_details', { p_student: id }),
+  classPerformance: (id) => rpc('elimu_parent_class_performance', { p_student: id }),
+  passwordDone: () => rpc('elimu_parent_password_done'),
+  helpLog: (channel, message, name, code) => rpc('elimu_help_log', { p_channel: channel, p_message: message || null, p_name: name || null, p_school_code: code || null }),
   link: () => rpc('elimu_parent_link'),
   children: () => rpc('elimu_parent_children'),
   attendance: (id) => rpc('elimu_parent_attendance', { p_student: id }),

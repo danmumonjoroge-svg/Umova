@@ -12,6 +12,7 @@ import { useElimuAccess } from '../../hooks/useElimu.js';
 import { studentService } from '../../services/ElimuStudentService.js';
 import { gatePassService } from '../services/gatePassService.js';
 import { friendlyError } from '../../utils/validation.js';
+import { PassTicket } from '../../ui/cards/index.js';
 
 export const STATE = { REQUESTED: ['Waiting for parent', 'bg-amber-50 text-amber-900'], PARENT_ACCEPTED: ['Parent accepted', 'bg-emerald-50 text-emerald-900'], PARENT_REFUSED: ['Parent refused', 'bg-red-50 text-red-800'],
   CANCELLED: ['Cancelled', 'bg-slate-100 text-slate-600'], EXITED: ['Left school', 'bg-sky-50 text-sky-900'], EXPIRED: ['Expired', 'bg-slate-100 text-slate-600'] };
@@ -43,16 +44,12 @@ function NewPassSheet({ onClose, onSaved }) {
     </Sheet>);
 }
 
+const TONE = { REQUESTED: 'warn', PARENT_ACCEPTED: 'ok', PARENT_REFUSED: 'bad', CANCELLED: 'quiet', EXITED: 'ok', EXPIRED: 'quiet' };
 function PassCard({ p, children }) {
   return (
-    <li className="rounded-2xl border border-[#E3DBB8] bg-white p-3">
-      <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="font-semibold">{p.student_name}</div><div className="text-xs text-[#6F7461]">{p.class_name} · {p.reason}</div></div><Chip s={p.state} /></div>
-      <div className="mt-1 text-xs text-[#6F7461]">Written {when(p.requested_at)}{p.requested_by_name ? ` by ${p.requested_by_name}` : ''} · valid until {when(p.valid_until)}</div>
-      {p.collector_name && <div className="text-xs mt-0.5">Collector: <b>{p.collector_name}</b>{p.collector_phone ? ` · ${p.collector_phone}` : ''}</div>}
-      {p.parent_note && <div className="text-xs mt-0.5 italic">Parent: “{p.parent_note}”</div>}
-      {p.register_result && <div className="text-xs text-[#6F7461] mt-0.5">Register: {p.register_result}</div>}
-      {children}
-    </li>);
+    <PassTicket student={p.student_name} meta={`${p.class_name} · ${p.reason}`} state={{ label: (STATE[p.state] || [p.state])[0], tone: TONE[p.state] || 'quiet' }}
+      stubTop="Valid until" stubBottom={when(p.valid_until)}
+      lines={[`Written ${when(p.requested_at)}${p.requested_by_name ? ` by ${p.requested_by_name}` : ''}`, p.collector_name && `Collector: ${p.collector_name}${p.collector_phone ? ` · ${p.collector_phone}` : ''}`, p.parent_note && `Parent: “${p.parent_note}”`, p.register_result && `Register: ${p.register_result}`]}>{children}</PassTicket>);
 }
 
 export default function GatePassPage() {
@@ -76,11 +73,11 @@ export default function GatePassPage() {
           {tab === 'gate' && <Notice tone="gold">Only passes the parent has accepted appear here. Check who is collecting before you let the student go.</Notice>}
           {list.error && <Notice tone="bad">{list.error}</Notice>}
           {list.loading && !list.data ? <LoadingBlock /> : rows.length === 0 ? <EmptyBlock>{tab === 'gate' ? 'No student is cleared to leave right now.' : tab === 'mine' ? 'You have not written any passes in the last 30 days.' : 'No passes.'}</EmptyBlock> : (
-            <ul className="space-y-2">{rows.map((p) => (
+            <div className="space-y-3">{rows.map((p) => (
               <PassCard key={p.id} p={p}>
                 {tab === 'gate' && p.state === 'PARENT_ACCEPTED' && <button type="button" disabled={busy} onClick={() => run(() => gatePassService.exit(p.id), (r) => `${p.student_name} released.${r?.register ? ` ${r.register}` : ''}`)} className="mt-2 w-full min-h-[48px] rounded-xl bg-[#1F6B45] text-white font-bold disabled:opacity-50">Let {p.student_name.split(' ')[0]} go</button>}
                 {tab !== 'gate' && ['REQUESTED', 'PARENT_ACCEPTED'].includes(p.state) && <button type="button" disabled={busy} onClick={() => { const why = window.prompt('Why is this pass cancelled?'); if (why && why.trim().length >= 3) run(() => gatePassService.cancel(p.id, why.trim()), 'Pass cancelled.'); }} className="mt-2 px-3 min-h-[38px] rounded-lg border border-[#E3DBB8] text-sm disabled:opacity-50">Cancel pass</button>}
-              </PassCard>))}</ul>)}
+              </PassCard>))}</div>)}
           {sheet && <NewPassSheet onClose={() => setSheet(false)} onSaved={() => { setMsg({ tone: 'good', text: 'Sent to the parent.' }); list.reload(); }} />}
         </div>)}
     </FitPage>);

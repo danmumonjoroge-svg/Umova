@@ -2,6 +2,7 @@
 // Balanced -> the ticked payments are marked reconciled. Unbalanced -> the attempt is kept with a note and the payments stay open (E006).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
+import { ReconCard } from '../../ui/cards/index.js';
 import { FitPage, LoadingBlock, EmptyBlock, Notice, DataCard, inputCls } from '../../../components/CardKit';
 import { fromDb, formatMoney, toCents, toDecimalString, MoneyError } from '../utils/money';
 import { readStatement, matchStatement } from '../utils/statementImport';
@@ -74,5 +75,5 @@ export default function ElimuReconciliationPage() {
 }
 
 function HistCard({ h }) {
-  return <DataCard title={`${h.method}${h.account_label ? ` · ${h.account_label}` : ''}`} subtitle={`${h.period_start} to ${h.period_end} · ${h.payment_count} payment(s)${h.notes ? ` · ${h.notes}` : ''}`} big={M(h.statement_total)} metrics={[{ label: h.status === 'BALANCED' ? 'Balanced' : 'Difference', value: h.status === 'BALANCED' ? 'Yes' : M(h.difference) }]} />;
+  return <div className="mb-3"><ReconCard title={`${h.method}${h.account_label ? ` · ${h.account_label}` : ''}`} sub={`${h.period_start} to ${h.period_end} · ${h.payment_count} payment(s)${h.notes ? ` · ${h.notes}` : ''}`} totalText={M(h.statement_total)} balanced={h.status === 'BALANCED'} differenceText={M(h.difference)} /></div>;
 }

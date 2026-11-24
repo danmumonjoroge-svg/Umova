@@ -70,7 +70,7 @@ export function PeriodBar({ from, to, onChange, single = false }) {
 export function Line({ label, amount, bold, indent, tone }) {
   return (<div className={`flex justify-between gap-3 py-1.5 text-sm ${bold ? 'font-bold border-t border-[#D9D2B4] mt-1 pt-2' : ''} ${indent ? 'pl-3' : ''}`}><span className="min-w-0">{label}</span><span className={`shrink-0 ${tone === 'bad' ? 'text-[#B3402A]' : ''}`}>{M(amount)}</span></div>);
 }
-export function Section({ title, children }) { return <div className="mb-4 rounded-2xl border border-[#E3DBB8] bg-white p-3"><h3 className="text-xs font-bold uppercase tracking-wide text-[#6F7461] mb-1">{title}</h3>{children}</div>; }
+export function Section({ title, children }) { return <div className="mb-4 rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3"><h3 className="text-xs font-bold uppercase tracking-wide text-[#6F7461] mb-1">{title}</h3>{children}</div>; }
 
 /** Runs a statement loader whenever the period changes (and the school has a ledger). */
 export function useStatement(loader, deps) {

@@ -6,6 +6,7 @@ import { useAsync } from '../../hooks/useAsync.js';
 import { materialService, CATEGORIES, CATEGORY_LABEL } from '../services/materialService.js';
 import { fileProblem, fileSize } from '../../shared/services/fileStorage.js';
 import { friendlyError } from '../../utils/validation.js';
+import { DocCard } from '../../ui/cards/index.js';
 
 const btnP = 'min-h-[44px] px-4 rounded-xl text-sm font-semibold bg-[#1F6B45] text-white disabled:opacity-50';
 const btnS = 'min-h-[40px] px-3 rounded-xl text-xs font-semibold border border-[#E3DBB8] bg-white text-[#23382B] disabled:opacity-50';
@@ -53,14 +54,10 @@ export default function StudyMaterialsPage() {
         </div>
         {sc.data && scopes.length === 0 && <Notice tone="warn">You can post once the school allocates you a subject in a class (Academics → Teacher allocations).</Notice>}
         {list.loading ? <LoadingBlock /> : rows.length === 0 ? <EmptyBlock title="No study materials yet" /> : (
-          <ul className="space-y-2">{rows.map((m) => (
-            <li key={m.id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3 text-sm">
-              <div className="flex justify-between gap-2"><b>{m.title}</b><span className="text-xs text-[#6F7461]">{CATEGORY_LABEL[m.category]}</span></div>
-              <div className="text-xs text-[#6F7461]">{m.class_name}{m.stream_name ? ` ${m.stream_name}` : ''} · {m.subject_name} · {m.posted_by || 'teacher'} · {new Date(m.created_at).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}</div>
-              {m.description && <div className="text-xs mt-1">{m.description}</div>}
-              <div className="flex gap-2 mt-2"><button type="button" className={btnS} onClick={() => view(m)}>Open · {fileSize(m.size_bytes)}</button>
-                <button type="button" className={btnS} onClick={() => remove(m)}>Remove</button></div>
-            </li>))}</ul>)}
+          <div className="space-y-2">{rows.map((m) => (
+            <DocCard key={m.id} tab={CATEGORY_LABEL[m.category]} title={m.title}
+              meta={`${m.class_name}${m.stream_name ? ` ${m.stream_name}` : ''} · ${m.subject_name} · ${m.posted_by || 'teacher'} · ${new Date(m.created_at).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}${m.description ? ` — ${m.description}` : ''}`}
+              footer={<div className="flex gap-2"><button type="button" className={btnS} onClick={() => view(m)}>Open · {fileSize(m.size_bytes)}</button><button type="button" className={btnS} onClick={() => remove(m)}>Remove</button></div>} />))}</div>)}
       </div>
       {open && <PostSheet scopes={scopes} onClose={() => setOpen(false)} onDone={() => { setOpen(false); setMsg('Posted. Parents of the class can now see it.'); setTick((x) => x + 1); }} />}
     </FitPage>

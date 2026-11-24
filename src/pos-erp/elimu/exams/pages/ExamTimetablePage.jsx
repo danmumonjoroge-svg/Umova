@@ -10,6 +10,7 @@ import ScopeBar from '../../academic/components/ScopeBar';
 import AccessGate from '../../academic/components/AccessGate';
 import Note from '../../academic/components/Note';
 import { examScheduleService } from '../../academic/services/examScheduleService';
+import { ExamPaper } from '../../ui/cards/index.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const hm = (t) => (t ? String(t).slice(0, 5) : '');
@@ -52,14 +53,15 @@ export default function ExamTimetablePage() {
           {msg && <Note tone={msg.tone}>{msg.text}</Note>}
           {can && unpublished.length > 0 && <button type="button" disabled={busy} onClick={() => publish(unpublished.map((r) => r.assessment_id), true)} className="w-full min-h-[44px] rounded-xl border border-[#1F6B45] text-[#1F6B45] font-semibold disabled:opacity-50">Publish {unpublished.length} scheduled paper(s) to parents</button>}
           {list.loading ? <LoadingBlock /> : list.error ? <Note tone="bad">{list.error.message}</Note> : rows.length === 0 ? <EmptyBlock>No assessments for this term{scope.classId ? ' and class' : ''}. Create them under Exams &amp; assessments first.</EmptyBlock> : (
-            <ul className="space-y-2">{rows.map((r) => (
-              <li key={r.assessment_id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3">
-                <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="font-semibold">{r.name}</div><div className="text-xs text-[#6F7461]">{r.class_name}{r.stream_name ? ` ${r.stream_name}` : ''} · {r.subject}</div></div>
-                  {r.exam_date ? <Pill tone={r.published ? 'good' : 'warn'}>{r.published ? 'Published' : 'Not published'}</Pill> : <Pill tone="neutral">Not scheduled</Pill>}</div>
-                {r.exam_date && <div className="mt-1 text-sm">{dayText(r.exam_date)} · {hm(r.start_time)}–{hm(r.end_time)}{r.venue ? ` · ${r.venue}` : ''}</div>}
-                {can && <div className="mt-2 flex gap-2"><button type="button" onClick={() => setEdit(r)} className="px-3 min-h-[38px] rounded-lg border border-[#1F6B45] text-[#1F6B45] text-sm">{r.exam_date ? 'Change' : 'Set date and venue'}</button>
-                  {r.exam_date && <button type="button" disabled={busy} onClick={() => publish([r.assessment_id], !r.published)} className="px-3 min-h-[38px] rounded-lg border border-[#E3DBB8] text-sm disabled:opacity-50">{r.published ? 'Hide from parents' : 'Publish'}</button>}</div>}
-              </li>))}</ul>)}
+            <div className="space-y-3">{rows.map((r) => { const d = r.exam_date ? new Date(`${r.exam_date}T00:00:00`) : null;
+              return (
+              <ExamPaper key={r.assessment_id} title={r.name} sub={`${r.class_name}${r.stream_name ? ` ${r.stream_name}` : ''} · ${r.subject}`}
+                day={d ? d.getDate() : null} month={d ? d.toLocaleDateString('en-KE', { month: 'short' }) : ''} weekday={d ? d.toLocaleDateString('en-KE', { weekday: 'short' }) : ''}
+                status={r.exam_date ? { label: r.published ? 'Published' : 'Not published', tone: r.published ? 'ok' : 'warn' } : { label: 'Not scheduled', tone: 'quiet' }}
+                lines={r.exam_date ? [`${hm(r.start_time)}–${hm(r.end_time)}${r.venue ? ` · ${r.venue}` : ''}`] : []}>
+                {can && <><button type="button" onClick={() => setEdit(r)} className="px-3 min-h-[38px] rounded-lg border border-[#1F6B45] text-[#1F6B45] text-sm">{r.exam_date ? 'Change' : 'Set date and venue'}</button>
+                  {r.exam_date && <button type="button" disabled={busy} onClick={() => publish([r.assessment_id], !r.published)} className="px-3 min-h-[38px] rounded-lg border border-[#E3DBB8] text-sm disabled:opacity-50">{r.published ? 'Hide from parents' : 'Publish'}</button>}</>}
+              </ExamPaper>); })}</div>)}
           {edit && <SittingSheet row={edit} onClose={() => setEdit(null)} onSaved={() => list.reload()} />}
         </div>);
       }}</AccessGate>

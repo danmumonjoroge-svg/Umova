@@ -12,6 +12,7 @@ import {
   APPROVER_ROLES, MORE_KEYS, MORE_MODULE, adminPath, hubPath,
   moduleForPath, moduleByKey, visibleNav, childForPath,
 } from "./adminNav";
+import useElimuOwner from "./useElimuOwner";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Umova Admin shell — one app, three form factors:
@@ -53,6 +54,12 @@ function useAdminAlerts(isApprover, pathname) {
         .from("pos_registration_requests").select("id", { count: "exact", head: true }).eq("status", "pending");
       if (count) out.push({ id: "pos-requests", text: `${count} POS registration request${count > 1 ? "s" : ""} pending`, to: "/admin/pos-requests" });
     } catch (e) { /* same */ }
+    // Elimu: new messages from schools and parents (only Elimu owners get a number back; everyone else gets an error and no alert).
+    try {
+      const { data, error } = await supabase.rpc("elimu_owner_unread");
+      const n = Number(data || 0);
+      if (!error && n > 0) out.push({ id: "elimu-support", text: `${n} new Elimu message${n > 1 ? "s" : ""} from users`, to: "/admin/elimu/support" });
+    } catch (e) { /* same */ }
     setAlerts(out);
   }, [isApprover]);
   useEffect(() => { load(); }, [load, pathname]);
@@ -70,7 +77,8 @@ export default function AdminLayout() {
   const [openGroups, setOpenGroups] = useState({});
 
   const isApprover = APPROVER_ROLES.includes(role);
-  const nav = useMemo(() => visibleNav(isApprover), [isApprover]);
+  const elimuOwner = useElimuOwner(isApprover);
+  const nav = useMemo(() => visibleNav(isApprover, elimuOwner), [isApprover, elimuOwner]);
   const alerts = useAdminAlerts(isApprover, location.pathname);
 
   const path = location.pathname;

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
+import { PayslipCard } from '../../ui/cards/index.js';
 import { FitPage, LoadingBlock, EmptyBlock, Notice, DataCard, inputCls } from '../../../components/CardKit';
 import Sheet from '../../components/AppSheet.jsx';
 import { fromDb, formatMoney, toCents, MoneyError } from '../utils/money';
@@ -74,14 +75,14 @@ export default function ElimuPayrollPage() {
       <div className="flex items-center gap-1.5 mb-3">{[['runs', 'Pay runs'], ['staff', 'Employees']].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`h-9 px-3 rounded-full text-sm font-semibold border ${tab === k ? 'bg-[#12261F] text-white border-[#12261F]' : 'bg-white border-[#E3DBB8]'}`}>{l}</button>)}
         <span className="flex-1" />{tab === 'staff' && <Btn tone="solid" onClick={() => setSheet({ emp: null })}><Plus size={14} className="inline" /> Employee</Btn>}</div>
       {tab === 'staff' ? (!emps.length ? <EmptyBlock>No employees yet. Add the staff you pay each month.</EmptyBlock> : emps.map((e) => (
-        <button key={e.id} type="button" onClick={() => setSheet({ emp: e })} className="block w-full text-left"><DataCard title={e.name} subtitle={`${e.job_title || 'Staff'}${e.is_active ? '' : ' · no longer employed'}`} big={M(fromDb(e.basic) + fromDb(e.allowances))} metrics={[{ label: 'Basic', value: M(e.basic) }, { label: 'Allowances', value: M(e.allowances) }]} /></button>)))
+        <div key={e.id} className="mb-3"><PayslipCard name={e.name} role={`${e.job_title || 'Staff'}${e.is_active ? '' : ' · no longer employed'}`} totalText={M(fromDb(e.basic) + fromDb(e.allowances))} basic={fromDb(e.basic)} allowances={fromDb(e.allowances)} basicText={M(e.basic)} allowancesText={M(e.allowances)} off={!e.is_active} onClick={() => setSheet({ emp: e })} /></div>)))
       : (<>
         <div className="rounded-xl border border-[#E3DBB8] bg-white p-3 mb-3 flex items-end gap-2"><label className="flex-1 text-xs text-[#6F7461]">Start a pay run for<input type="month" max={thisMonth()} className={`${inputCls} mt-1`} value={month} onChange={(e) => setMonth(e.target.value)} /></label>
           <Btn tone="solid" disabled={!active.length} onClick={() => run(() => api.prCreateRun(businessId, `${month}-01`), 'Draft pay run created. Check it, then ask another person to approve.')}>Create</Btn></div>
         {!active.length && <Notice tone="gold">Add at least one employee first.</Notice>}
         {!live.length && !runs.length ? <EmptyBlock>No pay runs yet.</EmptyBlock> : runs.map((r) => {
           const st = r.status === 'VOIDED' ? 'Voided' : r.status === 'DRAFT' ? 'Draft — not posted' : `${r.paid_on ? 'Salaries paid' : 'Salaries unpaid'} · ${r.remitted_on ? 'statutory remitted' : 'statutory not remitted'}`;
-          return <div key={r.id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3 mb-2 text-sm">
+          return <div key={r.id} className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 mb-2 text-sm">
             <button type="button" className="w-full text-left" onClick={() => show(r)}><div className="flex justify-between"><b>{monthLabel(r.period)}</b><b>{M(r.net)} net</b></div>
               <div className="text-xs text-[#6F7461]">Gross {M(r.gross)} · employer cost {M(r.employer_cost)} · statutory {M(r.statutory)}</div><div className="text-xs mt-0.5">{st}</div></button>
             {open === r.id && (lines[r.id] ? <Slips lines={lines[r.id]} /> : <LoadingBlock />)}

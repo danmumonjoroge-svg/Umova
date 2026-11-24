@@ -2,7 +2,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
-import { FitPage, LoadingBlock, EmptyBlock, Notice, DataCard, inputCls } from '../../../components/CardKit';
+import { FitPage, LoadingBlock, EmptyBlock, Notice, inputCls } from '../../../components/CardKit';
+import { StockCard } from '../../ui/cards';
 import Sheet from '../../components/AppSheet.jsx';
 import { fromDb, formatMoney, toCents, MoneyError } from '../utils/money';
 
@@ -74,12 +75,13 @@ export default function ElimuStoresPage() {
       <input className={`${inputCls} mb-2`} placeholder="Search items" value={q} onChange={(e) => setQ(e.target.value)} />
       {items === null ? <LoadingBlock /> : !shown.length ? <EmptyBlock>No items yet. Add one, then receive stock.</EmptyBlock> : shown.map((i) => {
         const low = Number(i.reorder_level) > 0 && Number(i.qty_on_hand) <= Number(i.reorder_level);
-        return (<DataCard key={i.id} alert={low} title={i.name} subtitle={`${CATS.find((c) => c[0] === i.category)?.[1] || i.category}${low ? ' · running low' : ''}`} big={`${Number(i.qty_on_hand)} ${i.unit}`} metrics={[{ label: 'Value', value: M(i.value) }]}>
+        const rl = Number(i.reorder_level);
+        return (<StockCard key={i.id} low={low} name={i.name} sub={`${CATS.find((c) => c[0] === i.category)?.[1] || i.category}${low ? ' · running low' : ''}`} qtyText={`${Number(i.qty_on_hand)} ${i.unit}`} valueText={M(i.value)} ratio={rl > 0 ? Number(i.qty_on_hand) / (rl * 3) : (Number(i.qty_on_hand) > 0 ? 1 : 0)}>
           <div className="flex gap-2 flex-wrap mt-1">
             {can('expense') && <><button type="button" onClick={() => setMove({ item: i, kind: 'receive' })} className="px-3 min-h-[38px] rounded-lg bg-[#1F6B45] text-white text-sm">Receive</button>
               <button type="button" disabled={!Number(i.qty_on_hand)} onClick={() => setMove({ item: i, kind: 'issue' })} className="px-3 min-h-[38px] rounded-lg border border-[#1F6B45] text-[#1F6B45] text-sm disabled:opacity-40">Issue</button>
               <button type="button" onClick={() => setMove({ item: i, kind: 'adjust' })} className="px-3 min-h-[38px] rounded-lg border text-sm">Count</button></>}
-            <button type="button" onClick={() => setHist(i)} className="px-3 min-h-[38px] rounded-lg border text-sm">History</button></div></DataCard>);
+            <button type="button" onClick={() => setHist(i)} className="px-3 min-h-[38px] rounded-lg border text-sm">History</button></div></StockCard>);
       })}
       {add && <ItemSheet ctx={ctx} onClose={() => setAdd(false)} onDone={done} />}
       {move && <MoveSheet ctx={ctx} item={move.item} kind={move.kind} onClose={() => setMove(null)} onDone={done} />}

@@ -63,7 +63,7 @@ export default function AdmissionLettersPage() {
         <input className={fieldClass} placeholder="Search by name or application number" value={search} onChange={(e) => setSearch(e.target.value)} />
         {list.loading ? <LoadingBlock /> : list.error ? <Notice tone="bad">{friendlyError(list.error)}</Notice> : rows.length === 0 ? <EmptyBlock title="No applications here" hint="Decide an application on the Applications page first." /> :
           <div className="space-y-2">{rows.map((r) => (
-            <div key={r.id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3">
+            <div key={r.id} className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3">
               <div className="text-sm font-semibold">{r.student?.first_name} {r.student?.last_name}</div>
               <div className="text-xs text-[#6F7461]">{r.application_no} · {r.status?.label}</div>
               <div className="flex gap-2 flex-wrap mt-2">{lettersFor(r.status?.category).map((k) => <button key={k} type="button" className={btnS} onClick={() => setOpen({ app: r, kind: k })}>{LETTER_KINDS[k]}</button>)}</div>

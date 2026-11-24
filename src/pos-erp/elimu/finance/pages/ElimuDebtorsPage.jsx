@@ -8,6 +8,7 @@ import { debtorsReport, agingReport, reportToCsv } from '../reports/reportBuilde
 import { toCents, fromDb, formatMoney } from '../utils/money';
 import { buildVars } from '../../communication/finance/financeComm';
 import MessageComposer from '../components/MessageComposer';
+import { AgeingBar, DebtorCard } from '../../ui/cards/index.js';
 
 const PAGE = 50;
 export default function ElimuDebtorsPage() {
@@ -33,18 +34,16 @@ export default function ElimuDebtorsPage() {
   return (
     <FitPage title="Fee debtors" subtitle="Who owes, how much, and since when">
       {err && <Notice tone="bad">{err}</Notice>}
-      {aging && <MiniStats items={[{ label: 'Not yet due', value: formatMoney(fromDb(aging.not_yet_due.amount)) }, { label: '1-30 days', value: formatMoney(fromDb(aging.days_1_30.amount)) }, { label: '31-60', value: formatMoney(fromDb(aging.days_31_60.amount)) },
-        { label: '61-90', value: formatMoney(fromDb(aging.days_61_90.amount)) }, { label: 'Over 90', value: formatMoney(fromDb(aging.over_90.amount)) }, { label: 'Total', value: formatMoney(fromDb(aging.total.amount)) }]} />}
+      {aging && <AgeingBar totalText={formatMoney(fromDb(aging.total.amount))} buckets={[['Not yet due', aging.not_yet_due], ['1-30 days', aging.days_1_30], ['31-60 days', aging.days_31_60], ['61-90 days', aging.days_61_90], ['Over 90 days', aging.over_90]].map(([label, x]) => ({ label, value: fromDb(x.amount), text: formatMoney(fromDb(x.amount)) }))} />}
       <div className={formCard}><div className="flex gap-2 flex-wrap">
         <input className={inputCls} style={{ maxWidth: 160 }} placeholder="Min days overdue" inputMode="numeric" value={f.minDays} onChange={e => { setPage(0); setF({ ...f, minDays: e.target.value.replace(/\D/g, '') }); }} />
         <input className={inputCls} style={{ maxWidth: 160 }} placeholder="Min amount owing" inputMode="decimal" value={f.minAmount} onChange={e => { setPage(0); setF({ ...f, minAmount: e.target.value }); }} />
         <TextBtn onClick={exportPdf}>PDF</TextBtn><TextBtn onClick={exportCsv}>Excel (CSV)</TextBtn></div></div>
       {rows === null ? <LoadingBlock /> : rows.length === 0 ? <EmptyBlock>No students match.</EmptyBlock> : rows.map(r => (
-        <DataCard key={r.student_id} title={`${r.student_name} (${r.admission_no})`} subtitle={`${[r.class_name, r.stream_name].filter(Boolean).join(' ')} - ${r.guardian_name || 'no guardian on file'} ${r.guardian_phone || ''}`}
-          big={formatMoney(fromDb(r.outstanding))} onClick={() => nav(`../account/${r.student_id}`)}
-          metrics={[{ label: 'Billed', value: formatMoney(fromDb(r.total_billed)) }, { label: 'Paid', value: formatMoney(fromDb(r.total_paid)) }, { label: 'Days overdue', value: r.days_overdue || '-' },
-            { label: 'Last payment', value: r.last_payment_date || '-' }, { label: 'Next instalment', value: r.next_installment_due || '-' }]}
-          actions={[...(r.guardian_phone ? [{ label: 'Call', onClick: () => { window.location.href = `tel:${r.guardian_phone}`; } }] : []), { label: 'Message', onClick: () => setMsgFor(r) }]} />))}
+        <div key={r.student_id} className="mb-3"><DebtorCard name={`${r.student_name} (${r.admission_no})`} meta={[r.class_name, r.stream_name].filter(Boolean).join(' ')} guardian={`${r.guardian_name || 'no guardian on file'} ${r.guardian_phone || ''}`.trim()}
+          owedText={formatMoney(fromDb(r.outstanding))} billed={fromDb(r.total_billed)} paid={fromDb(r.total_paid)} billedText={formatMoney(fromDb(r.total_billed))} paidText={formatMoney(fromDb(r.total_paid))}
+          days={Number(r.days_overdue) || 0} lastPayment={r.last_payment_date || ''} onClick={() => nav(`../account/${r.student_id}`)}
+          actions={<>{r.guardian_phone && <TextBtn onClick={() => { window.location.href = `tel:${r.guardian_phone}`; }}>Call</TextBtn>}<TextBtn onClick={() => setMsgFor(r)}>Message</TextBtn></>} /></div>))}
       {msgFor && <MessageComposer ctx={ctx} purpose="ELIMU_BALANCE_REMINDER" studentId={msgFor.student_id} contact={{ phone: msgFor.guardian_phone, email: msgFor.guardian_email }}
         vars={buildVars({ school: ctx.school, student: { name: msgFor.student_name, admission_no: msgFor.admission_no, class_name: msgFor.class_name }, guardian: { name: msgFor.guardian_name }, balanceCents: fromDb(msgFor.outstanding) })}
         reference={{ type: 'ELIMU_ACCOUNT', id: msgFor.student_id, label: 'Balance reminder' }} onClose={() => setMsgFor(null)} />}

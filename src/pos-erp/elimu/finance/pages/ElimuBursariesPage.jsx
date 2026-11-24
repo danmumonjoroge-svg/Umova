@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
+import { AwardCard } from '../../ui/cards/index.js';
 import { FitPage, LoadingBlock, EmptyBlock, Notice, DataCard, inputCls } from '../../../components/CardKit';
 import Sheet from '../../components/AppSheet.jsx';
 import { fromDb, formatMoney, toCents, MoneyError } from '../utils/money';
@@ -118,8 +119,9 @@ export default function ElimuBursariesPage() {
   const decide = (a, yes) => { let why = null; if (!yes) { why = window.prompt('Why is this declined?'); if (!why) return; } act(() => api.decideAdjustment(a.id, yes, why), yes ? 'Approved and posted to the student account.' : 'Declined.'); };
   const withdraw = (a) => { const why = window.prompt('Why is it being withdrawn? (optional)') ?? null; act(() => api.withdrawAdjustment(a.id, why), 'Request withdrawn.'); };
   const pending = (adj || []).filter((a) => a.status === 'PENDING_APPROVAL'); const past = (adj || []).filter((a) => a.status !== 'PENDING_APPROVAL');
-  const AdjCard = ({ a }) => (<DataCard key={a.id} title={`${KIND_LABEL[a.kind] || a.kind} · ${a.student_name}`} subtitle={`${a.admission_no} · ${a.reason}${a.sponsor_name ? ` · ${a.sponsor_name}` : ''}${a.decision_note ? ` · "${a.decision_note}"` : ''}`} big={M(a.amount)} metrics={[{ label: 'Status', value: STATUS_TONE[a.status] || a.status }]}>
-    {a.status === 'PENDING_APPROVAL' && <div className="flex gap-2 flex-wrap mt-1">{can('approve') && <><Small solid disabled={busy} onClick={() => decide(a, true)}>Approve</Small><Small disabled={busy} onClick={() => decide(a, false)}>Decline</Small></>}<Small disabled={busy} onClick={() => withdraw(a)}>Withdraw</Small></div>}</DataCard>);
+  const AdjCard = ({ a }) => (<AwardCard key={a.id} kind={KIND_LABEL[a.kind] || a.kind} title={a.student_name} sub={`${a.admission_no} · ${a.reason}${a.sponsor_name ? ` · ${a.sponsor_name}` : ''}${a.decision_note ? ` · "${a.decision_note}"` : ''}`} amountText={M(a.amount)} state={STATUS_TONE[a.status] || a.status}
+    tone={a.status === 'APPLIED' ? 'in' : a.status === 'PENDING_APPROVAL' ? 'wait' : a.status === 'REJECTED' ? 'owed' : 'quiet'}>
+    {a.status === 'PENDING_APPROVAL' && <>{can('approve') && <><Small solid disabled={busy} onClick={() => decide(a, true)}>Approve</Small><Small disabled={busy} onClick={() => decide(a, false)}>Decline</Small></>}<Small disabled={busy} onClick={() => withdraw(a)}>Withdraw</Small></>}</AwardCard>);
   return (
     <FitPage title="Bursaries & scholarships" subtitle="Discounts, sponsors, credit notes and write-offs" action={(can('collect') || can('bill')) ? <button type="button" onClick={() => setReq(true)} className="h-10 px-3 rounded-xl bg-[#12261F] text-white text-sm font-semibold flex items-center gap-1"><Plus size={16} />Request</button> : null}>
       {err && <Notice tone="bad">{err}</Notice>}{note && <Notice tone="good">{note}</Notice>}
@@ -128,8 +130,9 @@ export default function ElimuBursariesPage() {
         : tab === 'history' ? (!past.length ? <EmptyBlock>No past adjustments.</EmptyBlock> : past.map((a) => <AdjCard key={a.id} a={a} />))
         : (<>{can('approve') && <button type="button" onClick={() => setAw(true)} className="w-full h-11 mb-3 rounded-xl border border-[#1F6B45] text-[#1F6B45] font-semibold">+ Record a standing award</button>}
           {!(awards || []).length ? <EmptyBlock>No standing awards. Record one when a sponsor commits to a learner for a term or a year.</EmptyBlock> : awards.map((w) => (
-            <DataCard key={w.id} title={`${w.award_type === 'BURSARY' ? 'Bursary' : 'Scholarship'}${w.sponsor_name ? ` · ${w.sponsor_name}` : ''}`} subtitle={`${names[w.student_id] || 'Student'} · ${w.academic_year} · ${w.scope === 'ANNUAL' ? 'whole year' : 'one term'} · ${w.status.toLowerCase()}`} big={w.value_type === 'PERCENT' ? `${Number(w.value)}%` : M(w.value)}>
-              {w.status === 'ACTIVE' && can('bill') && <Small solid disabled={busy} onClick={() => setApply(w)}>Apply to an invoice</Small>}</DataCard>))}</>)}
+            <div key={w.id} className="mb-3"><AwardCard kind={w.award_type === 'BURSARY' ? 'Bursary' : 'Scholarship'} title={w.sponsor_name || 'No sponsor named'}
+              sub={`${names[w.student_id] || 'Student'} · ${w.academic_year} · ${w.scope === 'ANNUAL' ? 'whole year' : 'one term'}`} amountText={w.value_type === 'PERCENT' ? `${Number(w.value)}%` : M(w.value)} state={w.status.toLowerCase()} tone={w.status === 'ACTIVE' ? 'in' : 'quiet'}>
+              {w.status === 'ACTIVE' && can('bill') && <Small solid disabled={busy} onClick={() => setApply(w)}>Apply to an invoice</Small>}</AwardCard></div>))}</>)}
       {req && <RequestSheet ctx={ctx} onClose={() => setReq(false)} onDone={done} />}
       {aw && <AwardSheet ctx={ctx} onClose={() => setAw(false)} onDone={done} />}
       {apply && <ApplySheet ctx={ctx} award={apply} onClose={() => setApply(null)} onDone={done} />}

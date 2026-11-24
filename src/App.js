@@ -68,6 +68,11 @@ import AdminPOSHub            from "./Pages/Admin/POSAdminDashboard";
 import AdminPOSTenants        from "./Pages/Admin/POSTenants";
 import AdminPOSRequests       from "./Pages/Admin/POSRegistrationRequests";
 import AdminChama             from "./Pages/Admin/ChamaAdminDashboard";
+// Elimu management (owner console): clients, licences, payments and support messages. Owner-only inside the pages (elimu_platform_owners).
+import AdminElimu              from "./Pages/Admin/ElimuAdminDashboard";
+import AdminElimuSchools       from "./Pages/Admin/ElimuSchools";
+import AdminElimuPayments      from "./Pages/Admin/ElimuPayments";
+import AdminElimuSupport       from "./Pages/Admin/ElimuSupportInbox";
 
 // ─────────────────────────────────────────────
 // POS / INVENTORY (Universal Scanning Engine)
@@ -375,13 +380,17 @@ function App() {
           <Route path="journal-entry" element={<AdminJournalEntry />} />
           <Route path="accounting-periods" element={<AdminAccountingPeriods />} />
 
-          {/* POS approvals + Chama oversight (approver roles; nav hides them
+          {/* POS approvals + Chama oversight + Elimu management (approver roles; nav hides them
               from others, and ApproverOnly blocks direct URL access) */}
           <Route element={<ApproverOnly />}>
             <Route path="pos-admin" element={<AdminPOSHub />} />
             <Route path="pos-tenants" element={<AdminPOSTenants />} />
             <Route path="pos-requests" element={<AdminPOSRequests />} />
             <Route path="chama" element={<AdminChama />} />
+            <Route path="elimu" element={<AdminElimu />} />
+            <Route path="elimu/schools" element={<AdminElimuSchools />} />
+            <Route path="elimu/payments" element={<AdminElimuPayments />} />
+            <Route path="elimu/support" element={<AdminElimuSupport />} />
           </Route>
 
           {/* POS / Inventory (Universal Scanning Engine) — staff-only,

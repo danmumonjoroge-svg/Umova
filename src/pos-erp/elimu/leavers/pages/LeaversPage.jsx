@@ -31,7 +31,7 @@ function Record({ onDone }) {
     <div className="space-y-3">
       {err && <Notice tone="bad">{err}</Notice>}
       {ok && <Notice tone="good">{ok.name} is recorded as {KIND_LABEL[ok.kind].toLowerCase()}. {ok.enrolments_closed} enrolment{ok.enrolments_closed === 1 ? '' : 's'} closed{ok.passes_cancelled ? `, ${ok.passes_cancelled} open gate pass cancelled` : ''}.{ok.balance > 0 ? ` The ${kes(ok.balance)} balance stays on the student's account.` : ''}</Notice>}
-      <div className="rounded-2xl border border-[#E3DBB8] bg-white p-3 space-y-3">
+      <div className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 space-y-3">
         <div className="text-sm font-semibold">Student</div>
         {pick ? (<div className="flex items-center justify-between gap-2 rounded-xl bg-[#F7F4E8] p-2 text-sm"><span><b>{pick.name}</b> · {pick.admission_no}{pick.class_name ? ` · ${pick.class_name}` : ''}{pick.balance > 0 ? ` · owes ${kes(pick.balance)}` : ''}</span><button type="button" className={btnS} onClick={() => { setPick(null); setAsk(null); }}>Change</button></div>) : (<>
           <input className={fieldClass} placeholder="Search by name or admission number" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -62,7 +62,7 @@ function List({ refreshKey }) {
       {err && <Notice tone="bad">{err}</Notice>}{msg && <Notice tone="good">{msg}</Notice>}
       {data.loading && !data.data ? <LoadingBlock /> : (data.data || []).length === 0 ? <EmptyBlock>No leavers recorded.</EmptyBlock> : (
         <ul className="space-y-2">{data.data.map((r) => (
-          <li key={r.exit_id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3 text-sm">
+          <li key={r.exit_id} className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 text-sm">
             <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="font-semibold truncate">{r.name} <span className="text-xs font-normal text-[#6F7461]">{r.admission_no}{r.last_class ? ` · ${r.last_class}` : ''}</span></div>
               <div className="text-xs text-[#6F7461]">{KIND_LABEL[r.kind]} on {r.exit_date}{r.destination_school ? ` → ${r.destination_school}` : ''}{r.recorded_by_name ? ` · by ${r.recorded_by_name}` : ''}</div></div>
               {r.reinstated_at ? <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-900">Reinstated</span> : <button type="button" className={btnS} disabled={busy === r.exit_id} onClick={() => back(r)}>Reinstate</button>}</div>

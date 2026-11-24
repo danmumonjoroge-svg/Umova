@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
+import { ExpenseSlip } from '../../ui/cards/index.js';
 import { FitPage, LoadingBlock, EmptyBlock, Notice, DataCard, inputCls } from '../../../components/CardKit';
 import Sheet from '../../components/AppSheet.jsx';
 import { fromDb, formatMoney, toCents, MoneyError } from '../utils/money';
@@ -60,7 +61,8 @@ export default function ElimuExpensesPage() {
       {rows === null ? <LoadingBlock /> : !shown.length ? <EmptyBlock>Nothing here.</EmptyBlock> : <>
         <div className="text-xs text-[#6F7461] mb-2">Total shown: <b>{formatMoney(total)}</b></div>
         {shown.map((r) => (
-          <DataCard key={r.id} title={r.description || catName[r.category_id] || 'Expense'} subtitle={`${catName[r.category_id] || 'Uncategorised'}${r.supplier_name ? ` · ${r.supplier_name}` : ''}${r.department ? ` · ${r.department}` : ''} · ${r.expense_date}`} big={M(r.amount)}>
+          <div key={r.id} className="mb-3"><ExpenseSlip title={r.description || catName[r.category_id] || 'Expense'} sub={`${catName[r.category_id] || 'Uncategorised'}${r.supplier_name ? ` · ${r.supplier_name}` : ''}${r.department ? ` · ${r.department}` : ''} · ${r.expense_date}`} amountText={M(r.amount)}
+            status={{ label: String(r.status || '').toLowerCase(), tone: r.status === 'PAID' ? 'in' : r.status === 'REJECTED' ? 'owed' : r.status === 'PENDING' ? 'wait' : 'quiet' }}>
             {r.status === 'REJECTED' && r.approval_note && <div className="text-xs text-[#B3402A] mb-1">Declined: {r.approval_note}</div>}
             {can('approve') && (r.status === 'PENDING' || r.status === 'APPROVED') && (why === r.id ? (
               <div className="space-y-2"><input className={inputCls} placeholder="Why is it declined?" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -71,7 +73,7 @@ export default function ElimuExpensesPage() {
                 {r.status === 'PENDING' && <button type="button" disabled={busy === r.id} onClick={() => move(r.id, 'APPROVED')} className="px-3 min-h-[38px] rounded-lg bg-[#1F6B45] text-white text-sm">Approve</button>}
                 <button type="button" disabled={busy === r.id} onClick={() => move(r.id, 'PAID')} className="px-3 min-h-[38px] rounded-lg border border-[#1F6B45] text-[#1F6B45] text-sm">{r.status === 'PENDING' ? 'Approve & mark paid' : 'Mark paid'}</button>
                 <button type="button" onClick={() => setWhy(r.id)} className="px-3 min-h-[38px] rounded-lg border text-sm">Decline</button></div>))}
-          </DataCard>))}</>}
+          </ExpenseSlip></div>))}</>}
       {add && <AddSheet ctx={ctx} cats={cats} onClose={() => setAdd(false)} onDone={load} />}
     </FitPage>);
 }

@@ -32,6 +32,7 @@ export const SCHOOL_TREE = {
       ] },
       { key: 'guardians', label: 'Guardians', desc: 'Parents and guardians', children: [
         { key: 'guardian-register', label: 'Guardian register', desc: 'Contacts and what each guardian may see', to: 'guardians', anyOf: ['guardians.view'] },
+        { key: 'parent-logins', label: 'Parent logins', desc: 'Give parents access to their child\'s portal', to: 'parent-logins', anyOf: ['guardians.view', 'guardians.manage'] },
       ] },
       { key: 'structure', label: 'Classes & streams', desc: 'School structure', children: [
         { key: 'classes', label: 'Classes and streams', desc: 'Set up and view classes', to: 'classes', anyOf: ['structure.view'] },
@@ -58,6 +59,11 @@ export const SCHOOL_TREE = {
         { key: 'subjects', label: 'Subjects', desc: 'Subjects offered by class', to: 'academics/subjects', anyOf: ['structure.view'] },
         { key: 'allocations', label: 'Teacher allocations', desc: 'Which teacher teaches which subject', to: 'academics/allocations', anyOf: ['structure.view'] },
         { key: 'acad-setup', label: 'Years, terms and setup', desc: 'Academic years and terms', to: 'academics/setup', anyOf: ['structure.view'] },
+      ] },
+      { key: 'teachers', label: 'Teachers & activities', desc: 'Teacher reports, games, clubs and drama', children: [
+        { key: 'teacher-reports', label: 'Teacher reports', desc: 'Classes, results, comparisons, activities and pay for each teacher', to: 'teachers', anyOf: ['settings.manage', 'marks.manage_all'] },
+        { key: 'my-report', label: 'My report', desc: 'Your own classes, results and activities', to: 'my-report', anyOf: ['academic.access', 'attendance.take_own', 'marks.manage_all', 'settings.manage', 'timetable.manage'] },
+        { key: 'activities', label: 'Games, clubs & drama', desc: 'Who leads each activity, and the results', to: 'activities', anyOf: ['academic.access', 'attendance.take_own', 'marks.manage_all', 'settings.manage', 'timetable.manage'] },
       ] },
       { key: 'timetable', label: 'Timetable & rooms', desc: 'Lessons, changes and classrooms', children: [
         { key: 'tt', label: 'Class timetable', desc: 'Weekly lessons', to: 'timetable', anyOf: ['timetable.view'] },
@@ -126,17 +132,26 @@ export const SCHOOL_TREE = {
         { key: 'pp-messages', label: 'Messages', desc: 'SMS, email and history', to: 'communication', anyOf: ['comms.history'] },
       ] },
     ] },
+    { key: 'help', label: 'Help', icon: 'LifeBuoy', desc: 'Guidance and how to reach support', children: [
+      { key: 'help-main', label: 'Help centre', desc: 'Answers in plain language and our contacts', to: 'help' },
+    ] },
     { key: 'settings', label: 'Settings', icon: 'Settings', desc: 'School profile, academic setup and data', children: [
       { key: 'set-school', label: 'School profile', desc: 'Name, code and contacts', children: [
         { key: 'set-main', label: 'School settings', desc: 'School details and options', to: 'settings', anyOf: ['settings.manage'] },
+      ] },
+      { key: 'set-health', label: 'Setup check', desc: 'Is everything joined up?', children: [
+        { key: 'set-check', label: 'Student journey check', desc: 'Class, stream, subjects, fees and exams — what is missing', to: 'setup-check', anyOf: ['settings.manage', 'students.manage'] },
       ] },
       { key: 'set-acad', label: 'Academic setup', desc: 'Years, terms and grading', children: [
         { key: 'set-terms', label: 'Years and terms', desc: 'Academic years and terms', to: 'academics/setup', anyOf: ['structure.view'] },
         { key: 'set-grading', label: 'Grading schemes', desc: 'Grade boundaries and points', to: 'academics/grading', anyOf: ['structure.view'] },
       ] },
+      { key: 'set-me', label: 'My account', desc: 'How you sign in', children: [
+        { key: 'set-signin', label: 'My sign-in', desc: 'Fingerprint or face sign-in on this device', to: 'my-signin' },
+      ] },
       { key: 'set-data', label: 'Data & storage', desc: 'Files and backups', children: [
         { key: 'set-storage', label: 'File storage', desc: 'Space used by study materials and uploads', to: 'file-storage', anyOf: ['settings.manage'] },
-        { key: 'set-export', label: 'Export & backup', desc: 'Download your data', soon: true },
+        { key: 'set-export', label: 'Export & backup', desc: 'Download your data', to: 'export', anyOf: ['settings.manage'] },
       ] },
     ] },
   ],

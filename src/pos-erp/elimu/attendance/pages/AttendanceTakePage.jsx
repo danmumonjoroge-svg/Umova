@@ -1,6 +1,7 @@
 // elimu/attendance/pages/AttendanceTakePage.jsx -- the teacher's register: pick class + date (or lesson), mark fast, save a draft, submit.
 // Mobile first (big tap targets, sticky action bar). Works offline once the register has been opened (see services/offlineAttendance.js).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { TallyStrip } from '../../ui/cards';
 import { ClipboardCheck, Search, WifiOff, CloudUpload } from 'lucide-react';
 import { useElimu } from '../../shared/hooks/ElimuContext';
 import { useFoundation } from '../../shared/hooks/useFoundation';
@@ -133,7 +134,7 @@ export default function AttendanceTakePage() {
 
         {session && (<>
           <div className="flex items-center gap-2 my-2 flex-wrap"><CompletionPill state={state} /><button className={`${btn} !min-h-[36px] text-xs`} onClick={() => { setSession(null); setRows([]); }}>Change class</button></div>
-          <MiniStats items={[{ label: 'Present', value: counts.present }, { label: 'Absent', value: counts.absent }, { label: 'Late', value: counts.late }, { label: 'Not marked', value: counts.not_marked }]} />
+          <TallyStrip items={[{ label: 'Present', value: counts.present, tone: 'ok' }, { label: 'Absent', value: counts.absent, tone: 'bad' }, { label: 'Late', value: counts.late, tone: 'warn' }, { label: 'Not marked', value: counts.not_marked, tone: 'quiet' }]} />
           {!lockedDay && (<div className="my-2 flex gap-1.5 overflow-x-auto pb-1">{Object.entries(BULK_ACTIONS).map(([k, a]) => <button key={k} className={`${btn} !min-h-[38px] whitespace-nowrap text-xs`} onClick={() => runBulk(k)}>{a.label}</button>)}</div>)}
           <div className="flex gap-2 mb-2"><div className="relative flex-1"><Search size={15} className="absolute left-2.5 top-3 text-[#9A987F]" /><input className={`${inputCls} pl-8`} placeholder="Find a student" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
             <select className={`${inputCls} !w-auto`} value={filter} onChange={(e) => setFilter(e.target.value)}><option value="ALL">All</option><option value="UNMARKED">Not marked</option><option value="ABSENT">Absent</option><option value="LATE">Late</option></select></div>

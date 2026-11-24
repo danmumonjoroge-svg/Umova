@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
+import { BalanceHero, SupplierCard, BillSlip } from '../../ui/cards/index.js';
 import { FitPage, LoadingBlock, EmptyBlock, Notice, DataCard, inputCls } from '../../../components/CardKit';
 import Sheet from '../../components/AppSheet.jsx';
 import { fromDb, formatMoney, toCents, MoneyError } from '../utils/money';
@@ -81,19 +82,17 @@ export default function ElimuSuppliersPage() {
   return (
     <FitPage title="Suppliers" subtitle="Bills, balances and payments">
       {err && <Notice tone="bad">{err}</Notice>}{note && <Notice tone="good">{note}</Notice>}
-      <DataCard title="Owed to suppliers" big={formatMoney(owedAll)} metrics={[{ label: 'Overdue', value: formatMoney(overdueAll) }]} alert={overdueAll > 0} />
+      <BalanceHero state={owedAll > 0 ? 'owes' : 'clear'} mainText={formatMoney(owedAll)} rows={[['Overdue', formatMoney(overdueAll)]]} note={owedAll > 0 ? 'This is the total the school owes its suppliers.' : 'No supplier is owed anything.'} />
       <div className="flex items-center gap-1.5 my-3">{[['suppliers', 'Suppliers'], ['bills', 'Bills']].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`h-9 px-3 rounded-full text-sm font-semibold border ${tab === k ? 'bg-[#12261F] text-white border-[#12261F]' : 'bg-white border-[#E3DBB8]'}`}>{l}</button>)}
         <span className="flex-1" />{can('expense') && (tab === 'suppliers' ? <Btn tone="solid" onClick={() => setSheet('supplier')}><Plus size={14} className="inline" /> Supplier</Btn> : <Btn tone="solid" disabled={!sup.some((s) => s.is_active)} onClick={() => setSheet('bill')}><Plus size={14} className="inline" /> Bill</Btn>)}</div>
       {tab === 'suppliers' ? (!sup.length ? <EmptyBlock>No suppliers yet.</EmptyBlock> : sup.map((s) => (
-        <DataCard key={s.id} title={s.name} subtitle={`${s.phone || 'No phone'} · ${s.terms_days} day terms${s.is_active ? '' : ' · switched off'}`} big={M(s.owed)} metrics={[{ label: 'Billed', value: M(s.billed) }, { label: 'Paid', value: M(s.paid) }, { label: 'Overdue', value: M(s.overdue) }]} alert={fromDb(s.overdue) > 0} />)))
+        <div key={s.id} className="mb-3"><SupplierCard name={s.name} sub={`${s.phone || 'No phone'} · ${s.terms_days} day terms${s.is_active ? '' : ' · switched off'}`} owedText={M(s.owed)} billedText={M(s.billed)} paidText={M(s.paid)} overdueText={M(s.overdue)} overdue={fromDb(s.overdue) > 0} off={!s.is_active} /></div>)))
         : (bills === null ? <LoadingBlock /> : !bills.length ? <EmptyBlock>No bills yet.</EmptyBlock> : bills.map((b) => {
           const left = fromDb(b.amount) - fromDb(b.paid); const late = b.status === 'OPEN' && left > 0 && b.due_date < today();
-          return <div key={b.id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3 mb-2 text-sm">
-            <div className="flex justify-between"><b>{b.bill_no} · {name[b.supplier_id] || 'Supplier'}</b><b>{M(b.amount)}</b></div>
-            <div className="text-xs text-[#6F7461]">{b.bill_date} · due {b.due_date}{b.supplier_ref ? ` · ${b.supplier_ref}` : ''}{b.description ? ` · ${b.description}` : ''}</div>
-            <div className="mt-1">{b.status === 'VOIDED' ? <span className="text-[#8A3B2E]">Voided</span> : left === 0 ? <span className="text-emerald-700">Paid in full</span> : <span className={late ? 'text-[#8A3B2E]' : ''}>{late ? 'Overdue — ' : ''}balance {formatMoney(left)}</span>}</div>
-            {b.status === 'OPEN' && can('approve') && <div className="flex gap-2 mt-2">{left > 0 && <Btn tone="solid" onClick={() => setSheet({ pay: b })}>Pay</Btn>}{fromDb(b.paid) === 0 && <Btn onClick={() => act((r) => api.spVoidBill(b.id, r), 'Why is this bill voided?')}>Void</Btn>}</div>}
-          </div>; }))}
+          return <BillSlip key={b.id} title={`${b.bill_no} · ${name[b.supplier_id] || 'Supplier'}`} amountText={M(b.amount)}
+            sub={`${b.bill_date}${b.supplier_ref ? ` · ${b.supplier_ref}` : ''}${b.description ? ` · ${b.description}` : ''}`}
+            state={b.status === 'VOIDED' ? { label: 'Voided', tone: 'quiet' } : left === 0 ? { label: 'Paid in full', tone: 'in' } : late ? { label: `Overdue since ${b.due_date}`, tone: 'owed' } : { label: `Due ${b.due_date}`, tone: 'wait' }}
+            footer={<>{b.status !== 'VOIDED' && left > 0 && <div className="text-sm mb-1">Balance <b>{formatMoney(left)}</b></div>}{b.status === 'OPEN' && can('approve') && <div className="flex gap-2">{left > 0 && <Btn tone="solid" onClick={() => setSheet({ pay: b })}>Pay</Btn>}{fromDb(b.paid) === 0 && <Btn onClick={() => act((r) => api.spVoidBill(b.id, r), 'Why is this bill voided?')}>Void</Btn>}</div>}</>} />; }))}
       {sheet === 'supplier' && <SupplierSheet ctx={ctx} onClose={() => setSheet(null)} onDone={done} />}
       {sheet === 'bill' && <BillSheet ctx={ctx} suppliers={sup} onClose={() => setSheet(null)} onDone={done} />}
       {sheet && sheet.pay && <PaySheet ctx={ctx} bill={sheet.pay} onClose={() => setSheet(null)} onDone={done} />}

@@ -2,9 +2,11 @@
 // with the decision buttons, history, messaging and the final "Admit" step.
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { ApplicationCard } from '../ui/cards/index.js';
 import { FitPage, FilterChips, SearchBox, DataCard, CardGrid, LoadingBlock, EmptyBlock, Notice, Sheet, fieldClass, saveBtnCls } from '../services/platform.js';
 import { admissionService } from '../services/ElimuAdmissionService.js';
 import { setupService } from '../services/ElimuSetupService.js';
+import { enrollmentService } from '../services/ElimuEnrollmentService.js';
 import { useAsync, useDebounced } from '../hooks/useAsync.js';
 import { useElimuAccess, useElimuSetup } from '../hooks/useElimu.js';
 import { StatusPill, Field, Pager } from '../components/ui.jsx';
@@ -12,7 +14,7 @@ import ElimuCommunicationPanel from '../components/ElimuCommunicationPanel.jsx';
 import { RELATIONSHIPS, GENDERS, formatDate, shortName } from '../utils/format.js';
 import { validateApplication, friendlyError } from '../utils/validation.js';
 
-const STAGES = [{ value: '', label: 'All' }, { value: 'SUBMITTED', label: 'New' }, { value: 'IN_REVIEW', label: 'In review' }, { value: 'ACCEPTED', label: 'Accepted' }, { value: 'WAITLISTED', label: 'Waitlist' }, { value: 'REJECTED', label: 'Rejected' }, { value: 'ADMITTED', label: 'Admitted' }];
+const STAGES = [{ key: '', label: 'All' }, { key: 'SUBMITTED', label: 'New' }, { key: 'IN_REVIEW', label: 'In review' }, { key: 'ACCEPTED', label: 'Accepted' }, { key: 'WAITLISTED', label: 'Waitlist' }, { key: 'REJECTED', label: 'Rejected' }, { key: 'ADMITTED', label: 'Admitted' }];
 // What the person can do from each stage (mirrors elimu_admission_transition_ok in 004; the database is the authority).
 const NEXT = { SUBMITTED: ['IN_REVIEW', 'ACCEPTED', 'WAITLISTED', 'REJECTED'], IN_REVIEW: ['ACCEPTED', 'WAITLISTED', 'REJECTED'], WAITLISTED: ['ACCEPTED', 'REJECTED'], ACCEPTED: ['WAITLISTED', 'REJECTED'], REJECTED: ['IN_REVIEW'] };
 const VERB = { IN_REVIEW: 'Start review', ACCEPTED: 'Accept', WAITLISTED: 'Waitlist', REJECTED: 'Decline' };
@@ -29,7 +31,8 @@ export default function AdmissionsPage() {
       toolbar={<><SearchBox value={search} onChange={setSearch} placeholder="Child name or application number" /><FilterChips options={STAGES} value={cat} onChange={(v) => { setCat(v); setPage(0); }} /></>}>
       {list.error && <Notice tone="bad">{list.error}</Notice>}
       {list.loading && !list.data ? <LoadingBlock /> : list.data?.rows.length === 0 ? <EmptyBlock>No applications here.</EmptyBlock> :
-        <CardGrid>{list.data?.rows.map((a) => <DataCard key={a.id} title={shortName(a.student)} subtitle={`${a.application_no} · ${cname(a.requested_class_id)} · ${formatDate(a.application_date)}`} pill={<StatusPill category={a.status?.category} label={a.status?.label} />}><button type="button" className="text-sm font-semibold text-[#1F6B45] underline" onClick={() => setOpen(a)}>Open</button></DataCard>)}</CardGrid>}
+        <div className="space-y-4 pt-1">{list.data?.rows.map((a) => <ApplicationCard key={a.id} name={shortName(a.student)} meta={`${a.application_no} · ${cname(a.requested_class_id)} · ${formatDate(a.application_date)}`} category={a.status?.category}
+          status={{ label: a.status?.label || '', tone: { ADMITTED: 'ok', ACCEPTED: 'ok', WAITLISTED: 'warn', REJECTED: 'bad' }[a.status?.category] || 'quiet' }} onClick={() => setOpen(a)} />)}</div>}
       {list.data && <Pager page={page} total={list.data.total} pageSize={list.data.pageSize} onPage={setPage} />}
       {adding && <NewApplicationSheet classes={classes.data || []} onClose={() => setAdding(false)} onSaved={() => list.reload()} />}
       {open && <ApplicationSheet app={open} className={cname(open.requested_class_id)} classes={classes.data || []} settings={settings} onClose={() => setOpen(null)} onChanged={() => list.reload()} />}
@@ -80,8 +83,10 @@ function ApplicationSheet({ app, className, classes, settings, onClose, onChange
   const cur = fresh.data || app; const cat = cur.status?.category;
   const to = (c) => (statuses.data || []).find((s) => s.category === c && s.is_default && s.is_active);
   const move = async (c) => { setBusy(true); setErr(null); try { await admissionService.setStatus(app.id, to(c).id, { reason }); await Promise.all([fresh.reload(), hist.reload()]); onChanged(); } catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); } };
-  const admit = async () => { setBusy(true); setErr(null); try { const r = await admissionService.admit(app.id, { classId: adm.classId, streamId: adm.streamId, academicYearId: period?.academic_year_id }); setDone(r); await Promise.all([fresh.reload(), hist.reload()]); onChanged(); setAdm(null); } catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); } };
+  const admit = async () => { setBusy(true); setErr(null); try { const r = await admissionService.admit(app.id, { classId: adm.classId, streamId: adm.streamId, academicYearId: period?.academic_year_id }); if (picks.length && r?.enrollment_id && !r.already_admitted) { try { await enrollmentService.admitChoose(r.enrollment_id, picks); } catch (e2) { setErr('Admitted, but the subjects could not be saved: ' + friendlyError(e2) + ' Ask administration to add them on the learner profile.'); } } setDone(r); await Promise.all([fresh.reload(), hist.reload()]); onChanged(); setAdm(null); } catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); } };
   const cls = classes.find((c) => c.id === (adm?.classId || cur.requested_class_id));
+  const opts = useAsync(() => (adm?.classId ? enrollmentService.classElectives(adm.classId, adm.streamId) : Promise.resolve([])), [adm?.classId, adm?.streamId]);
+  const picks = adm?.picks || [];
   return (
     <Sheet title={`${shortName(cur.student)} · ${cur.application_no}`} onClose={onClose}>
       <div className="mb-2"><StatusPill category={cat} label={cur.status?.label} /> <span className="text-xs text-slate-500 ml-2">for {className}</span></div>
@@ -92,8 +97,9 @@ function ApplicationSheet({ app, className, classes, settings, onClose, onChange
           <div className="flex flex-wrap gap-2">{NEXT[cat].filter(to).map((c) => <button key={c} type="button" disabled={busy} onClick={() => move(c)} className={`px-3 min-h-[44px] rounded-xl text-sm font-medium border ${c === 'ACCEPTED' ? 'bg-[#1F6B45] text-white border-[#1F6B45]' : 'bg-white border-[#E3DBB8]'}`}>{VERB[c]}</button>)}</div></div>)}
       {!can('admissions.decide') && NEXT[cat] && <p className="text-xs text-slate-500 mb-3">Decisions are made by the principal or someone with admissions approval.</p>}
       {cat === 'ACCEPTED' && can('admissions.decide') && can('enrollment.manage') && (adm
-        ? <div className="rounded-xl bg-[#FBF8EA] border border-[#E3DBB8] p-3 mb-3"><Field label="Class"><select className={fieldClass} value={adm.classId} onChange={(e) => setAdm({ classId: e.target.value, streamId: '' })}>{classes.filter((c) => c.is_active).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        ? <div className="rounded-xl bg-[#FBF8EA] border border-[#E3DBB8] p-3 mb-3"><Field label="Class"><select className={fieldClass} value={adm.classId} onChange={(e) => setAdm({ classId: e.target.value, streamId: '', picks: [] })}>{classes.filter((c) => c.is_active).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
             {cls?.elimu_streams?.length > 0 && <Field label="Stream"><select className={fieldClass} value={adm.streamId} onChange={(e) => setAdm({ ...adm, streamId: e.target.value })}><option value="">None</option>{cls.elimu_streams.filter((x) => x.is_active).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>}
+            {(opts.data || []).length > 0 && <Field label="Optional subjects this learner will take"><div className="space-y-1.5">{opts.data.map((x) => <label key={x.id} className="flex items-center gap-3 min-h-[44px] rounded-xl bg-white border border-[#E3DBB8] px-3"><input type="checkbox" style={{ width: 22, height: 22 }} checked={picks.includes(x.id)} onChange={() => setAdm({ ...adm, picks: picks.includes(x.id) ? picks.filter((i) => i !== x.id) : [...picks, x.id] })} /><span className="flex-1">{x.name}</span></label>)}</div><p className="text-xs text-slate-500 mt-1">Chosen now; after admission only administration can change them.</p></Field>}
             <button type="button" disabled={busy || !period} className={`${saveBtnCls} w-full`} onClick={admit}>Admit and enrol</button>{!period && <p className="text-xs text-red-600 mt-1">Set the current academic year first.</p>}</div>
         : <button type="button" className={`${saveBtnCls} w-full mb-3`} onClick={() => setAdm({ classId: cur.requested_class_id, streamId: '' })}>Admit this student…</button>)}
       <h3 className="text-xs font-semibold uppercase text-slate-500 mt-2 mb-1">Contact the family</h3>

@@ -1,3 +1,4 @@
+import { humanMessage } from './humanError.js';
 // Client-side checks that give a friendly message BEFORE the database says no. The database remains the authority;
 // every rule here is also enforced there (constraints / triggers in schema/001-006).
 import { normalizeMsisdn, isValidEmail } from './phone.js';
@@ -41,10 +42,4 @@ export function validateApplication(a = {}) {
 }
 
 /** Turns a Postgres/Supabase error into a plain sentence. The database messages are already written for people. */
-export function friendlyError(err) {
-  const m = String(err?.message || err || '');
-  if (/duplicate key|unique/i.test(m)) return 'That record already exists.';
-  if (/row-level security|permission denied/i.test(m)) return 'You do not have permission to do that.';
-  if (/Failed to fetch|NetworkError|network/i.test(m)) return 'No internet connection. Your changes were not saved.';
-  return m || 'Something went wrong.';
-}
+export function friendlyError(err) { return humanMessage(err); }

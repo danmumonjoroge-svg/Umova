@@ -1,4 +1,5 @@
 import React from 'react';
+import { TallyStrip } from '../ui/cards';
 import { Link } from 'react-router-dom';
 import { FitPage, MiniStats, LoadingBlock, Notice } from '../services/platform.js';
 import { studentService } from '../services/ElimuStudentService.js';
@@ -32,7 +33,7 @@ export default function ElimuDashboard({ basePath = '/elimu' }) {
   }
   return (
     <FitPage title={setup.school.schoolName || 'School'} subtitle={period ? `${period.academic_year_name}${period.term_name ? ` · ${period.term_name}` : ''}` : 'No current academic year set'}
-      summary={<MiniStats items={[{ label: 'Active students', value: by.ACTIVE || 0 }, { label: 'Open applications', value: open }, { label: 'Guardians', value: s?.guardians || 0 }]} />}>
+      summary={<TallyStrip showBar={false} items={[{ label: 'Active students', value: by.ACTIVE || 0, tone: 'ok' }, { label: 'Open applications', value: open, tone: 'warn' }, { label: 'Guardians', value: s?.guardians || 0, tone: 'quiet' }]} />}>
       {!period && can('structure.manage') && <Notice tone="warn">Set the current academic year and terms in <Link className="underline" to={`${basePath}/settings`}>Settings</Link> to start enrolling students.</Notice>}
       {items.length > 0 && <div className="mb-4"><AttentionNote items={items.map((i) => ({ id: i.id, title: i.title, detail: i.detail, to: i.to }))} /></div>}
       <div className="mb-4"><InfoCard tone="soft" title="Students by class">

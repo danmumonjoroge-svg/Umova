@@ -7,6 +7,7 @@ import { supabase } from "../../supabaseClient";
 import {
   APPROVER_ROLES, MORE_KEYS, adminPath, hubPath, moduleByKey, visibleNav,
 } from "./adminNav";
+import useElimuOwner from "./useElimuOwner";
 import "./umova-theme.css";
 
 // Pending counts shown as small badges on cards (approvers only, real data).
@@ -26,6 +27,10 @@ function usePendingBadges(isApprover) {
           .from("pos_registration_requests").select("id", { count: "exact", head: true }).eq("status", "pending");
         if (count) out["pos-requests"] = count;
       } catch (e) { /* no badge */ }
+      try {
+        const { data, error } = await supabase.rpc("elimu_owner_unread");
+        if (!error && Number(data) > 0) out["elimu/support"] = Number(data);
+      } catch (e) { /* not an Elimu owner: no badge */ }
       if (out["pos-tenants"] || out["pos-requests"]) out["pos-admin"] = (out["pos-tenants"] || 0) + (out["pos-requests"] || 0);
       if (alive) setB(out);
     })();
@@ -45,7 +50,8 @@ export default function AdminHub() {
   const { module } = useParams();
   const { role, logout } = useAuth();
   const isApprover = APPROVER_ROLES.includes(role);
-  const nav = useMemo(() => visibleNav(isApprover), [isApprover]);
+  const elimuOwner = useElimuOwner(isApprover);
+  const nav = useMemo(() => visibleNav(isApprover, elimuOwner), [isApprover, elimuOwner]);
   const badges = usePendingBadges(isApprover);
   const [q, setQ] = useState("");
   const [openKey, setOpenKey] = useState(null);
@@ -73,7 +79,7 @@ export default function AdminHub() {
               ? n.children.filter((c) => !s || `${n.label} ${c.label} ${c.desc}`.toLowerCase().includes(s))
               : null;
             const open = !!kids && (openKey === n.key || !!s);
-            const total = (n.children || []).reduce((a, c) => a + (badges[c.to.split("/")[0]] || 0), 0);
+            const total = (n.children || []).reduce((a, c) => a + (badges[c.to] || 0), 0);
 
             if (!n.children) {
               return (

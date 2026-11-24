@@ -1,7 +1,7 @@
 // Elimu's own sign-in: school code + username + password. Uses the shared login underneath; shows no POS wording.
 import React, { useState } from 'react';
-import { GraduationCap, Loader2 } from 'lucide-react';
-import { usePOSAuth } from '../services/platform.js';
+import { GraduationCap, Loader2, Fingerprint } from 'lucide-react';
+import { usePOSAuth, posPasskeys } from '../services/platform.js';
 import { ELIMU_DEMO_CODE, ELIMU_DEMO_USERNAME, ELIMU_DEMO_PASSWORD } from './demo.js';
 
 const REASONS = {
@@ -12,6 +12,8 @@ const REASONS = {
   STAFF_DISABLED: 'This staff account has been disabled.',
   INVALID_CREDENTIALS: 'Incorrect username or password.',
 };
+/** The gate logs the sign-in once the session exists; this tells it how the person got in. */
+const rememberMethod = (m) => { try { sessionStorage.setItem('elimu-signin-method', m); } catch { /* private mode: it logs as password */ } };
 const field = 'w-full h-12 px-4 rounded-2xl border border-[#D9D2B4] bg-white text-[16px] outline-none focus:border-[#12261F] focus:ring-4 focus:ring-[#C9A227]/25';
 
 export function AuthShell({ title, sub, children }) {
@@ -30,18 +32,26 @@ export function AuthShell({ title, sub, children }) {
 }
 
 export default function ElimuLogin({ onGoToRegister, logoutNotice }) {
-  const { login } = usePOSAuth();
+  const { login, loginWithPasskey } = usePOSAuth();
   const [code, setCode] = useState(''); const [user, setUser] = useState(''); const [pass, setPass] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
 
   const run = async (c, u, p) => {
-    setBusy(true); setError('');
+    setBusy(true); setError(''); rememberMethod('PASSWORD');
     const r = await login(c, u, p);
     if (!r.ok) setError(REASONS[r.reason] || r.detail || 'Something went wrong signing in. Try again.');
     setBusy(false);
   };
+  const canPrint = (() => { try { return !!posPasskeys?.supported?.(); } catch { return false; } })();
+  const finger = async () => {
+    setBusy(true); setError(''); rememberMethod('FINGERPRINT');
+    const r = await loginWithPasskey?.();
+    if (r && !r.ok && r.reason === 'NO_PASSKEY') setError('No fingerprint is set up on this device yet. Sign in with your password once, then open Settings → My sign-in to turn it on.');
+    else if (r && !r.ok && r.reason === 'PASSKEY_ERROR') setError(r.detail || 'Fingerprint sign-in failed. Use your password instead.');
+    setBusy(false);
+  };
   const submit = (e) => { e.preventDefault(); if (!code.trim() || !user.trim() || !pass) return setError('Enter your school code, username and password.'); run(code.trim(), user.trim(), pass); };
-  const demo = async () => { setBusy(true); setError(''); const r = await login(ELIMU_DEMO_CODE, ELIMU_DEMO_USERNAME, ELIMU_DEMO_PASSWORD);
+  const demo = async () => { setBusy(true); setError(''); rememberMethod('DEMO'); const r = await login(ELIMU_DEMO_CODE, ELIMU_DEMO_USERNAME, ELIMU_DEMO_PASSWORD);
     if (!r.ok) setError(r.reason === 'BUSINESS_NOT_FOUND' ? "The demo school isn't set up on this server yet." : REASONS[r.reason] || r.detail || 'Could not open the demo.'); setBusy(false); };
 
   return (
@@ -56,7 +66,9 @@ export default function ElimuLogin({ onGoToRegister, logoutNotice }) {
           {busy && <Loader2 className="animate-spin" size={16} />}{busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+      {canPrint && <button type="button" onClick={finger} disabled={busy} className="w-full mt-3 h-12 rounded-2xl border border-[#12261F]/30 bg-white text-[#12261F] font-semibold flex items-center justify-center gap-2 disabled:opacity-60"><Fingerprint size={18} />Sign in with fingerprint</button>}
       <button type="button" onClick={demo} disabled={busy} className="w-full mt-3 h-12 rounded-2xl border border-[#C9A227] bg-[#C9A227]/15 text-[#6B5510] font-semibold disabled:opacity-60">Try the demo school</button>
+      <a href="/parent" className="block text-center mt-4 text-sm font-semibold text-[#1F6B45] underline" data-testid="parent-link">Are you a parent? Open the parent portal</a>
       <p className="text-center text-xs text-[#5A6B5E] mt-5">New school? <button type="button" onClick={onGoToRegister} className="font-semibold text-[#8A6D0B] underline">Register here</button></p>
     </AuthShell>
   );

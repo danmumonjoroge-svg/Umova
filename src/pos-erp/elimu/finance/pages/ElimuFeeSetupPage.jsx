@@ -2,7 +2,8 @@
 // Nothing is hard-coded: every fee, class and period comes from the school's own configuration tables.
 import React, { useCallback, useEffect, useState } from 'react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
-import { FitPage, LoadingBlock, EmptyBlock, Notice, DataCard, Pill, inputCls, saveBtnCls, formCard } from '../../../components/CardKit';
+import { FitPage, LoadingBlock, EmptyBlock, Notice, Pill, inputCls, saveBtnCls, formCard } from '../../../components/CardKit';
+import { FeeSheet } from '../../ui/cards';
 import { toCents, toDecimalString, fromDb, formatMoney, MoneyError } from '../utils/money';
 
 const CATS = ['TUITION', 'ADMISSION', 'ACTIVITY', 'TRANSPORT', 'BOARDING', 'MEALS', 'EXAMINATION', 'DEVELOPMENT', 'MEDICAL', 'UNIFORM', 'BOOKS', 'OTHER'];
@@ -61,8 +62,8 @@ export default function ElimuFeeSetupPage() {
           {d.items.filter(i => i.is_active).map(i => (<div key={i.id} className="flex items-center gap-2 mb-1"><span className="text-sm flex-1">{i.name}</span><input className={inputCls} style={{ maxWidth: 130 }} inputMode="decimal" placeholder={String(i.default_amount)} value={struct.lines[i.id] ?? ''} onChange={e => setStruct({ ...struct, lines: { ...struct.lines, [i.id]: e.target.value } })} /></div>))}
           <button className={saveBtnCls} disabled={!struct.name.trim() || !struct.period_id} onClick={saveStruct}>Save structure</button></div></>}
       <h3 className="font-semibold mt-2">Fee structures</h3>
-      {d.structures.length === 0 ? <EmptyBlock>No fee structures yet.</EmptyBlock> : d.structures.map(s => (<DataCard key={s.structure_id} title={s.name} subtitle={`${s.academic_year} ${s.term || ''} - ${s.class || 'all classes'}`} pill={<Pill>{s.status.toLowerCase()}</Pill>} big={formatMoney(fromDb(s.total))}
-        metrics={s.items.map(i => ({ label: i.item, value: formatMoney(fromDb(i.amount)) }))} />))}
+      {d.structures.length === 0 ? <EmptyBlock>No fee structures yet.</EmptyBlock> : d.structures.map(s => (<FeeSheet key={s.structure_id} title={s.name} sub={`${s.academic_year} ${s.term || ''} - ${s.class || 'all classes'}`} status={s.status.toLowerCase()} totalText={formatMoney(fromDb(s.total))}
+        items={s.items.map(i => ({ label: i.item, value: formatMoney(fromDb(i.amount)) }))} />))}
       {biller && (<div className={formCard}><div className="font-semibold mb-1">Bill a class</div>
         <select className={inputCls + ' mb-1'} value={bill.period_id} onChange={e => { setPrev(null); setBill({ ...bill, period_id: e.target.value }); }}><option value="">Choose period</option>{d.periods.map(p => <option key={p.id} value={p.id}>{p.academic_year} {p.term || ''}</option>)}</select>
         <select className={inputCls + ' mb-1'} value={bill.class_id} onChange={e => { setPrev(null); setBill({ ...bill, class_id: e.target.value }); }}><option value="">All classes</option>{d.classes.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>

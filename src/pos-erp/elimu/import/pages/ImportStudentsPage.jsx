@@ -55,7 +55,7 @@ export default function ImportStudentsPage({ basePath = '/elimu' }) {
         {done && (<Notice tone="good">Saved {done.imported} student{done.imported === 1 ? '' : 's'}.{done.failed > 0 ? ` ${done.failed} could not be saved at the last moment; see the import log.` : ''}{done.skipped_with_errors > 0 ? ` ${done.skipped_with_errors} row${done.skipped_with_errors === 1 ? '' : 's'} with errors were left out.` : ''} <Link className="underline" to={`${basePath}/students`}>Open students</Link> · <Link className="underline" to={`${basePath}/import/log`}>Import log</Link></Notice>)}
 
         {!batch && (<>
-          <div className="rounded-2xl border border-[#E3DBB8] bg-white p-3 space-y-3">
+          <div className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 space-y-3">
             <div className="text-sm font-semibold">1. Choose the year and the file</div>
             {years.loading && !years.data ? <LoadingBlock /> : (
               <label className="block text-xs text-[#6F7461]">Academic year the students are in now
@@ -69,7 +69,7 @@ export default function ImportStudentsPage({ basePath = '/elimu' }) {
 
           {busy && !table && <LoadingBlock />}
           {table && (
-            <div className="rounded-2xl border border-[#E3DBB8] bg-white p-3 space-y-3">
+            <div className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 space-y-3">
               <div className="text-sm font-semibold">2. Match the columns <span className="font-normal text-[#6F7461]">({fileName}: {table.rows.length} rows)</span></div>
               <div className="grid sm:grid-cols-2 gap-2">
                 {FIELDS.map((f) => (

@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useElimuFinance } from '../hooks/useElimuFinance';
+import { DocCard } from '../../ui/cards/index.js';
 import { FitPage, LoadingBlock, EmptyBlock, Notice, DataCard, inputCls } from '../../../components/CardKit';
 import Sheet from '../../components/AppSheet.jsx';
 import { fromDb, formatMoney, toCents, MoneyError } from '../utils/money';
@@ -73,7 +74,7 @@ export default function ElimuBudgetsPage() {
     <FitPage title="Budgets" subtitle="Plan, then compare with what was spent" action={(can('expense') || can('configure')) ? <button type="button" onClick={() => setAdd(true)} className="h-10 px-3 rounded-xl bg-[#12261F] text-white text-sm font-semibold flex items-center gap-1.5"><Plus size={16} />New</button> : null}>
       {err && <Notice tone="bad">{err}</Notice>}
       {rows === null ? <LoadingBlock /> : !rows.length ? <EmptyBlock>No budgets yet.</EmptyBlock> : rows.map((b) => (
-        <button key={b.id} type="button" onClick={() => setOpen(b)} className="block w-full text-left"><DataCard title={b.name} subtitle={`${b.academic_year} · ${b.status === 'DRAFT' ? 'Draft' : b.status === 'APPROVED' ? 'Approved' : 'Closed'}`} /></button>))}
+        <DocCard key={b.id} tab={b.academic_year} title={b.name} status={{ label: b.status === 'DRAFT' ? 'Draft' : b.status === 'APPROVED' ? 'Approved' : 'Closed', tone: b.status === 'APPROVED' ? 'ok' : b.status === 'DRAFT' ? 'warn' : 'quiet' }} onClick={() => setOpen(b)} />))}
       {add && <EditSheet ctx={ctx} cats={cats} onClose={() => setAdd(false)} onDone={load} />}
       {open && <ReportSheet ctx={ctx} budget={open} cats={cats} onClose={() => setOpen(null)} onChanged={load} />}
     </FitPage>);

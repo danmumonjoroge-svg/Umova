@@ -8,6 +8,7 @@ import { useElimuAccess } from '../hooks/useElimu.js';
 import { Field } from '../components/ui.jsx';
 import { STAFF_ROLE_CHOICES } from '../utils/permissions.js';
 import { friendlyError } from '../utils/validation.js';
+import { StaffBadge } from '../ui/cards/index.js';
 
 const label = (k) => STAFF_ROLE_CHOICES.find((r) => r.key === k)?.label || k;
 
@@ -71,12 +72,8 @@ export default function ElimuStaffPage() {
   return (
     <FitPage title="Staff" action={<button type="button" onClick={() => setAdd(true)} className="h-10 px-3 rounded-xl bg-[#12261F] text-white text-sm font-semibold flex items-center gap-1.5"><UserPlus size={16} />Add</button>}>
       {list.error && <Notice tone="bad">{list.error}</Notice>}
-      <div className="space-y-2">{people.map((p) => (
-        <button key={p.id} type="button" onClick={() => setOpen(p.id)} className="w-full text-left rounded-2xl border border-[#E3DBB8] bg-white p-3 active:bg-[#F4EFD3]">
-          <div className="flex items-center justify-between gap-2"><b className="text-sm truncate">{p.name}{p.is_self ? ' (you)' : ''}</b>
-            <span className={`text-[11px] font-semibold ${p.status === 'active' ? 'text-emerald-700' : 'text-[#B3402A]'}`}>{p.status === 'active' ? 'Active' : 'Off'}</span></div>
-          <div className="text-xs text-[#6F7461] mt-0.5">{p.role === 'owner' ? 'Owner' : p.roles.length ? p.roles.map(label).join(', ') : 'No school role yet'}</div></button>))}
-        {!people.length && <p className="text-sm text-[#6F7461]">No staff yet.</p>}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-4">{people.map((p) => <StaffBadge key={p.id} name={p.name} you={p.is_self} owner={p.role === 'owner'} roles={(p.roles || []).map(label)} active={p.status === 'active'} onClick={() => setOpen(p.id)} />)}
+        {!people.length && <p className="col-span-full text-sm text-[#6F7461]">No staff yet.</p>}</div>
       {add && <AddSheet onClose={() => setAdd(false)} onDone={list.reload} />}
       {current && <PersonSheet p={current} onClose={() => setOpen(null)} onChanged={list.reload} />}
     </FitPage>);

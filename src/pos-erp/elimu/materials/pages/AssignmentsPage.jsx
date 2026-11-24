@@ -78,7 +78,7 @@ export default function AssignmentsPage() {
         {sc.data && scopes.length === 0 && <Notice tone="warn">You can set work once the school allocates you a subject in a class.</Notice>}
         {list.loading ? <LoadingBlock /> : rows.length === 0 ? <EmptyBlock title="No assignments yet" /> : (
           <ul className="space-y-2">{rows.map((a) => (
-            <li key={a.id} className="rounded-2xl border border-[#E3DBB8] bg-white p-3 text-sm">
+            <li key={a.id} className="rounded-[18px] border border-[#E3DBB8] bg-white shadow-[0_1px_2px_rgba(18,38,31,.06),0_6px_14px_-8px_rgba(18,38,31,.18)] p-3 text-sm">
               <div className="flex justify-between gap-2"><b>{a.title}</b><span className="text-xs text-[#6F7461]">{a.status === 'CLOSED' ? 'Closed' : `Due ${when(a.due_at)}`}</span></div>
               <div className="text-xs text-[#6F7461]">{a.class_name}{a.stream_name ? ` ${a.stream_name}` : ''} · {a.subject_name}</div>
               <div className="text-xs mt-1">{a.submitted} of {a.roster} handed in{a.late ? ` (${a.late} late)` : ''} · {a.marked} marked</div>
