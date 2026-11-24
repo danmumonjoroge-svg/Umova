@@ -5,7 +5,7 @@
 // Hidden entries never remove a route: a bookmark still works; the database decides access.
 import React, { Suspense, useContext } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, CalendarCheck, Wallet, LayoutGrid, GraduationCap, ClipboardList, Layers, UserRound, MessageSquare, CalendarDays, BarChart3, Settings, Clock, DoorOpen, ScanLine, UserCog, Building2, ShieldCheck } from 'lucide-react';
+import { Home, Users, CalendarCheck, Wallet, LayoutGrid, GraduationCap, ClipboardList, Layers, UserRound, MessageSquare, CalendarDays, BarChart3, Settings, Clock, DoorOpen, ScanLine, UserCog, Building2, ShieldCheck, Briefcase, FileText, Trophy } from 'lucide-react';
 import { SCHOOL_TREE } from '../navigation/schoolTree.js';
 import { bottomTabs, moduleOfPath } from '../navigation/bottomBar.js';
 import { NAV_ITEMS } from '../utils/permissions.js';
@@ -18,7 +18,7 @@ import { ElimuShellContext } from '../theme/useElimuTheme.jsx';
 import LicenceGate from './LicenceGate.jsx';
 
 const ICONS = { dashboard: Home, students: Users, admissions: ClipboardList, classes: Layers, guardians: UserRound, academics: GraduationCap, attendance: CalendarCheck,
-  timetable: Clock, rooms: DoorOpen, gate: ScanLine, fees: Wallet, communication: MessageSquare, calendar: CalendarDays, reports: BarChart3, settings: Settings, staff: UserCog };
+  timetable: Clock, teachers: Briefcase, 'my-report': FileText, activities: Trophy, rooms: DoorOpen, gate: ScanLine, fees: Wallet, communication: MessageSquare, calendar: CalendarDays, reports: BarChart3, settings: Settings, staff: UserCog };
 const MODULE_ICONS = { Building2, ClipboardList, GraduationCap, ShieldCheck, Wallet, Users, Settings };   // icon names used by the menu tree
 const PRIMARY = ['dashboard', 'students', 'attendance', 'fees'];       // tablet pills and the desktop side list keep these first; the PHONE bar uses the major modules below
 

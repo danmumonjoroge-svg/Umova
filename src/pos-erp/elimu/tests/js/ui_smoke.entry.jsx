@@ -466,6 +466,12 @@ results.push(['parent home: hero, tiles, skeleton, summary helpers', (() => {
       t('a long report flows onto more pages', /\/Count [2-9]/.test(Array.from(buildPdf(Array.from({ length: 130 }, (_, i) => ({ t: `line ${i}` }))), (b) => String.fromCharCode(b)).join('')));
       t('teacher list CSV has one row per teacher', listCsv({ teachers: [{ name: 'A', class_teacher_of: ['Grade 5'], subjects: 2, learners: 40, lessons_per_week: 8, mean: 60, change: -1, activities: 1, leads: 1 }] }).split('\r\n').filter(Boolean).length === 2);
       if (process.env.PDF_OUT) process.getBuiltinModule('node:fs').writeFileSync(process.env.PDF_OUT, pdf); }
+    { const sidebar = (access) => renderToString(<MemoryRouter initialEntries={['/school']}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={access} />} /></Routes></MemoryRouter>);
+      const own = sidebar({ can: () => true, loaded: true, isOwner: true, roles: [] });
+      t('the laptop sidebar lists Teachers, My report and Games & clubs for the owner', /aria-label="School sections"/.test(own) && /Teachers<\/a>/.test(own.split('aria-label="School sections"')[1] || '') && /My report/.test(own) && /Games &amp; clubs/.test(own));
+      const none = sidebar({ can: (a) => a === 'students.view', loaded: true, isOwner: false, roles: [] });
+      t('a person with no academic role does not get those sidebar links', !/My report/.test(none) && !/Games &amp; clubs/.test(none) && !/>Teachers</.test(none));
+    }
     t('teacher pages are routed', ['/school/teachers', '/school/my-report', '/school/activities'].every((u) => renderToString(<MemoryRouter initialEntries={[u]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>).length > 0));
   }
 }

@@ -11,7 +11,8 @@ const SORTS = { name: 'Name', mean: 'Best average', load: 'Heaviest load' };
 
 export default function TeachersPage({ basePath = '/school' }) {
   const [term, setTerm] = useState(''); const [sort, setSort] = useState('name'); const [q, setQ] = useState('');
-  const r = useAsync(() => teacherService.list(term), [term]);
+  const r = useAsync(() => teacherService.list(term), [term]); const [dlErr, setDlErr] = useState('');
+  const run = async (fn) => { setDlErr(''); try { await fn(); } catch { setDlErr('We could not save the file. Please try again.'); } };
   const d = r.data; const rows = useMemo(() => {
     const list = (d?.teachers || []).filter((t) => !q || t.name.toLowerCase().includes(q.toLowerCase()));
     const by = { name: (a, b) => a.name.localeCompare(b.name), mean: (a, b) => (b.mean ?? -1) - (a.mean ?? -1), load: (a, b) => b.lessons_per_week - a.lessons_per_week || b.learners - a.learners };
@@ -20,6 +21,7 @@ export default function TeachersPage({ basePath = '/school' }) {
   return (
     <FitPage title="Teachers" icon={Users} subtitle="Classes, results, activities and pay for each teacher">
       {r.error && !d && <Notice tone="bad">{r.error}</Notice>}
+      {dlErr && <Notice tone="bad">{dlErr}</Notice>}
       {r.loading && !d && <LoadingBlock />}
       {d && (<div className="space-y-3">
         <div className="flex flex-wrap gap-2 items-center">
@@ -27,7 +29,7 @@ export default function TeachersPage({ basePath = '/school' }) {
           <input aria-label="Find a teacher" className={`${fieldClass} !w-auto flex-1 min-w-[140px]`} placeholder="Find a teacher" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <div className="flex flex-wrap gap-1.5">{Object.entries(SORTS).map(([k, l]) => <button key={k} type="button" onClick={() => setSort(k)} aria-pressed={sort === k} className="min-h-[36px] px-3 rounded-full text-xs font-semibold" style={{ background: sort === k ? V.primary : V.soft, color: sort === k ? '#fff' : V.text }}>{l}</button>)}</div>
-        <div className="flex flex-wrap items-center gap-1.5"><button type="button" className="min-h-[36px] px-3 rounded-full text-xs font-semibold border bg-white" style={{ borderColor: V.border }} onClick={() => download(`teachers-${(d.term?.name || 'term').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.csv`, listCsv({ ...d, teachers: rows }), 'text/csv;charset=utf-8')}>Download CSV</button><StatPill label="teachers" value={rows.length} /><StatPill label="lead an activity" value={rows.filter((t) => t.leads > 0).length} /></div>
+        <div className="flex flex-wrap items-center gap-1.5"><button type="button" className="min-h-[36px] px-3 rounded-full text-xs font-semibold border bg-white" style={{ borderColor: V.border }} onClick={() => run(() => download(`teachers-${(d.term?.name || 'term').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.csv`, listCsv({ ...d, teachers: rows }), 'text/csv;charset=utf-8'))}>Download CSV</button><StatPill label="teachers" value={rows.length} /><StatPill label="lead an activity" value={rows.filter((t) => t.leads > 0).length} /></div>
         {rows.length === 0 ? <EmptyNote title="No teachers to show yet">Teachers appear here once they are given classes and subjects under Teacher allocations.</EmptyNote> : (
           <div className="space-y-3">{rows.map((t) => (
             <PersonCard key={t.id} name={t.name} to={`${basePath}/teachers/${t.id}`}

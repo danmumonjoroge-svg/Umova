@@ -7,11 +7,11 @@ import { useAsync } from '../../hooks/useAsync.js';
 import { friendlyError } from '../../utils/validation.js';
 import { C, HBars } from '../../dashboard/components/charts.jsx';
 import { Wash, InfoCard, StatPill, EmptyNote, V } from '../../ui/cards/index.js';
-import { reportCsv, reportPdfLines, buildPdf, download, fileSafe } from '../services/teacherExport.js';
+import { reportCsv, reportPdfLines, buildPdf, download, printReport, fileSafe } from '../services/teacherExport.js';
 import { teacherService, teacherNotes, groupName, pts, pctText, money, KIND_LABEL, ROLE_LABEL, LEVEL_LABEL } from '../services/teacherService.js';
 
 // Printing: only the report is drawn (whatever menus the app has around it are hidden), with the dark header kept dark.
-const PRINT_CSS = '.tr-printonly{display:none}@media print{.tr-printonly{display:block!important;font-size:20px;font-weight:800;margin-bottom:8px}body *{visibility:hidden}#teacher-report,#teacher-report *{visibility:visible}#teacher-report{position:absolute;left:0;top:0;width:100%}#teacher-report section,#teacher-report div{-webkit-print-color-adjust:exact;print-color-adjust:exact}#teacher-report .print\\:hidden{display:none!important}}';
+const PRINT_CSS = '.tr-printonly{display:none}@media print{.tr-printonly{display:block!important;font-size:20px;font-weight:800;margin-bottom:8px}body *{visibility:hidden}#teacher-report,#teacher-report *{visibility:visible}#teacher-report{position:absolute;left:0;top:0;width:100%}#teacher-report section,#teacher-report div{-webkit-print-color-adjust:exact;print-color-adjust:exact}#teacher-report .print\\:hidden,#teacher-report .tr-noprint{display:none!important}}';
 const day = (v) => new Date(v).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' });
 const btn = 'min-h-[40px] px-3.5 rounded-xl text-xs font-semibold border disabled:opacity-50';
 const toneColor = { bad: V.bad, ok: V.primary, info: V.muted };
@@ -52,6 +52,8 @@ function PayCard({ rep, onChanged }) {
 }
 
 export function ReportBody({ d, own, basePath, term, setTerm, reload }) {
+  const [busy, setBusy] = useState(false); const [note, setNote] = useState(null);
+  const run = async (kind, fn) => { setBusy(true); setNote(null); try { const how = await fn(); setNote(how === 'shared' ? { tone: 'ok', text: 'Choose where to save or send it from the sheet that opened. For printing, pick Print there.' } : how === 'downloaded' ? { tone: 'ok', text: 'The file was saved to your downloads.' } : null); } catch (e) { setNote({ tone: 'bad', text: `We could not ${kind === 'print' ? 'start printing' : 'save the file'}. Please try again. If it keeps failing, tell your administrator.` }); } setBusy(false); };
   const notes = teacherNotes(d); const base = `teacher-report-${fileSafe(d.teacher.name)}-${fileSafe(`${d.term.name}-${d.term.year}`)}`;
   return (
     <div id="teacher-report" className="space-y-3">
@@ -60,10 +62,11 @@ export function ReportBody({ d, own, basePath, term, setTerm, reload }) {
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           {!own && <Link to={`${basePath}/teachers`} className={btn} style={{ borderColor: V.border, background: '#fff', display: 'inline-flex', alignItems: 'center' }}>All teachers</Link>}
           <select aria-label="Term" className={`${fieldClass} !w-auto`} value={term || d.term.id} onChange={(e) => setTerm(e.target.value)}>{d.terms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-          <button type="button" className={btn} style={{ borderColor: V.border, background: '#fff' }} onClick={() => window.print()}><Printer size={14} className="inline mr-1" />Print</button>
-          <button type="button" className={btn} style={{ borderColor: V.border, background: '#fff' }} onClick={() => download(`${base}.csv`, reportCsv(d), 'text/csv;charset=utf-8')}><Table size={14} className="inline mr-1" />CSV</button>
-          <button type="button" className={btn} style={{ borderColor: V.border, background: '#fff' }} onClick={() => download(`${base}.pdf`, buildPdf(reportPdfLines(d)), 'application/pdf')}><FileText size={14} className="inline mr-1" />PDF</button>
+          <button type="button" disabled={busy} className={btn} style={{ borderColor: V.border, background: '#fff' }} onClick={() => run('print', () => printReport(`${base}.pdf`, buildPdf(reportPdfLines(d))))}><Printer size={14} className="inline mr-1" />Print</button>
+          <button type="button" disabled={busy} className={btn} style={{ borderColor: V.border, background: '#fff' }} onClick={() => run('csv', () => download(`${base}.csv`, reportCsv(d), 'text/csv;charset=utf-8'))}><Table size={14} className="inline mr-1" />CSV</button>
+          <button type="button" disabled={busy} className={btn} style={{ borderColor: V.border, background: '#fff' }} onClick={() => run('pdf', () => download(`${base}.pdf`, buildPdf(reportPdfLines(d)), 'application/pdf'))}><FileText size={14} className="inline mr-1" />PDF</button>
         </div>
+        {note && <div className="print:hidden tr-noprint"><Notice tone={note.tone}>{note.text}</Notice></div>}
         <section className="p-4 md:p-5" style={{ background: V.dark, color: V.onDark, borderRadius: '34px 34px 34px 10px' }}>
           <div className="text-xs opacity-80">{(d.teacher.roles || []).map((x) => x.replace('_', ' ')).join(' - ')}</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-2">
