@@ -3,7 +3,7 @@
 // one module open at a time, and a narrow icon-only mode for more room. Visibility only: the database decides access.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ChevronDown, Home, LayoutGrid, PanelLeftClose, PanelLeftOpen, Pin, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Home, LayoutGrid, PanelLeftClose, PanelLeftOpen, Pin, Search, X } from 'lucide-react';
 import { visibleChildren, leavesOf, soleLeaf, searchPages } from '../navigation/menuKit.js';
 import { moduleOfPath } from '../navigation/bottomBar.js';
 import { recordOpen, recentAmong } from '../navigation/recents.js';
@@ -40,15 +40,18 @@ export function pageIndex(tree, can, owner) {
   return idx;
 }
 
-const focusRing = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1F6B45]';
+/** Badge colours for sub-branch cards: only theme variables, so they follow whichever colour theme or mix is chosen. Neighbours never match. */
+const BADGES = ['var(--e-primary,#1F6B45)', 'var(--e-accent-deep,#8A6D0B)', 'var(--e-primary-deep,#1B5138)', 'var(--e-dark,#12261F)'];
+const focusRing = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--e-primary,#1F6B45)]';
 const base = 'relative flex items-center gap-3 min-h-[44px] rounded-xl text-sm font-medium transition-colors';
-const onCls = 'bg-[#E4F0E8] text-[#1F6B45] font-semibold'; const offCls = 'text-[#23382B] hover:bg-[#F4EFD3]';
+const onCls = 'bg-[var(--e-tint,#E4F0E8)] text-[var(--e-primary,#1F6B45)] font-semibold'; const offCls = 'text-[var(--e-text,#23382B)] hover:bg-[var(--e-soft,#F4EFD3)]';
 
 export default function SideTree({ tree, basePath, can, isOwner, loc, icons, showHome = true, collapsed = false, onToggle = () => {} }) {
   const nav = useNavigate();
   const rel = loc.pathname.replace(basePath, '').replace(/^\/+|\/+$/g, ''); const search = loc.search || ''; const here = moduleOfPath(tree, rel);
   const [openKey, setOpenKey] = useState(here || null);
   useEffect(() => { if (here) setOpenKey(here); }, [here]);
+  const [secOpen, setSecOpen] = useState({});   // sub-branches the person opened or closed by hand: { 'module/section': true|false }
   const [pins, setPins] = useState(() => readPins());
   const [q, setQ] = useState(''); const input = useRef(null); const wantFocus = useRef(false);
   const index = useMemo(() => pageIndex(tree, can, isOwner), [tree, can, isOwner]);
@@ -74,10 +77,10 @@ export default function SideTree({ tree, basePath, can, isOwner, loc, icons, sho
   const row = (p, on, keyPrefix = '', showWhere = false) => { const isPin = pins.includes(p.key); return (
     <div key={keyPrefix + p.key} className="group relative flex items-center">
       <NavLink to={`${basePath}/${p.to}`} onClick={() => go(p)} aria-current={on ? 'page' : undefined} className={`flex-1 min-w-0 flex flex-col justify-center px-2 pr-8 min-h-[38px] rounded-lg text-[13px] ${focusRing} ${on ? onCls : offCls}`}>
-        <span className="truncate">{p.label}</span>{showWhere && <span className="truncate text-[11px] font-normal text-[#6F7461]">{p.modLabel}</span>}
+        <span className={showWhere ? 'truncate' : 'leading-snug py-1'}>{p.label}</span>{showWhere && <span className="truncate text-[11px] font-normal text-[var(--e-muted,#6F7461)]">{p.modLabel}</span>}
       </NavLink>
       <button type="button" onClick={(e) => pin(e, p.key)} aria-pressed={isPin} aria-label={isPin ? `Unpin ${p.label}` : `Pin ${p.label} to the top`} title={isPin ? 'Unpin' : 'Pin to the top'}
-        className={`absolute right-1 h-7 w-7 flex items-center justify-center rounded-md ${focusRing} ${isPin ? 'text-[#1F6B45]' : 'text-[#6F7461] opacity-0 group-hover:opacity-100 focus:opacity-100'}`}><Pin size={14} fill={isPin ? 'currentColor' : 'none'} /></button>
+        className={`absolute right-1 h-7 w-7 flex items-center justify-center rounded-md ${focusRing} ${isPin ? 'text-[var(--e-primary,#1F6B45)]' : 'text-[var(--e-muted,#6F7461)] opacity-0 group-hover:opacity-100 focus:opacity-100'}`}><Pin size={14} fill={isPin ? 'currentColor' : 'none'} /></button>
     </div>); };
 
   const mods = visibleChildren(tree, can, isOwner);
@@ -100,26 +103,26 @@ export default function SideTree({ tree, basePath, can, isOwner, loc, icons, sho
     <>
       <div className="sticky top-0 z-10 -mt-1 pb-2 bg-white">
         <div className="relative">
-          <Search size={15} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6F7461]" />
+          <Search size={15} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--e-muted,#6F7461)]" />
           <input ref={input} type="text" role="searchbox" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Find a page" placeholder="Find a page"
             onKeyDown={(e) => { if (e.key === 'Escape') { setQ(''); e.currentTarget.blur(); } else if (e.key === 'Enter' && hits[0]) { recordOpen(hits[0].key); nav(`${basePath}/${hits[0].to}`); setQ(''); e.currentTarget.blur(); } }}
-            className={`w-full min-h-[40px] pl-9 pr-9 rounded-xl border border-[#E3DBB8] bg-[#FBF8EA] text-[13px] placeholder:text-[#6F7461] ${focusRing}`} />
-          {q ? <button type="button" onClick={() => { setQ(''); input.current?.focus(); }} aria-label="Clear search" className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 flex items-center justify-center rounded-md text-[#6F7461] ${focusRing}`}><X size={14} /></button>
-            : <kbd aria-hidden="true" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] px-1.5 rounded border border-[#E3DBB8] text-[#6F7461] bg-white">/</kbd>}
+            className={`w-full min-h-[40px] pl-9 pr-9 rounded-xl border border-[var(--e-border,#E3DBB8)] bg-[var(--e-bg,#FBF8EA)] text-[13px] placeholder:text-[var(--e-muted,#6F7461)] ${focusRing}`} />
+          {q ? <button type="button" onClick={() => { setQ(''); input.current?.focus(); }} aria-label="Clear search" className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 flex items-center justify-center rounded-md text-[var(--e-muted,#6F7461)] ${focusRing}`}><X size={14} /></button>
+            : <kbd aria-hidden="true" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] px-1.5 rounded border border-[var(--e-border,#E3DBB8)] text-[var(--e-muted,#6F7461)] bg-white">/</kbd>}
         </div>
       </div>
 
       {searching ? (
         <div role="region" aria-label="Search results" aria-live="polite">
-          {hits.length === 0 ? <p className="px-2 py-3 text-[13px] text-[#6F7461]">Nothing matches "{q.trim()}". Try a shorter word, like "fees" or "exam".</p>
+          {hits.length === 0 ? <p className="px-2 py-3 text-[13px] text-[var(--e-muted,#6F7461)]">Nothing matches "{q.trim()}". Try a shorter word, like "fees" or "exam".</p>
             : hits.map((h) => row({ ...h, modLabel: h.trail }, globalAct.has(h.to), 's-', true))}
         </div>
       ) : (<>
         {pinned.length > 0 && <section aria-label="Pinned pages" className="mb-2">
-          <div className="px-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-[#6F7461]">Pinned</div>
+          <div className="px-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-[var(--e-muted,#6F7461)]">Pinned</div>
           {pinned.map((p) => row(p, globalAct.has(p.to), 'p-', true))}</section>}
         {recent.length > 0 && <section aria-label="Opened recently" className="mb-2">
-          <div className="px-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-[#6F7461]">Recent</div>
+          <div className="px-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-[var(--e-muted,#6F7461)]">Recent</div>
           {recent.map((p) => row(p, globalAct.has(p.to), 'r-', true))}</section>}
 
         {showHome && <NavLink to={basePath} end className={({ isActive }) => `${base} pl-3 pr-3 mb-0.5 ${focusRing} ${isActive ? onCls : offCls}`}>{({ isActive }) => (<>{mark(isActive)}{icon(Home, isActive)}Dashboard</>)}</NavLink>}
@@ -130,20 +133,31 @@ export default function SideTree({ tree, basePath, can, isOwner, loc, icons, sho
           const secs = moduleSections(m, can, isOwner); if (!secs.length) return null; const isOpen = openKey === m.key; const act = isOpen ? activePages(secs, rel, search) : new Set(); const n = secs.reduce((t, s) => t + s.pages.length, 0);
           return (
             <div key={m.key} className="mb-0.5">
-              <button type="button" aria-expanded={isOpen} onClick={() => setOpenKey(isOpen ? null : m.key)} className={`${base} w-full text-left pl-3 pr-3 ${focusRing} ${isHere ? 'text-[#1F6B45] font-semibold hover:bg-[#F4EFD3]' : offCls}`}>
+              <button type="button" aria-expanded={isOpen} onClick={() => setOpenKey(isOpen ? null : m.key)} className={`${base} w-full text-left pl-3 pr-3 ${focusRing} ${isHere ? 'text-[var(--e-primary,#1F6B45)] font-semibold hover:bg-[var(--e-soft,#F4EFD3)]' : offCls}`}>
                 {mark(isHere && !isOpen)}{icon(I, isHere)}<span className="flex-1">{m.label}</span>
-                {!isOpen && <span aria-hidden="true" className="text-[11px] font-medium text-[#6F7461] tabular-nums">{n}</span>}
+                {!isOpen && <span aria-hidden="true" className="text-[11px] font-medium text-[var(--e-muted,#6F7461)] tabular-nums">{n}</span>}
                 <ChevronDown size={15} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" /></button>
-              {isOpen && <div className="ml-6 pl-3 border-l border-[#E3DBB8] mb-1">
-                {secs.map((s) => (<div key={s.key}>
-                  {s.label && <div className="px-2 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-[#6F7461]">{s.label}</div>}
-                  {s.pages.map((p) => row(p, act.has(p.to)))}
-                </div>))}
+              {isOpen && <div className="ml-1 mt-1 mb-1.5 min-w-0">
+                {secs.map((s, si) => {
+                  if (!s.label) return <div key={s.key} className="mb-1">{s.pages.map((p) => row(p, act.has(p.to)))}</div>;
+                  const id = `${m.key}/${s.key}`; const holdsHere = s.pages.some((p) => act.has(p.to));
+                  const open = secOpen[id] !== undefined ? secOpen[id] : (holdsHere || secs.filter((x) => x.label).length <= 1);
+                  const badge = BADGES[si % BADGES.length];
+                  return (<div key={s.key} className="mb-1.5 rounded-2xl overflow-hidden" style={{ background: '#fff', border: `1px solid ${open || holdsHere ? badge : 'var(--e-border,#E3DBB8)'}`, boxShadow: open ? '0 2px 8px rgba(0,0,0,.08)' : 'none' }}>
+                    <button type="button" aria-expanded={open} onClick={() => setSecOpen((o) => ({ ...o, [id]: !open }))}
+                      className={`w-full flex items-center gap-2.5 min-h-[44px] px-2.5 text-left text-[13px] font-bold hover:bg-[var(--e-soft,#F4EFD3)] ${focusRing}`} style={{ color: 'var(--e-dark,#12261F)' }}>
+                      <span aria-hidden="true" className="h-6 w-6 shrink-0 rounded-lg flex items-center justify-center text-[11px] font-extrabold" style={{ background: badge, color: '#fff' }}>{s.label.charAt(0).toUpperCase()}</span>
+                      <span className="flex-1 min-w-0 leading-snug break-words">{s.label}</span>
+                      <span aria-hidden="true" className="shrink-0 text-[11px] font-semibold rounded-full px-2" style={{ background: 'var(--e-tint,#E4F0E8)', color: 'var(--e-muted,#6F7461)' }}>{s.pages.length}</span>
+                      <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} style={{ color: 'var(--e-muted,#6F7461)' }} /></button>
+                    {open && <div className="pl-2 pr-1.5 pb-2 ml-[18px] mr-1 border-l-2" style={{ borderColor: badge }}>{s.pages.map((p) => row(p, act.has(p.to)))}</div>}
+                  </div>);
+                })}
               </div>}
             </div>);
         })}
         <NavLink to={`${basePath}/menu`} className={({ isActive }) => `${base} px-3 mt-1 ${focusRing} ${isActive ? onCls : offCls}`}>{icon(LayoutGrid)}All menu</NavLink>
-        <div className="mt-auto pt-3"><button type="button" onClick={onToggle} className={`${base} w-full px-3 text-[13px] text-[#6F7461] hover:bg-[#F4EFD3] ${focusRing}`}>{icon(PanelLeftClose)}Make narrower</button></div>
+        <div className="mt-auto pt-3"><button type="button" onClick={onToggle} className={`${base} w-full px-3 text-[13px] text-[var(--e-muted,#6F7461)] hover:bg-[var(--e-soft,#F4EFD3)] ${focusRing}`}>{icon(PanelLeftClose)}Make narrower</button></div>
       </>)}
     </>);
 }

@@ -498,7 +498,11 @@ results.push(['parent home: hero, tiles, skeleton, summary helpers', (() => {
         const rail = renderToString(<MemoryRouter><SideTree tree={SCHOOL_TREE} basePath="/school" can={() => true} isOwner loc={{ pathname: '/school/teachers', search: '' }} icons={{}} collapsed onToggle={() => {}} /></MemoryRouter>);
         t('the narrow sidebar shows icons with names for screen readers and no visible labels', /aria-label="Academics"/.test(rail) && /aria-label="Widen the sidebar"/.test(rail) && !/>Academics</.test(rail));
         const wide = renderToString(<MemoryRouter><SideTree tree={SCHOOL_TREE} basePath="/school" can={() => true} isOwner loc={{ pathname: '/school/teachers', search: '' }} icons={{}} onToggle={() => {}} /></MemoryRouter>);
-        t('the full sidebar has the find box, the module list and a way to make it narrower', /aria-label="Find a page"/.test(wide) && /Make narrower/.test(wide) && /aria-expanded="true"/.test(wide) && (wide.match(/aria-expanded="true"/g) || []).length === 1);
+        t('the full sidebar has the find box, the module list and a way to make it narrower', /aria-label="Find a page"/.test(wide) && /Make narrower/.test(wide) && /aria-expanded="true"/.test(wide));
+        const adm = renderToString(<MemoryRouter><SideTree tree={SCHOOL_TREE} basePath="/school" can={() => true} isOwner loc={{ pathname: '/school/notices', search: '' }} icons={{}} onToggle={() => {}} /></MemoryRouter>);
+        const btns = adm.match(/<button[^>]*aria-expanded="(true|false)"[^>]*>/g) || [];
+        t('sub-branches (like Communication) are folder rows with a count, apart from the pages under them', /Communication/.test(adm) && btns.length >= 4 && btns.some((b) => /aria-expanded="false"/.test(b)) && btns.some((b) => /aria-expanded="true"/.test(b)));
+        t('the branch holding the current page is open and shows its pages', /Notices &amp; announcements|Notices/.test(adm) && /Messages to parents/.test(adm));
       }
     t('teacher pages are routed', ['/school/teachers', '/school/my-report', '/school/activities'].every((u) => renderToString(<MemoryRouter initialEntries={[u]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>).length > 0));
   }
