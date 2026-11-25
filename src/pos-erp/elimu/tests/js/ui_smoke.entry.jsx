@@ -68,6 +68,8 @@ import NotFound from '../../components/NotFound.jsx';
 import { licenceNotice } from '../../services/ElimuLicenceService.js';
 import ElimuManagementPage from '../../owner/ElimuManagementPage.jsx';
 import { ReportBody } from '../../teachers/pages/TeacherReportPage.jsx';
+import { visibleChildren } from '../../navigation/menuKit.js';
+import { moduleSections, activePages } from '../../components/SideTree.jsx';
 import { teacherNotes, groupName } from '../../teachers/services/teacherService.js';
 import { reportCsv, reportPdfLines, buildPdf, listCsv } from '../../teachers/services/teacherExport.js';
 
@@ -466,11 +468,22 @@ results.push(['parent home: hero, tiles, skeleton, summary helpers', (() => {
       t('a long report flows onto more pages', /\/Count [2-9]/.test(Array.from(buildPdf(Array.from({ length: 130 }, (_, i) => ({ t: `line ${i}` }))), (b) => String.fromCharCode(b)).join('')));
       t('teacher list CSV has one row per teacher', listCsv({ teachers: [{ name: 'A', class_teacher_of: ['Grade 5'], subjects: 2, learners: 40, lessons_per_week: 8, mean: 60, change: -1, activities: 1, leads: 1 }] }).split('\r\n').filter(Boolean).length === 2);
       if (process.env.PDF_OUT) process.getBuiltinModule('node:fs').writeFileSync(process.env.PDF_OUT, pdf); }
-    { const sidebar = (access) => renderToString(<MemoryRouter initialEntries={['/school']}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={access} />} /></Routes></MemoryRouter>);
-      const own = sidebar({ can: () => true, loaded: true, isOwner: true, roles: [] });
-      t('the laptop sidebar lists Teachers, My report and Games & clubs for the owner', /aria-label="School sections"/.test(own) && /Teachers<\/a>/.test(own.split('aria-label="School sections"')[1] || '') && /My report/.test(own) && /Games &amp; clubs/.test(own));
-      const none = sidebar({ can: (a) => a === 'students.view', loaded: true, isOwner: false, roles: [] });
-      t('a person with no academic role does not get those sidebar links', !/My report/.test(none) && !/Games &amp; clubs/.test(none) && !/>Teachers</.test(none));
+    { const sidebar = (url, access) => renderToString(<MemoryRouter initialEntries={[url]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={access} />} /></Routes></MemoryRouter>);
+      const all = { can: () => true, loaded: true, isOwner: true, roles: [] };
+      const side = (h) => (h.split('aria-label="School sections"')[1] || '').split('</nav>')[0];
+      const own = side(sidebar('/school/teachers', all));
+      t('the laptop sidebar opens the module you are in and lists Teacher reports, My report and Games, clubs & drama', /Teacher reports/.test(own) && /My report/.test(own) && /Games, clubs &amp; drama/.test(own) && /aria-expanded="true"/.test(own));
+      t('the laptop sidebar lists every major module as a heading', ['Administration', 'Registration', 'Academics', 'Security', 'Finance', 'Parents portal', 'Help', 'Settings'].every((m) => own.includes(m)));
+      const none = side(sidebar('/school', { can: (a) => a === 'students.view', loaded: true, isOwner: false, roles: [] }));
+      t('a person with no academic role does not get the teacher links', !/My report/.test(none) && !/Teacher reports/.test(none));
+      // completeness: every page a person can open from the phone menu is in the sidebar's list for its module
+      const miss = []; const mods = visibleChildren(SCHOOL_TREE, () => true, true);
+      mods.forEach((m) => { if (soleLeaf(m, () => true, true)) return; const want = new Set(leavesOf(m, () => true, true).map((x) => x.to)); const have = new Set(moduleSections(m, () => true, true).flatMap((x) => x.pages.map((y) => y.to))); want.forEach((to) => { if (!have.has(to)) miss.push(`${m.key}:${to}`); }); });
+      t('every page on the phone menu is in the laptop sidebar', miss.length === 0, miss.join(', '));
+      t('the same screen is listed once, not twice', (() => { const m = mods.find((x) => x.key === 'academics'); const tos = moduleSections(m, () => true, true).flatMap((x) => x.pages.map((y) => y.to)); return tos.length === new Set(tos).size; })());
+      const secs = moduleSections(mods.find((x) => x.key === 'security'), () => true, true);
+      t('on gate passes the right tab is highlighted', [...activePages(secs, 'gate-passes', '?tab=all')].join() === 'gate-passes?tab=all' && [...activePages(secs, 'gate-passes', '')].join() === 'gate-passes');
+      t('the longest route wins (Subjects, not Academics overview)', [...activePages(moduleSections(mods.find((x) => x.key === 'academics'), () => true, true), 'academics/subjects', '')].join() === 'academics/subjects');
     }
     t('teacher pages are routed', ['/school/teachers', '/school/my-report', '/school/activities'].every((u) => renderToString(<MemoryRouter initialEntries={[u]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>).length > 0));
   }

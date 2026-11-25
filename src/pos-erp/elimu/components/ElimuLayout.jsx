@@ -5,10 +5,11 @@
 // Hidden entries never remove a route: a bookmark still works; the database decides access.
 import React, { Suspense, useContext } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, CalendarCheck, Wallet, LayoutGrid, GraduationCap, ClipboardList, Layers, UserRound, MessageSquare, CalendarDays, BarChart3, Settings, Clock, DoorOpen, ScanLine, UserCog, Building2, ShieldCheck, Briefcase, FileText, Trophy } from 'lucide-react';
+import { Home, Users, CalendarCheck, Wallet, LayoutGrid, GraduationCap, ClipboardList, Layers, UserRound, MessageSquare, CalendarDays, BarChart3, Settings, Clock, DoorOpen, ScanLine, UserCog, Building2, ShieldCheck, Briefcase, FileText, Trophy, LifeBuoy } from 'lucide-react';
 import { SCHOOL_TREE } from '../navigation/schoolTree.js';
 import { bottomTabs, moduleOfPath } from '../navigation/bottomBar.js';
 import { NAV_ITEMS } from '../utils/permissions.js';
+import SideTree from './SideTree.jsx';
 import { useElimuAccess } from '../hooks/useElimu.js';
 import { OfflineBanner } from './ui.jsx';
 import { useOnline } from '../hooks/useAsync.js';
@@ -19,7 +20,7 @@ import LicenceGate from './LicenceGate.jsx';
 
 const ICONS = { dashboard: Home, students: Users, admissions: ClipboardList, classes: Layers, guardians: UserRound, academics: GraduationCap, attendance: CalendarCheck,
   timetable: Clock, teachers: Briefcase, 'my-report': FileText, activities: Trophy, rooms: DoorOpen, gate: ScanLine, fees: Wallet, communication: MessageSquare, calendar: CalendarDays, reports: BarChart3, settings: Settings, staff: UserCog };
-const MODULE_ICONS = { Building2, ClipboardList, GraduationCap, ShieldCheck, Wallet, Users, Settings };   // icon names used by the menu tree
+const MODULE_ICONS = { LifeBuoy, Building2, ClipboardList, GraduationCap, ShieldCheck, Wallet, Users, Settings };   // icon names used by the menu tree
 const PRIMARY = ['dashboard', 'students', 'attendance', 'fees'];       // tablet pills and the desktop side list keep these first; the PHONE bar uses the major modules below
 
 export default function ElimuLayout({ basePath = '/elimu' }) {
@@ -49,10 +50,7 @@ export default function ElimuLayout({ basePath = '/elimu' }) {
       <div className="flex-1 min-h-0 flex">
         {/* laptop / desktop: sidebar */}
         <nav aria-label="School sections" className="hidden lg:flex flex-col w-60 shrink-0 overflow-y-auto border-r border-[#E3DBB8] bg-white py-4 pl-3 pr-2">
-          {items.map((n) => { const Icon = ICONS[n.key] || Home; const on = isOn(n); return (
-            <NavLink key={n.key} to={href(n)} end={n.to === ''} aria-current={on ? 'page' : undefined} className={`relative flex items-center gap-3 pl-3 pr-3 min-h-[44px] mb-0.5 rounded-xl text-sm font-medium transition-colors ${on ? 'bg-[#E4F0E8] text-[#1F6B45] font-bold' : 'text-[#23382B] hover:bg-[#F4EFD3]'}`}>
-              {on && <span aria-hidden="true" className="absolute -left-2 top-2.5 bottom-2.5 w-1 rounded-r-full" style={{ background: 'var(--e-primary,#1F6B45)' }} />}
-              <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${on ? 'bg-white/70' : ''}`}><Icon size={17} strokeWidth={on ? 2.4 : 2} /></span>{n.label}</NavLink>); })}
+          <SideTree tree={SCHOOL_TREE} basePath={basePath} can={can} isOwner={isOwner} loc={loc} icons={MODULE_ICONS} showHome={items.some((n) => n.key === 'dashboard')} />
           <NavLink to={`${basePath}/menu`} className={({ isActive }) => `flex items-center gap-3 px-3 min-h-[42px] mt-1 rounded-xl text-sm font-medium ${isActive ? 'bg-[#E4F0E8] text-[#1F6B45] font-semibold' : 'text-[#23382B] hover:bg-[#F4EFD3]'}`}><LayoutGrid size={18} />All menu</NavLink>
         </nav>
 
