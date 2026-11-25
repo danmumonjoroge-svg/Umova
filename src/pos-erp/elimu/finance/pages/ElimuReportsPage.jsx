@@ -5,6 +5,7 @@ import { FitPage, Notice, LoadingBlock, TextBtn, inputCls, saveBtnCls, formCard 
 import { buildReportPdf, savePdf, reportFileName } from '../../../utils/reportPdf';
 import { collectionsReport, agingReport, feeSummaryReport, budgetReport, debtorsReport, reportToCsv } from '../reports/reportBuilders';
 import { fromDb, formatMoney } from '../utils/money';
+import { csvFile } from '../../utils/fileDownload.js';
 
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
 const monthStart = () => today().slice(0, 8) + '01';
@@ -30,7 +31,7 @@ export default function ElimuReportsPage() {
     credit: go(async () => { const l = await api.studentList(businessId, 'CREDIT', null, 200, 0); return { title: 'STUDENTS WITH CREDIT BALANCES', subtitle: 'Money the school holds for families - a liability, not income', sections: [{ heading: 'Students', columns: [{ key: 'a', label: 'Adm no', w: 1 }, { key: 'n', label: 'Student', w: 3 }, { key: 'b', label: 'Credit held', align: 'right', w: 2 }], rows: l.map(r => ({ a: r.admission_no, n: r.student_name, b: formatMoney(Math.abs(fromDb(r.balance))) })) }] }; }),
   };
   const pdf = () => savePdf(buildReportPdf(report, { business: ctx.school }), reportFileName(report), report.title);
-  const csv = () => { const b = new Blob([reportToCsv(report)], { type: 'text/csv;charset=utf-8' }); const u = URL.createObjectURL(b); Object.assign(document.createElement('a'), { href: u, download: `${reportFileName(report).replace(/\.pdf$/, '')}.csv` }).click(); URL.revokeObjectURL(u); };
+  const csv = () => { csvFile(`${reportFileName(report).replace(/\.pdf$/, '')}.csv`, reportToCsv(report)); };
 
   return (
     <FitPage title="Finance reports" subtitle="Figures come from confirmed records only">

@@ -3,7 +3,7 @@
 // Phone-first shell: fixed top app bar, ONE scrolling area, bottom tab bar (in ElimuLayout). Registers every Elimu module once.
 import React, { Suspense, useEffect } from 'react';
 import { Route, Navigate, useNavigate } from 'react-router-dom';
-import { GraduationCap, LogOut, Home as HomeIcon } from 'lucide-react';
+import { GraduationCap, LogOut, LayoutGrid, Home as HomeIcon } from 'lucide-react';
 import { POSAuthProvider, AppLock, supabase, usePosErpAuth } from './services/platform.js';
 import ElimuAuthGate from './auth/ElimuAuthGate.jsx';
 import { seedDemoSchoolIfEmpty } from './auth/demo.js';
@@ -55,8 +55,12 @@ function Shell() {
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#C9A227] text-[#12261F]"><GraduationCap size={20} /></span>
           <div className="min-w-0 flex-1 leading-tight"><div className="font-bold text-[15px]">Elimu</div><div className="text-[11.5px] text-white/70 truncate">{tenant?.business_name || staffName || ''}</div></div>
           <ThemeSwitcher tone="dark" />
-          <button type="button" onClick={() => nav('/')} aria-label="Umova home" className="h-10 w-10 flex items-center justify-center rounded-full active:bg-white/10"><HomeIcon size={19} /></button>
-          <button type="button" onClick={logout} aria-label="Sign out" className="h-10 w-10 flex items-center justify-center rounded-full active:bg-white/10"><LogOut size={19} /></button>
+          <nav aria-label="Account and apps" className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+            <button type="button" onClick={() => nav(`${ELIMU_BASE}/menu`)} title="All menu: every page in Elimu" className="hidden md:inline-flex items-center gap-2 h-10 px-3.5 rounded-full text-[13px] font-semibold bg-white/10 hover:bg-white/20 active:bg-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"><LayoutGrid size={17} aria-hidden="true" />All menu</button>
+            <button type="button" onClick={() => nav('/')} aria-label="Back to Umova home" title="Leave Elimu and go to the Umova home screen" className="inline-flex items-center gap-2 h-10 min-w-10 justify-center px-2.5 sm:px-3.5 rounded-full text-[13px] font-semibold bg-white/10 hover:bg-white/20 active:bg-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"><HomeIcon size={17} aria-hidden="true" /><span className="hidden sm:inline">Umova home</span></button>
+            <span aria-hidden="true" className="mx-0.5 h-6 w-px bg-white/25" />
+            <button type="button" onClick={logout} aria-label="Sign out" title="Sign out of Elimu" className="inline-flex items-center gap-2 h-10 min-w-10 justify-center px-2.5 sm:px-3.5 rounded-full text-[13px] font-semibold border border-[#FF9D8F]/60 text-[#FFD5CE] hover:bg-[#FF9D8F]/20 active:bg-[#FF9D8F]/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#FFD5CE]"><LogOut size={17} aria-hidden="true" /><span className="hidden sm:inline">Sign out</span></button>
+          </nav>
         </div>
       </header>
       <div className="flex-1 min-h-0">

@@ -9,6 +9,7 @@ import { toCents, fromDb, formatMoney } from '../utils/money';
 import { buildVars } from '../../communication/finance/financeComm';
 import MessageComposer from '../components/MessageComposer';
 import { AgeingBar, DebtorCard } from '../../ui/cards/index.js';
+import { csvFile } from '../../utils/fileDownload.js';
 
 const PAGE = 50;
 export default function ElimuDebtorsPage() {
@@ -29,7 +30,7 @@ export default function ElimuDebtorsPage() {
   if (!(can('report') || can('bill'))) return <FitPage title="Debtors"><Notice tone="gold">You do not have permission to view debtors.</Notice></FitPage>;
   const total = rows?.[0]?.total_count ? Number(rows[0].total_count) : 0;
   const exportPdf = () => { const r = debtorsReport(rows); savePdf(buildReportPdf(r, { business: ctx.school }), reportFileName(r), 'Fee debtors'); };
-  const exportCsv = () => { const b = new Blob([reportToCsv(debtorsReport(rows))], { type: 'text/csv;charset=utf-8' }); const u = URL.createObjectURL(b); Object.assign(document.createElement('a'), { href: u, download: 'fee-debtors.csv' }).click(); URL.revokeObjectURL(u); };
+  const exportCsv = () => { csvFile('fee-debtors.csv', reportToCsv(debtorsReport(rows))); };
 
   return (
     <FitPage title="Fee debtors" subtitle="Who owes, how much, and since when">

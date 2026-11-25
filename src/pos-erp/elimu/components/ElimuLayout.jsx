@@ -47,7 +47,6 @@ export default function ElimuLayout({ basePath = '/elimu' }) {
         {items.map((n) => (
           <NavLink key={n.key} to={href(n)} end={n.to === ''} className={({ isActive }) => `inline-flex items-center px-3 min-h-[40px] mr-1 rounded-full text-sm font-medium ${isActive ? 'bg-[#1F6B45] text-white' : 'text-[#23382B] hover:bg-[#EFE8C8]'}`}>{n.label}</NavLink>
         ))}
-        <NavLink to={`${basePath}/menu`} className={({ isActive }) => `inline-flex items-center px-3 min-h-[40px] mr-1 rounded-full text-sm font-medium ${isActive ? 'bg-[#1F6B45] text-white' : 'text-[#23382B] hover:bg-[#EFE8C8]'}`}>All menu</NavLink>
       </nav>
 
       <div className="flex-1 min-h-0 flex">

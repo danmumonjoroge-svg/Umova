@@ -8,6 +8,7 @@ import { setupService } from '../../services/ElimuSetupService.js';
 import { tripService, tripProblems, tripMoney, CONSENT_LABEL } from '../services/tripService.js';
 import { friendlyError } from '../../utils/validation.js';
 import { TripCard } from '../../ui/cards/index.js';
+import { csvFile } from '../../utils/fileDownload.js';
 
 const btnP = 'min-h-[44px] px-4 rounded-xl text-sm font-semibold bg-[#1F6B45] text-white disabled:opacity-50';
 const btnS = 'min-h-[40px] px-3 rounded-xl text-xs font-semibold border border-[#E3DBB8] bg-white text-[#23382B] disabled:opacity-50';
@@ -35,7 +36,7 @@ function Roster({ trip, canManage, onClose, onChanged }) {
   const rows = (r.data?.rows || []).filter((x) => !filter || x.consent === filter); const started = new Date(trip.trip_date) <= new Date(new Date().toDateString());
   const mark = async (x, v) => { try { await tripService.attended(trip.id, x.student_id, v); setTick((n) => n + 1); onChanged(); } catch (e) { setErr(friendlyError(e)); } };
   const csv = () => { const lines = [['Student', 'Admission no', 'Class', 'Consent', 'Went']].concat((r.data?.rows || []).map((x) => [x.student_name, x.admission_no, x.class_name, CONSENT_LABEL[x.consent], x.attended === true ? 'Yes' : x.attended === false ? 'No' : '']));
-    const blob = new Blob([lines.map((l) => l.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `trip-${trip.id.slice(0, 8)}.csv`; a.click(); };
+    csvFile(`trip-${trip.id.slice(0, 8)}.csv`, lines.map((l) => l.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')); };
   return (
     <Sheet title={trip.title} onClose={onClose}><div className="space-y-2">{err && <Notice tone="bad">{err}</Notice>}
       <div className="flex gap-1.5 flex-wrap">{[['', 'All'], ['YES', 'Agreed'], ['NO', 'Declined'], ['WAITING', 'No answer']].map(([k, l]) => <button key={k} type="button" onClick={() => setFilter(k)} className={`h-9 px-3 rounded-full text-xs font-semibold border ${filter === k ? 'bg-[#12261F] text-white' : 'bg-white border-[#E3DBB8]'}`}>{l}</button>)}<button type="button" className={btnS} onClick={csv}>Download CSV</button></div>

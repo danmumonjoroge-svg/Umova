@@ -1,8 +1,6 @@
 // elimu/teachers/services/teacherExport.js -- CSV and PDF of a teacher report, and CSV of the teacher list. No libraries: the PDF is written by hand
 // (plain text, A4, Helvetica) so it works on any phone and cannot fail on a missing dependency. Pure functions plus one small download helper.
-import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share';
+import { download, isNative } from '../../utils/fileDownload.js';
 import { groupName, KIND_LABEL, ROLE_LABEL, LEVEL_LABEL } from './teacherService.js';
 
 const n1 = (v) => (v == null ? '' : Number(v).toFixed(1));
@@ -74,25 +72,7 @@ export function buildPdf(lines) {
   return bytes;
 }
 
-const isNative = () => { try { return Capacitor.isNativePlatform(); } catch { return false; } };
-const toBytes = (data) => (typeof data === 'string' ? new TextEncoder().encode(data) : data);
-const toBase64 = (bytes) => { let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); };
-
-/**
- * Saves text or bytes as a file. In a browser it downloads. In the phone app (Android WebView) a browser-style download does nothing,
- * so the file is written to the app's cache and handed to the share sheet, which is where Save, Print, WhatsApp and Email live
- * (the same way the POS reports do it). Resolves to 'downloaded' or 'shared'.
- */
-export async function download(name, data, type) {
-  if (isNative()) {
-    const written = await Filesystem.writeFile({ path: name, data: toBase64(toBytes(data)), directory: Directory.Cache, recursive: true });
-    try { await Share.share({ title: name, text: name, url: written.uri, dialogTitle: 'Save, print or send this file' }); }
-    catch (e) { if (!/cancel/i.test(String(e?.message || e))) throw e; }   // closing the sheet is not an error
-    return 'shared';
-  }
-  const blob = new Blob([data], { type }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  return 'downloaded';
-}
+export { download };
 
 /** Print. A browser prints the page (only the report is drawn). The phone app cannot print a web page, so it opens the share sheet with the PDF, which has a Print option. */
 export async function printReport(name, pdfBytes) {

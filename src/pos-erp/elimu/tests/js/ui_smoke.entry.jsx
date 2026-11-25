@@ -115,7 +115,7 @@ function Routes2() { return <Suspense fallback={<i>loading-chunk</i>}><ElimuRout
   results.push(['unknown finance section says so', none.includes('does not exist'), '']);
   results.push(['school tab bar says Finance (not Fees)', hub.includes('>Finance<'), '']); }
 const appHtml = check('ElimuApp (auth + shell) renders', () => renderToString(<MemoryRouter initialEntries={['/school']}><Routes><Route path="/school/*" element={<ElimuApp />} /></Routes></MemoryRouter>));
-results.push(['app bar has school name, Umova home and Sign out', appHtml.includes('Sunrise Academy') && appHtml.includes('aria-label="Umova home"') && appHtml.includes('aria-label="Sign out"'), '']);
+results.push(['app bar has school name, All menu, labelled Umova home and Sign out', appHtml.includes('Sunrise Academy') && appHtml.includes('All menu') && appHtml.includes('Umova home<') && appHtml.includes('Sign out<') && appHtml.includes('aria-label="Back to Umova home"') && appHtml.includes('aria-label="Sign out"'), '']);
 results.push(['shell is one full-height column (dvh) with safe-area padding', appHtml.includes('100dvh') && appHtml.includes('safe-area-inset-top'), '']);
 const parentHtml = check('ParentApp renders (signed-out state is the loading screen on the server)', () => renderToString(<MemoryRouter><ParentApp /></MemoryRouter>));
 results.push(['parent app is a full-height dvh column', parentHtml.includes('100dvh'), '']);

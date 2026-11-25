@@ -12,6 +12,7 @@ import { importService } from '../services/importService.js';
 import { readTable } from '../utils/readSheet.js';
 import { FIELDS, MAX_ROWS, TEMPLATE_CSV, autoMap, buildRows, mappingProblems } from '../utils/studentImport.js';
 import { friendlyError } from '../../utils/validation.js';
+import { csvFile } from '../../utils/fileDownload.js';
 
 const Tile = ({ n, label, tone = '' }) => <div className={`rounded-xl border border-[#E3DBB8] bg-white p-3 text-center ${tone}`}><div className="text-xl font-bold">{n}</div><div className="text-[11px] text-[#6F7461]">{label}</div></div>;
 const btnP = 'min-h-[44px] px-4 rounded-xl text-sm font-semibold bg-[#1F6B45] text-white disabled:opacity-50';
@@ -46,7 +47,7 @@ export default function ImportStudentsPage({ basePath = '/elimu' }) {
     setBusy(false);
   };
   const startOver = async () => { setBusy(true); try { if (batch) await importService.discard(batch.batch_id); } catch (x) { setErr(friendlyError(x)); } setBatch(null); setRows([]); setBusy(false); };
-  const download = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([TEMPLATE_CSV], { type: 'text/csv' })); a.download = 'student-import-template.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
+  const download = () => { csvFile('student-import-template.csv', TEMPLATE_CSV); };
 
   return (
     <FitPage title="Import students" subtitle="Bring students and their guardians from your old system" icon={Upload}>

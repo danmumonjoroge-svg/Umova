@@ -1,5 +1,6 @@
 // elimu/export/services/exportService.js -- download the school's data as CSV (elimu_1020). Administrators only.
 import { rpc } from '../../shared/services/elimuDb';
+import { csvFile } from '../../utils/fileDownload.js';
 
 export const DATASETS = [
   { key: 'STUDENTS', label: 'Students', hint: 'Every student with class, status and main guardian', dated: false },
@@ -30,11 +31,7 @@ export function rangeProblem(from, to) {
   if ((new Date(to) - new Date(from)) / 864e5 > 800) return 'Choose a period of at most 800 days.';
   return '';
 }
-export function saveCsv(name, text) {
-  const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
-}
+export function saveCsv(name, text) { return csvFile(name, text); }
 export const exportService = {
   fetch: (dataset, from, to) => rpc('elimu_export', { p_dataset: dataset, p_from: from || null, p_to: to || null }),
 };

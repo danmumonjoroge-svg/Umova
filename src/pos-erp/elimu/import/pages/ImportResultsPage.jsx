@@ -9,6 +9,7 @@ import { importService } from '../services/importService.js';
 import { readTable } from '../utils/readSheet.js';
 import { LONG_FIELDS, LONG_TEMPLATE_CSV, WIDE_TEMPLATE_CSV, autoMapLong, buildLongRows, guessWide, longProblems, pivotWide, wideProblems } from '../utils/resultsImport.js';
 import { friendlyError } from '../../utils/validation.js';
+import { csvFile } from '../../utils/fileDownload.js';
 
 const btnP = 'min-h-[44px] px-4 rounded-xl text-sm font-semibold bg-[#1F6B45] text-white disabled:opacity-50';
 const btnS = 'min-h-[44px] px-4 rounded-xl text-sm font-semibold border border-[#E3DBB8] bg-white text-[#23382B] disabled:opacity-50';
@@ -39,7 +40,7 @@ export default function ImportResultsPage({ basePath = '/elimu' }) {
   };
   const commit = async () => { setBusy(true); setErr(''); try { setDone(await importService.commitResults(batch.batch_id)); setConfirm(false); setBatch(null); setTable(null); } catch (x) { setErr(friendlyError(x)); setConfirm(false); } setBusy(false); };
   const startOver = async () => { setBusy(true); try { if (batch) await importService.discard(batch.batch_id); } catch (x) { setErr(friendlyError(x)); } setBatch(null); setRows([]); setBusy(false); };
-  const download = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([layout === 'WIDE' ? WIDE_TEMPLATE_CSV : LONG_TEMPLATE_CSV], { type: 'text/csv' })); a.download = `results-${layout.toLowerCase()}-template.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
+  const download = () => { csvFile(`results-${layout.toLowerCase()}-template.csv`, layout === 'WIDE' ? WIDE_TEMPLATE_CSV : LONG_TEMPLATE_CSV); };
   const n = batch ? batch.ok_count : 0;
 
   return (

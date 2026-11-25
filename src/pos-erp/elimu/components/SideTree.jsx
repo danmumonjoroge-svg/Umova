@@ -3,7 +3,7 @@
 // one module open at a time, and a narrow icon-only mode for more room. Visibility only: the database decides access.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Home, LayoutGrid, PanelLeftClose, PanelLeftOpen, Pin, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Home, PanelLeftClose, PanelLeftOpen, Pin, Search, X } from 'lucide-react';
 import { visibleChildren, leavesOf, soleLeaf, searchPages } from '../navigation/menuKit.js';
 import { moduleOfPath } from '../navigation/bottomBar.js';
 import { recordOpen, recentAmong } from '../navigation/recents.js';
@@ -156,7 +156,6 @@ export default function SideTree({ tree, basePath, can, isOwner, loc, icons, sho
           <div className="px-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-[var(--e-muted,#6F7461)]">Recent</div>
           {recent.map((p) => row(p, globalAct.has(p.to), 'r-', true))}</section>}
 
-        <NavLink to={`${basePath}/menu`} className={({ isActive }) => `${base} px-3 mt-1 ${focusRing} ${isActive ? onCls : offCls}`}>{icon(LayoutGrid)}All menu</NavLink>
         <div className="mt-auto pt-3"><button type="button" onClick={onToggle} className={`${base} w-full px-3 text-[13px] text-[var(--e-muted,#6F7461)] hover:bg-[var(--e-soft,#F4EFD3)] ${focusRing}`}>{icon(PanelLeftClose)}Make narrower</button></div>
       </>)}
     </>);

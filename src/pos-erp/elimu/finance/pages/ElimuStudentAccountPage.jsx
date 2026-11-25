@@ -12,6 +12,7 @@ import { fromDb, formatMoney } from '../utils/money';
 import { studentViewWithCopy } from '../offline/feeOfflineQueue';
 import { buildVars } from '../../communication/finance/financeComm';
 import MessageComposer from '../components/MessageComposer';
+import { csvFile } from '../../utils/fileDownload.js';
 
 const niceDate = (d) => (d ? new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 const STATUS_TONE = { PAID: 'good', PARTIALLY_PAID: 'warn', ISSUED: 'neutral', CANCELLED: 'bad' };
@@ -56,7 +57,7 @@ export default function ElimuStudentAccountPage({ studentId: propId }) {
       <div className="flex gap-2 flex-wrap mb-3">
         <TextBtn onClick={run(async () => savePdf(pdf(), reportFileName({ ...report, title: `statement-${s.admission_no}` }), 'Fee statement'))}>Statement PDF</TextBtn>
         <TextBtn onClick={run(async () => sharePdf(pdf(), reportFileName({ ...report, title: `statement-${s.admission_no}` }), 'Fee statement'))}>Share</TextBtn>
-        <TextBtn onClick={() => { const b = new Blob([reportToCsv(report)], { type: 'text/csv;charset=utf-8' }); const u = URL.createObjectURL(b); Object.assign(document.createElement('a'), { href: u, download: `statement-${s.admission_no}.csv` }).click(); URL.revokeObjectURL(u); }}>Excel (CSV)</TextBtn>
+        <TextBtn onClick={() => { csvFile(`statement-${s.admission_no}.csv`, reportToCsv(report)); }}>Excel (CSV)</TextBtn>
         {bal > 0 && !v.fromCache && <TextBtn onClick={() => setCompose(true)}>Send balance reminder</TextBtn>}
         {s.guardian_phone && <a className="underline text-sm self-center" href={`tel:${s.guardian_phone}`}>Call {s.guardian_name || 'guardian'}</a>}
       </div>

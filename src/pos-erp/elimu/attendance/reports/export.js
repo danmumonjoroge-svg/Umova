@@ -1,4 +1,5 @@
 // elimu/attendance/reports/export.js -- CSV and print for any report. Printing reuses the POS printDocument helper.
+import { csvFile } from '../../utils/fileDownload.js';
 export function cellText(row, c) {
   const v = row[c.key]; const out = c.fmt ? c.fmt(v, row) : v;
   return out === null || out === undefined ? '' : String(out);
@@ -7,11 +8,7 @@ export function toCsv(columns, rows) {
   const esc = (s) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   return [columns.map((c) => esc(c.label)).join(','), ...rows.map((r) => columns.map((c) => esc(cellText(r, c))).join(','))].join('\n');
 }
-export function downloadCsv(filename, columns, rows) {
-  const blob = new Blob(['﻿' + toCsv(columns, rows)], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
-}
+export function downloadCsv(filename, columns, rows) { return csvFile(filename, toCsv(columns, rows)); }
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 export function reportHtml({ title, subtitle, schoolName, columns, rows }) {
   return `<div class="center bold" style="font-size:16px">${esc(schoolName || '')}</div><div class="center bold">${esc(title)}</div><div class="center">${esc(subtitle || '')}</div><br/>
