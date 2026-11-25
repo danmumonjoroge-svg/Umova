@@ -3,13 +3,14 @@
 //   tablet+: the same items as a pill bar at the top
 // Items owned by other modules appear only when that module has registered itself (see registry.js), so there are no dead links.
 // Hidden entries never remove a route: a bookmark still works; the database decides access.
-import React, { Suspense, useContext } from 'react';
+import React, { Suspense, useCallback, useContext, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Users, CalendarCheck, Wallet, LayoutGrid, GraduationCap, ClipboardList, Layers, UserRound, MessageSquare, CalendarDays, BarChart3, Settings, Clock, DoorOpen, ScanLine, UserCog, Building2, ShieldCheck, Briefcase, FileText, Trophy, LifeBuoy } from 'lucide-react';
 import { SCHOOL_TREE } from '../navigation/schoolTree.js';
 import { bottomTabs, moduleOfPath } from '../navigation/bottomBar.js';
 import { NAV_ITEMS } from '../utils/permissions.js';
 import SideTree from './SideTree.jsx';
+import { readFlag, writeFlag } from '../navigation/pins.js';
 import { useElimuAccess } from '../hooks/useElimu.js';
 import { OfflineBanner } from './ui.jsx';
 import { useOnline } from '../hooks/useAsync.js';
@@ -26,6 +27,8 @@ const PRIMARY = ['dashboard', 'students', 'attendance', 'fees'];       // tablet
 export default function ElimuLayout({ basePath = '/elimu' }) {
   const inShell = useContext(ElimuShellContext); const { can, isOwner } = useElimuAccess(); const online = useOnline(); const loc = useLocation(); const nav = useNavigate();
   const mods = registeredModules();
+  const [narrow, setNarrow] = useState(() => readFlag('elimu-side-narrow'));   // laptop sidebar: full or icons only, remembered on this device
+  const toggleNarrow = useCallback(() => setNarrow((v) => { writeFlag('elimu-side-narrow', !v); return !v; }), []);
   const items = NAV_ITEMS.filter((n) => (!n.ownerOnly || isOwner) && (n.owned || mods.has(n.key)) && (n.anyOf ? n.anyOf.some((a) => can(a)) : can(n.action)));
   const href = (n) => `${basePath}${n.to}`;
   const isOn = (n) => (n.to === '' ? loc.pathname.replace(/\/$/, '') === basePath : loc.pathname.startsWith(href(n)) || (n.also || []).some((a) => loc.pathname.startsWith(`${basePath}${a}`)));
@@ -49,9 +52,8 @@ export default function ElimuLayout({ basePath = '/elimu' }) {
 
       <div className="flex-1 min-h-0 flex">
         {/* laptop / desktop: sidebar */}
-        <nav aria-label="School sections" className="hidden lg:flex flex-col w-60 shrink-0 overflow-y-auto border-r border-[#E3DBB8] bg-white py-4 pl-3 pr-2">
-          <SideTree tree={SCHOOL_TREE} basePath={basePath} can={can} isOwner={isOwner} loc={loc} icons={MODULE_ICONS} showHome={items.some((n) => n.key === 'dashboard')} />
-          <NavLink to={`${basePath}/menu`} className={({ isActive }) => `flex items-center gap-3 px-3 min-h-[42px] mt-1 rounded-xl text-sm font-medium ${isActive ? 'bg-[#E4F0E8] text-[#1F6B45] font-semibold' : 'text-[#23382B] hover:bg-[#F4EFD3]'}`}><LayoutGrid size={18} />All menu</NavLink>
+        <nav aria-label="School sections" className={`hidden lg:flex flex-col shrink-0 overflow-y-auto border-r border-[#E3DBB8] bg-white py-4 transition-[width] duration-150 ${narrow ? 'w-[68px] px-2' : 'w-64 pl-3 pr-2'}`}>
+          <SideTree tree={SCHOOL_TREE} basePath={basePath} can={can} isOwner={isOwner} loc={loc} icons={MODULE_ICONS} showHome={items.some((n) => n.key === 'dashboard')} collapsed={narrow} onToggle={toggleNarrow} />
         </nav>
 
         {/* the ONE scrolling area */}

@@ -69,7 +69,9 @@ import { licenceNotice } from '../../services/ElimuLicenceService.js';
 import ElimuManagementPage from '../../owner/ElimuManagementPage.jsx';
 import { ReportBody } from '../../teachers/pages/TeacherReportPage.jsx';
 import { visibleChildren } from '../../navigation/menuKit.js';
-import { moduleSections, activePages } from '../../components/SideTree.jsx';
+import SideTree, { moduleSections, activePages, pageIndex } from '../../components/SideTree.jsx';
+import { readPins, togglePin } from '../../navigation/pins.js';
+import { searchPages } from '../../navigation/menuKit.js';
 import { teacherNotes, groupName } from '../../teachers/services/teacherService.js';
 import { reportCsv, reportPdfLines, buildPdf, listCsv } from '../../teachers/services/teacherExport.js';
 
@@ -485,6 +487,19 @@ results.push(['parent home: hero, tiles, skeleton, summary helpers', (() => {
       t('on gate passes the right tab is highlighted', [...activePages(secs, 'gate-passes', '?tab=all')].join() === 'gate-passes?tab=all' && [...activePages(secs, 'gate-passes', '')].join() === 'gate-passes');
       t('the longest route wins (Subjects, not Academics overview)', [...activePages(moduleSections(mods.find((x) => x.key === 'academics'), () => true, true), 'academics/subjects', '')].join() === 'academics/subjects');
     }
+      { const mem = () => { const m = {}; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = v; } }; };
+        const st = mem();
+        t('pinning a page adds it first; pinning again removes it', togglePin('a', st).join() === 'a' && togglePin('b', st).join() === 'b,a' && togglePin('a', st).join() === 'b');
+        t('at most 12 pages can be pinned', (() => { const x = mem(); for (let i = 0; i < 20; i++) togglePin(`k${i}`, x); return readPins(x).length === 12 && readPins(x)[0] === 'k19'; })());
+        t('damaged or blocked storage never breaks the sidebar', readPins({ getItem: () => '{oops' }).length === 0 && readPins({ getItem: () => { throw new Error('blocked'); } }).length === 0 && Array.isArray(togglePin('z', { getItem: () => null, setItem: () => { throw new Error('blocked'); } })));
+        const idx = pageIndex(SCHOOL_TREE, () => true, true);
+        t('the page index holds every page once, with its module', idx.get('att-take')?.modLabel === 'Academics' && idx.get('teacher-reports')?.mod === 'academics');
+        t('search finds a page by a word in its name or description', searchPages(SCHOOL_TREE, 'exit', () => true, true).some((x) => x.key === 'gate-exit') && searchPages(SCHOOL_TREE, 'x', () => true, true).length === 0);
+        const rail = renderToString(<MemoryRouter><SideTree tree={SCHOOL_TREE} basePath="/school" can={() => true} isOwner loc={{ pathname: '/school/teachers', search: '' }} icons={{}} collapsed onToggle={() => {}} /></MemoryRouter>);
+        t('the narrow sidebar shows icons with names for screen readers and no visible labels', /aria-label="Academics"/.test(rail) && /aria-label="Widen the sidebar"/.test(rail) && !/>Academics</.test(rail));
+        const wide = renderToString(<MemoryRouter><SideTree tree={SCHOOL_TREE} basePath="/school" can={() => true} isOwner loc={{ pathname: '/school/teachers', search: '' }} icons={{}} onToggle={() => {}} /></MemoryRouter>);
+        t('the full sidebar has the find box, the module list and a way to make it narrower', /aria-label="Find a page"/.test(wide) && /Make narrower/.test(wide) && /aria-expanded="true"/.test(wide) && (wide.match(/aria-expanded="true"/g) || []).length === 1);
+      }
     t('teacher pages are routed', ['/school/teachers', '/school/my-report', '/school/activities'].every((u) => renderToString(<MemoryRouter initialEntries={[u]}><Routes><Route path="/school/*" element={<ElimuRoutes basePath="/school" accessOverride={{ can: () => true, loaded: true, isOwner: true, roles: [] }} />} /></Routes></MemoryRouter>).length > 0));
   }
 }
